@@ -6,7 +6,7 @@ GymCore is a full-stack gym management project:
 - Database: Microsoft SQL Server
 
 ## Folder Layout
-- `backend/backend`: Spring Boot app
+- `backend`: Spring Boot app
 - `frontend`: React app
 - `docs/GymCore.txt`: database schema script
 - `docs/InsertValues.txt`: sample data script

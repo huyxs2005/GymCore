@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $rootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backendDir = Join-Path $rootDir 'backend\backend'
+$backendDir = Join-Path $rootDir 'backend'
 $frontendDir = Join-Path $rootDir 'frontend'
 
 if (-not (Test-Path (Join-Path $backendDir 'mvnw.cmd'))) {
