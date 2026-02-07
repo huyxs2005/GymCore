@@ -1,0 +1,978 @@
+/* =========================================================
+   GymCore - MS SQL Server (Fresh Schema)
+   - PayOS Hosted Checkout: Payments table (reuse pending link)
+   - Coupon wallet: claim first, one-time use per user per promo
+   - Membership renew vs upgrade supported (logic in backend)
+   - Day pass: active until midnight (StartDate=EndDate)
+   - Daily job SP included for:
+       + membership expiry countdown notifications
+       + expire memberships
+       + cancel PT sessions if no ACTIVE membership
+========================================================= */
+
+CREATE DATABASE GymCore;
+GO
+USE GymCore;
+GO
+
+/* =========================
+   ROLES
+========================= */
+CREATE TABLE dbo.Roles (
+    RoleID INT IDENTITY(1,1) PRIMARY KEY,
+    RoleName NVARCHAR(50) NOT NULL UNIQUE
+);
+GO
+
+/* =========================
+   USERS + AUTH
+========================= */
+CREATE TABLE dbo.Users (
+    UserID INT IDENTITY(1,1) PRIMARY KEY,
+    RoleID INT NOT NULL,
+
+    FullName NVARCHAR(100) NOT NULL,
+    Email NVARCHAR(100) NOT NULL UNIQUE,
+    Phone NVARCHAR(20) NULL,
+
+    -- Local login: store HASHED password (bcrypt/argon2 from backend)
+    PasswordHash NVARCHAR(255) NULL,
+
+    IsLocked BIT NOT NULL CONSTRAINT DF_Users_IsLocked DEFAULT 0,
+    LockedAt DATETIME2 NULL,
+    LockReason NVARCHAR(200) NULL,
+
+    IsActive BIT NOT NULL CONSTRAINT DF_Users_IsActive DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Users_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    -- Check-in QR token (immutable)
+    QrCodeToken NVARCHAR(64) NOT NULL
+        CONSTRAINT DF_Users_QrCodeToken DEFAULT (CONVERT(NVARCHAR(64), NEWID())),
+    QrIssuedAt DATETIME2 NOT NULL
+        CONSTRAINT DF_Users_QrIssuedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleID) REFERENCES dbo.Roles(RoleID),
+    CONSTRAINT UQ_Users_QrCodeToken UNIQUE (QrCodeToken)
+);
+GO
+
+CREATE TABLE dbo.UserAuthProviders (
+    UserAuthProviderID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+    Provider NVARCHAR(30) NOT NULL,           -- 'GOOGLE'
+    ProviderUserId NVARCHAR(100) NOT NULL,    -- Google sub
+    ProviderEmail NVARCHAR(100) NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_UserAuthProviders_CreatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_UserAuthProviders_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT UQ_UserAuthProviders UNIQUE (Provider, ProviderUserId)
+);
+GO
+
+CREATE TABLE dbo.PasswordResetTokens (
+    PasswordResetTokenID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+    TokenHash NVARCHAR(255) NOT NULL,
+    ExpiresAt DATETIME2 NOT NULL,
+    UsedAt DATETIME2 NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PasswordResetTokens_CreatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_PasswordResetTokens_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TRIGGER dbo.TRG_Users_BlockQrChange
+ON dbo.Users
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF UPDATE(QrCodeToken)
+    BEGIN
+        RAISERROR('QrCodeToken cannot be changed once created.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* =========================
+   PROFILES
+========================= */
+CREATE TABLE dbo.Customers (
+    CustomerID INT PRIMARY KEY,     -- same as Users.UserID
+    DateOfBirth DATE NULL,
+    Gender NVARCHAR(10) NULL,
+    CONSTRAINT FK_Customers_Users FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TABLE dbo.Coaches (
+    CoachID INT PRIMARY KEY,        -- same as Users.UserID
+    ExperienceYears INT NULL,
+    Bio NVARCHAR(500) NULL,
+    CONSTRAINT FK_Coaches_Users FOREIGN KEY (CoachID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+/* =========================
+   WORKOUT INFO PAGES
+========================= */
+CREATE TABLE dbo.WorkoutCategories (
+    WorkoutCategoryID INT IDENTITY(1,1) PRIMARY KEY,
+    CategoryName NVARCHAR(100) NOT NULL UNIQUE,
+    Description NVARCHAR(300) NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_WorkoutCategories_IsActive DEFAULT 1
+);
+GO
+
+CREATE TABLE dbo.Workouts (
+    WorkoutID INT IDENTITY(1,1) PRIMARY KEY,
+    WorkoutName NVARCHAR(150) NOT NULL,
+    Description NVARCHAR(500) NULL,
+    Instructions NVARCHAR(MAX) NOT NULL,
+    ImageUrl NVARCHAR(500) NULL,
+    VideoUrl NVARCHAR(500) NULL,
+    Difficulty NVARCHAR(20) NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_Workouts_IsActive DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Workouts_CreatedAt DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE dbo.WorkoutCategoryMap (
+    WorkoutID INT NOT NULL,
+    WorkoutCategoryID INT NOT NULL,
+    PRIMARY KEY (WorkoutID, WorkoutCategoryID),
+    CONSTRAINT FK_WorkoutCategoryMap_Workouts FOREIGN KEY (WorkoutID) REFERENCES dbo.Workouts(WorkoutID),
+    CONSTRAINT FK_WorkoutCategoryMap_Categories FOREIGN KEY (WorkoutCategoryID) REFERENCES dbo.WorkoutCategories(WorkoutCategoryID)
+);
+GO
+
+/* =========================
+   FOOD INFO PAGES
+========================= */
+CREATE TABLE dbo.FoodCategories (
+    FoodCategoryID INT IDENTITY(1,1) PRIMARY KEY,
+    CategoryName NVARCHAR(100) NOT NULL UNIQUE,
+    Description NVARCHAR(300) NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_FoodCategories_IsActive DEFAULT 1
+);
+GO
+
+CREATE TABLE dbo.Foods (
+    FoodID INT IDENTITY(1,1) PRIMARY KEY,
+    FoodName NVARCHAR(150) NOT NULL,
+    Description NVARCHAR(500) NULL,
+    Recipe NVARCHAR(MAX) NULL,
+    Calories INT NULL,
+    Protein DECIMAL(6,2) NULL,
+    Carbs DECIMAL(6,2) NULL,
+    Fat DECIMAL(6,2) NULL,
+    ImageUrl NVARCHAR(500) NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_Foods_IsActive DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Foods_CreatedAt DEFAULT SYSDATETIME(),
+    CONSTRAINT CK_Foods_Calories CHECK (Calories IS NULL OR Calories >= 0)
+);
+GO
+
+CREATE TABLE dbo.FoodCategoryMap (
+    FoodID INT NOT NULL,
+    FoodCategoryID INT NOT NULL,
+    PRIMARY KEY (FoodID, FoodCategoryID),
+    CONSTRAINT FK_FoodCategoryMap_Foods FOREIGN KEY (FoodID) REFERENCES dbo.Foods(FoodID),
+    CONSTRAINT FK_FoodCategoryMap_Categories FOREIGN KEY (FoodCategoryID) REFERENCES dbo.FoodCategories(FoodCategoryID)
+);
+GO
+
+/* =========================
+   MEMBERSHIP PLANS + CUSTOMER MEMBERSHIPS
+========================= */
+CREATE TABLE dbo.MembershipPlans (
+    MembershipPlanID INT IDENTITY(1,1) PRIMARY KEY,
+    PlanName NVARCHAR(100) NOT NULL,
+    PlanType NVARCHAR(20) NOT NULL, -- 'GYM_ONLY','DAY_PASS','GYM_PLUS_COACH'
+    Price DECIMAL(12,2) NOT NULL,
+    DurationDays INT NOT NULL,
+    AllowsCoachBooking BIT NOT NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_MembershipPlans_IsActive DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_MembershipPlans_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+    UpdatedBy INT NULL,
+
+    CONSTRAINT CK_MembershipPlans_Type CHECK (PlanType IN ('GYM_ONLY','DAY_PASS','GYM_PLUS_COACH')),
+    CONSTRAINT CK_MembershipPlans_Price CHECK (Price >= 0),
+    CONSTRAINT CK_MembershipPlans_Duration CHECK (DurationDays > 0),
+    CONSTRAINT FK_MembershipPlans_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
+
+    -- Day pass rule: duration must be 1, coach booking must be 0
+    CONSTRAINT CK_MembershipPlans_DayPass CHECK (
+        (PlanType <> 'DAY_PASS')
+        OR (DurationDays = 1 AND AllowsCoachBooking = 0)
+    )
+);
+GO
+
+CREATE TABLE dbo.CustomerMemberships (
+    CustomerMembershipID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NOT NULL,
+    MembershipPlanID INT NOT NULL,
+
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_CustomerMemberships_Status DEFAULT 'PENDING',
+    StartDate DATE NOT NULL,
+    EndDate DATE NOT NULL,
+
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_CustomerMemberships_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+    UpdatedBy INT NULL,
+
+    CONSTRAINT FK_CustomerMemberships_Customers FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT FK_CustomerMemberships_Plans FOREIGN KEY (MembershipPlanID) REFERENCES dbo.MembershipPlans(MembershipPlanID),
+    CONSTRAINT FK_CustomerMemberships_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
+
+    CONSTRAINT CK_CustomerMemberships_Status CHECK (Status IN ('PENDING','ACTIVE','EXPIRED','CANCELLED')),
+    CONSTRAINT CK_CustomerMemberships_Dates CHECK (EndDate >= StartDate)
+);
+GO
+
+-- Only ONE ACTIVE membership per customer
+CREATE UNIQUE INDEX UX_CustomerMemberships_OneActive
+ON dbo.CustomerMemberships(CustomerID)
+WHERE Status = 'ACTIVE';
+GO
+
+/* =========================
+   PROMOTIONS + COUPON WALLET (claim first)
+========================= */
+CREATE TABLE dbo.Promotions (
+    PromotionID INT IDENTITY(1,1) PRIMARY KEY,
+    PromoCode NVARCHAR(30) NOT NULL UNIQUE,
+    Description NVARCHAR(200) NULL,
+    DiscountPercent DECIMAL(5,2) NULL,
+    DiscountAmount DECIMAL(12,2) NULL,
+    ValidFrom DATETIME2 NOT NULL,
+    ValidTo DATETIME2 NOT NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_Promotions_IsActive DEFAULT 1,
+
+    CONSTRAINT CK_Promotions_Date CHECK (ValidTo > ValidFrom),
+    CONSTRAINT CK_Promotions_DiscountType CHECK (
+        NOT (DiscountPercent IS NOT NULL AND DiscountAmount IS NOT NULL)
+    ),
+    CONSTRAINT CK_Promotions_Percent CHECK (DiscountPercent IS NULL OR (DiscountPercent >= 0 AND DiscountPercent <= 100)),
+    CONSTRAINT CK_Promotions_Amount CHECK (DiscountAmount IS NULL OR DiscountAmount >= 0)
+);
+GO
+
+CREATE TABLE dbo.PromotionPosts (
+    PromotionPostID INT IDENTITY(1,1) PRIMARY KEY,
+    Title NVARCHAR(150) NOT NULL,
+    Content NVARCHAR(2000) NOT NULL,
+    BannerUrl NVARCHAR(500) NULL,
+
+    PromotionID INT NOT NULL,
+    StartAt DATETIME2 NOT NULL,
+    EndAt DATETIME2 NOT NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_PromotionPosts_IsActive DEFAULT 1,
+
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PromotionPosts_CreatedAt DEFAULT SYSDATETIME(),
+    CreatedBy INT NULL,
+
+    CONSTRAINT FK_PromotionPosts_Promotions FOREIGN KEY (PromotionID) REFERENCES dbo.Promotions(PromotionID),
+    CONSTRAINT FK_PromotionPosts_CreatedBy FOREIGN KEY (CreatedBy) REFERENCES dbo.Users(UserID),
+    CONSTRAINT CK_PromotionPosts_Time CHECK (EndAt > StartAt)
+);
+GO
+
+CREATE TABLE dbo.UserPromotionClaims (
+    ClaimID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+    PromotionID INT NOT NULL,
+    SourcePostID INT NOT NULL,
+    ClaimedAt DATETIME2 NOT NULL CONSTRAINT DF_UserPromotionClaims_ClaimedAt DEFAULT SYSDATETIME(),
+
+    UsedAt DATETIME2 NULL,
+    UsedPaymentID INT NULL,
+    UsedOnOrderID INT NULL,
+    UsedOnMembershipID INT NULL,
+
+    CONSTRAINT FK_UserPromotionClaims_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT FK_UserPromotionClaims_Promotions FOREIGN KEY (PromotionID) REFERENCES dbo.Promotions(PromotionID),
+    CONSTRAINT FK_UserPromotionClaims_SourcePost FOREIGN KEY (SourcePostID) REFERENCES dbo.PromotionPosts(PromotionPostID),
+
+    CONSTRAINT UQ_UserPromotionClaims UNIQUE (UserID, PromotionID),
+
+    CONSTRAINT CK_UserPromotionClaims_UsedTarget CHECK (
+        (UsedAt IS NULL AND UsedPaymentID IS NULL AND UsedOnOrderID IS NULL AND UsedOnMembershipID IS NULL)
+        OR
+        (UsedAt IS NOT NULL AND UsedPaymentID IS NOT NULL AND (
+            (UsedOnOrderID IS NOT NULL AND UsedOnMembershipID IS NULL)
+            OR
+            (UsedOnOrderID IS NULL AND UsedOnMembershipID IS NOT NULL)
+        ))
+    )
+);
+GO
+
+CREATE TRIGGER dbo.TRG_UserPromotionClaims_Validate
+ON dbo.UserPromotionClaims
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @now DATETIME2 = SYSDATETIME();
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN dbo.PromotionPosts p ON p.PromotionPostID = i.SourcePostID
+        JOIN dbo.Promotions pr ON pr.PromotionID = i.PromotionID
+        WHERE
+            p.PromotionID <> i.PromotionID
+            OR p.IsActive = 0
+            OR @now < p.StartAt OR @now > p.EndAt
+            OR pr.IsActive = 0
+            OR @now < pr.ValidFrom OR @now > pr.ValidTo
+    )
+    BEGIN
+        RAISERROR('Invalid claim: post/promotion must be active, within time windows, and match PromotionID.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* =========================
+   PRODUCTS + CART + ORDERS
+========================= */
+CREATE TABLE dbo.Products (
+    ProductID INT IDENTITY(1,1) PRIMARY KEY,
+    ProductName NVARCHAR(150) NOT NULL,
+    Description NVARCHAR(800) NULL,
+    Price DECIMAL(12,2) NOT NULL,
+    ImageUrl NVARCHAR(500) NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_Products_IsActive DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Products_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+    UpdatedBy INT NULL,
+
+    CONSTRAINT CK_Products_Price CHECK (Price >= 0),
+    CONSTRAINT FK_Products_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TABLE dbo.Carts (
+    CartID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NOT NULL UNIQUE,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Carts_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    CONSTRAINT FK_Carts_Customers FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID)
+);
+GO
+
+CREATE TABLE dbo.CartItems (
+    CartID INT NOT NULL,
+    ProductID INT NOT NULL,
+    Quantity INT NOT NULL,
+    PRIMARY KEY (CartID, ProductID),
+
+    CONSTRAINT FK_CartItems_Carts FOREIGN KEY (CartID) REFERENCES dbo.Carts(CartID),
+    CONSTRAINT FK_CartItems_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT CK_CartItems_Qty CHECK (Quantity > 0)
+);
+GO
+
+CREATE TABLE dbo.Orders (
+    OrderID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NOT NULL,
+    OrderDate DATETIME2 NOT NULL CONSTRAINT DF_Orders_OrderDate DEFAULT SYSDATETIME(),
+
+    ClaimID INT NULL, -- claimed coupon applied here (wallet -> checkout)
+
+    Subtotal DECIMAL(12,2) NOT NULL CONSTRAINT DF_Orders_Subtotal DEFAULT 0,
+    DiscountApplied DECIMAL(12,2) NOT NULL CONSTRAINT DF_Orders_Discount DEFAULT 0,
+    TotalAmount DECIMAL(12,2) NOT NULL CONSTRAINT DF_Orders_Total DEFAULT 0,
+
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_Orders_Status DEFAULT 'PENDING', -- PENDING|PAID|CANCELLED
+
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Orders_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+    UpdatedBy INT NULL,
+
+    CONSTRAINT FK_Orders_Customers FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT FK_Orders_Claim FOREIGN KEY (ClaimID) REFERENCES dbo.UserPromotionClaims(ClaimID),
+    CONSTRAINT FK_Orders_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
+
+    CONSTRAINT CK_Orders_Status CHECK (Status IN ('PENDING','PAID','CANCELLED')),
+    CONSTRAINT CK_Orders_Money CHECK (Subtotal >= 0 AND DiscountApplied >= 0 AND TotalAmount >= 0 AND DiscountApplied <= Subtotal)
+);
+GO
+
+CREATE TABLE dbo.OrderItems (
+    OrderID INT NOT NULL,
+    ProductID INT NOT NULL,
+    Quantity INT NOT NULL,
+    UnitPrice DECIMAL(12,2) NOT NULL,
+    PRIMARY KEY (OrderID, ProductID),
+
+    CONSTRAINT FK_OrderItems_Orders FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+    CONSTRAINT FK_OrderItems_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT CK_OrderItems_Qty CHECK (Quantity > 0),
+    CONSTRAINT CK_OrderItems_Price CHECK (UnitPrice >= 0)
+);
+GO
+
+CREATE TABLE dbo.ProductReviews (
+    ProductReviewID INT IDENTITY(1,1) PRIMARY KEY,
+    ProductID INT NOT NULL,
+    CustomerID INT NOT NULL,
+    Rating INT NOT NULL,
+    Comment NVARCHAR(500) NULL,
+    ReviewDate DATETIME2 NOT NULL CONSTRAINT DF_ProductReviews_ReviewDate DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_ProductReviews_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT FK_ProductReviews_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT CK_ProductReviews_Rating CHECK (Rating BETWEEN 1 AND 5),
+    CONSTRAINT UQ_ProductReviews UNIQUE (ProductID, CustomerID)
+);
+GO
+
+CREATE TRIGGER dbo.TRG_Orders_ValidateClaim
+ON dbo.Orders
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @now DATETIME2 = SYSDATETIME();
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted o
+        JOIN dbo.UserPromotionClaims c ON c.ClaimID = o.ClaimID
+        JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+        WHERE o.ClaimID IS NOT NULL
+          AND (
+                c.UserID <> o.CustomerID
+             OR c.UsedAt IS NOT NULL
+             OR p.IsActive = 0
+             OR @now < p.ValidFrom OR @now > p.ValidTo
+          )
+    )
+    BEGIN
+        RAISERROR('Invalid coupon claim for Order.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* =========================
+   TIME SLOTS (fixed 8 slots/day, 90 mins)
+========================= */
+CREATE TABLE dbo.TimeSlots (
+    TimeSlotID INT IDENTITY(1,1) PRIMARY KEY,
+    SlotIndex TINYINT NOT NULL UNIQUE, -- 1..8
+    StartTime TIME NOT NULL,
+    EndTime TIME NOT NULL,
+    CONSTRAINT CK_TimeSlots_Index CHECK (SlotIndex BETWEEN 1 AND 8),
+    CONSTRAINT CK_TimeSlots_Time CHECK (EndTime > StartTime)
+);
+GO
+
+CREATE TABLE dbo.CoachWeeklyAvailability (
+    CoachID INT NOT NULL,
+    DayOfWeek TINYINT NOT NULL, -- 1..7
+    TimeSlotID INT NOT NULL,
+    IsAvailable BIT NOT NULL CONSTRAINT DF_CoachWeeklyAvailability_IsAvailable DEFAULT 1,
+    PRIMARY KEY (CoachID, DayOfWeek, TimeSlotID),
+
+    CONSTRAINT FK_CoachWeeklyAvailability_Coach FOREIGN KEY (CoachID) REFERENCES dbo.Coaches(CoachID),
+    CONSTRAINT FK_CoachWeeklyAvailability_TimeSlot FOREIGN KEY (TimeSlotID) REFERENCES dbo.TimeSlots(TimeSlotID),
+    CONSTRAINT CK_CoachWeeklyAvailability_Day CHECK (DayOfWeek BETWEEN 1 AND 7)
+);
+GO
+
+/* =========================
+   PT RECURRING REQUESTS + SESSIONS
+========================= */
+CREATE TABLE dbo.PTRecurringRequests (
+    PTRequestID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NOT NULL,
+    CoachID INT NOT NULL,
+    CustomerMembershipID INT NOT NULL,
+
+    StartDate DATE NOT NULL,
+    EndDate DATE NOT NULL,
+
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_PTRecurringRequests_Status DEFAULT 'PENDING',
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PTRecurringRequests_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    CONSTRAINT FK_PTRecurringRequests_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT FK_PTRecurringRequests_Coach FOREIGN KEY (CoachID) REFERENCES dbo.Coaches(CoachID),
+    CONSTRAINT FK_PTRecurringRequests_Membership FOREIGN KEY (CustomerMembershipID) REFERENCES dbo.CustomerMemberships(CustomerMembershipID),
+
+    CONSTRAINT CK_PTRecurringRequests_Status CHECK (Status IN ('PENDING','APPROVED','DENIED','CANCELLED')),
+    CONSTRAINT CK_PTRecurringRequests_Dates CHECK (EndDate >= StartDate)
+);
+GO
+
+-- Each customer can have only ONE APPROVED coach relationship at a time
+CREATE UNIQUE INDEX UX_PTRecurringRequests_OneApprovedCoach
+ON dbo.PTRecurringRequests(CustomerID)
+WHERE Status = 'APPROVED';
+GO
+
+CREATE TABLE dbo.PTRequestSlots (
+    PTRequestID INT NOT NULL,
+    DayOfWeek TINYINT NOT NULL,     -- 1..7
+    TimeSlotID INT NOT NULL,
+    PRIMARY KEY (PTRequestID, DayOfWeek, TimeSlotID),
+
+    CONSTRAINT FK_PTRequestSlots_Request FOREIGN KEY (PTRequestID) REFERENCES dbo.PTRecurringRequests(PTRequestID),
+    CONSTRAINT FK_PTRequestSlots_TimeSlot FOREIGN KEY (TimeSlotID) REFERENCES dbo.TimeSlots(TimeSlotID),
+    CONSTRAINT CK_PTRequestSlots_Day CHECK (DayOfWeek BETWEEN 1 AND 7)
+);
+GO
+
+CREATE TABLE dbo.PTSessions (
+    PTSessionID INT IDENTITY(1,1) PRIMARY KEY,
+    PTRequestID INT NOT NULL,
+    CustomerID INT NOT NULL,
+    CoachID INT NOT NULL,
+
+    SessionDate DATE NOT NULL,
+    DayOfWeek TINYINT NOT NULL,
+    TimeSlotID INT NOT NULL,
+
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_PTSessions_Status DEFAULT 'SCHEDULED',
+    CancelReason NVARCHAR(200) NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PTSessions_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    CONSTRAINT FK_PTSessions_Request FOREIGN KEY (PTRequestID) REFERENCES dbo.PTRecurringRequests(PTRequestID),
+    CONSTRAINT FK_PTSessions_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT FK_PTSessions_Coach FOREIGN KEY (CoachID) REFERENCES dbo.Coaches(CoachID),
+    CONSTRAINT FK_PTSessions_TimeSlot FOREIGN KEY (TimeSlotID) REFERENCES dbo.TimeSlots(TimeSlotID),
+
+    CONSTRAINT CK_PTSessions_Status CHECK (Status IN ('SCHEDULED','COMPLETED','CANCELLED')),
+    CONSTRAINT CK_PTSessions_Day CHECK (DayOfWeek BETWEEN 1 AND 7)
+);
+GO
+
+-- Prevent coach double booking on same date+slot
+CREATE UNIQUE INDEX UX_PTSessions_Coach_Date_Slot
+ON dbo.PTSessions(CoachID, SessionDate, TimeSlotID)
+WHERE Status IN ('SCHEDULED','COMPLETED');
+GO
+
+CREATE TABLE dbo.PTSessionNotes (
+    PTSessionNoteID INT IDENTITY(1,1) PRIMARY KEY,
+    PTSessionID INT NOT NULL,
+    NoteContent NVARCHAR(1500) NOT NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PTSessionNotes_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    CONSTRAINT FK_PTSessionNotes_Session FOREIGN KEY (PTSessionID) REFERENCES dbo.PTSessions(PTSessionID)
+);
+GO
+
+CREATE TABLE dbo.CoachFeedback (
+    CoachFeedbackID INT IDENTITY(1,1) PRIMARY KEY,
+    PTSessionID INT NOT NULL,
+    CustomerID INT NOT NULL,
+    CoachID INT NOT NULL,
+    Rating INT NOT NULL,
+    Comment NVARCHAR(500) NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_CoachFeedback_CreatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_CoachFeedback_Session FOREIGN KEY (PTSessionID) REFERENCES dbo.PTSessions(PTSessionID),
+    CONSTRAINT FK_CoachFeedback_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT FK_CoachFeedback_Coach FOREIGN KEY (CoachID) REFERENCES dbo.Coaches(CoachID),
+    CONSTRAINT CK_CoachFeedback_Rating CHECK (Rating BETWEEN 1 AND 5),
+    CONSTRAINT UQ_CoachFeedback_OnePerSession UNIQUE (PTSessionID)
+);
+GO
+
+/* PT request must use ACTIVE membership that allows coach booking and covers the request dates */
+CREATE TRIGGER dbo.TRG_PTRecurringRequests_ValidateMembership
+ON dbo.PTRecurringRequests
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted r
+        JOIN dbo.CustomerMemberships m ON m.CustomerMembershipID = r.CustomerMembershipID
+        JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = m.MembershipPlanID
+        WHERE
+            m.CustomerID <> r.CustomerID
+            OR m.Status <> 'ACTIVE'
+            OR mp.AllowsCoachBooking = 0
+            OR r.StartDate < m.StartDate
+            OR r.EndDate > m.EndDate
+    )
+    BEGIN
+        RAISERROR('PT request invalid: membership must be ACTIVE, allow coach booking, and cover the request dates.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* =========================
+   CHECK-IN
+========================= */
+CREATE TABLE dbo.CheckIns (
+    CheckInID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NOT NULL,
+    CustomerMembershipID INT NOT NULL,
+    CheckedByUserID INT NULL, -- receptionist
+    CheckInTime DATETIME2 NOT NULL CONSTRAINT DF_CheckIns_Time DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_CheckIns_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT FK_CheckIns_Membership FOREIGN KEY (CustomerMembershipID) REFERENCES dbo.CustomerMemberships(CustomerMembershipID),
+    CONSTRAINT FK_CheckIns_CheckedBy FOREIGN KEY (CheckedByUserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TRIGGER dbo.TRG_CheckIns_ValidateMembershipActive
+ON dbo.CheckIns
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted ci
+        JOIN dbo.CustomerMemberships m ON m.CustomerMembershipID = ci.CustomerMembershipID
+        WHERE
+            m.CustomerID <> ci.CustomerID
+            OR m.Status <> 'ACTIVE'
+            OR CAST(ci.CheckInTime AS DATE) < m.StartDate
+            OR CAST(ci.CheckInTime AS DATE) > m.EndDate
+    )
+    BEGIN
+        RAISERROR('Check-in blocked: membership must be ACTIVE and valid for that date.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* =========================
+   PERSONAL HEALTH (current + history)
+========================= */
+CREATE TABLE dbo.CustomerHealthCurrent (
+    CustomerID INT PRIMARY KEY,
+    HeightCm DECIMAL(5,2) NOT NULL,
+    WeightKg DECIMAL(5,2) NOT NULL,
+    BMI AS (CONVERT(DECIMAL(5,2), (WeightKg * 10000.0) / (HeightCm * HeightCm))) PERSISTED,
+    UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_CustomerHealthCurrent_UpdatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_CustomerHealthCurrent_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT CK_HealthCurrent_Height CHECK (HeightCm > 0),
+    CONSTRAINT CK_HealthCurrent_Weight CHECK (WeightKg > 0)
+);
+GO
+
+CREATE TABLE dbo.CustomerHealthHistory (
+    CustomerHealthHistoryID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NOT NULL,
+    HeightCm DECIMAL(5,2) NOT NULL,
+    WeightKg DECIMAL(5,2) NOT NULL,
+    BMI AS (CONVERT(DECIMAL(5,2), (WeightKg * 10000.0) / (HeightCm * HeightCm))) PERSISTED,
+    RecordedAt DATETIME2 NOT NULL CONSTRAINT DF_CustomerHealthHistory_RecordedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_CustomerHealthHistory_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
+    CONSTRAINT CK_HealthHistory_Height CHECK (HeightCm > 0),
+    CONSTRAINT CK_HealthHistory_Weight CHECK (WeightKg > 0)
+);
+GO
+
+CREATE TRIGGER dbo.TRG_CustomerHealthHistory_UpsertCurrent
+ON dbo.CustomerHealthHistory
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    MERGE dbo.CustomerHealthCurrent AS tgt
+    USING (
+        SELECT i.CustomerID, i.HeightCm, i.WeightKg
+        FROM inserted i
+    ) src
+    ON tgt.CustomerID = src.CustomerID
+    WHEN MATCHED THEN
+        UPDATE SET tgt.HeightCm = src.HeightCm, tgt.WeightKg = src.WeightKg, tgt.UpdatedAt = SYSDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT (CustomerID, HeightCm, WeightKg) VALUES (src.CustomerID, src.HeightCm, src.WeightKg);
+END;
+GO
+
+/* =========================
+   NOTIFICATIONS
+========================= */
+CREATE TABLE dbo.Notifications (
+    NotificationID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+
+    NotificationType NVARCHAR(50) NOT NULL,
+    Title NVARCHAR(150) NOT NULL,
+    Message NVARCHAR(600) NOT NULL,
+    LinkUrl NVARCHAR(300) NULL,
+
+    IsRead BIT NOT NULL CONSTRAINT DF_Notifications_IsRead DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Notifications_CreatedAt DEFAULT SYSDATETIME(),
+
+    RefId INT NULL,        -- membershipId, requestId, orderId, etc.
+    ExtraKey NVARCHAR(50) NULL, -- e.g. 'DAYSLEFT_7'
+
+    CONSTRAINT FK_Notifications_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE UNIQUE INDEX UX_Notifications_Dedupe
+ON dbo.Notifications(UserID, NotificationType, RefId, ExtraKey)
+WHERE RefId IS NOT NULL;
+GO
+
+/* =========================
+   PAYMENTS (PayOS Hosted Checkout)
+   - Use PaymentID as PayOS orderCode (numeric)
+   - Option 2: reuse existing PENDING payment link
+========================= */
+CREATE TABLE dbo.Payments (
+    PaymentID INT IDENTITY(1,1) PRIMARY KEY,
+
+    -- Money detail (membership discounts are stored here too)
+    OriginalAmount DECIMAL(12,2) NOT NULL,
+    DiscountAmount DECIMAL(12,2) NOT NULL CONSTRAINT DF_Payments_Discount DEFAULT 0,
+    Amount DECIMAL(12,2) NOT NULL,
+    Currency NVARCHAR(10) NOT NULL CONSTRAINT DF_Payments_Currency DEFAULT 'VND',
+
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_Payments_Status DEFAULT 'PENDING', -- PENDING|SUCCESS|FAILED|CANCELLED
+
+    -- Optional: claim used for THIS payment (membership use is here)
+    ClaimID INT NULL,
+
+    -- PayOS fields
+    PayOS_PaymentLinkId NVARCHAR(80) NULL,
+    PayOS_CheckoutUrl NVARCHAR(1000) NULL,
+    PayOS_Status NVARCHAR(30) NULL,
+    PayOS_ExpiredAt DATETIME2 NULL,
+
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Payments_CreatedAt DEFAULT SYSDATETIME(),
+    PaidAt DATETIME2 NULL,
+    WebhookVerifiedAt DATETIME2 NULL,
+
+    OrderID INT NULL,
+    CustomerMembershipID INT NULL,
+
+    CONSTRAINT FK_Payments_Order FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+    CONSTRAINT FK_Payments_Membership FOREIGN KEY (CustomerMembershipID) REFERENCES dbo.CustomerMemberships(CustomerMembershipID),
+    CONSTRAINT FK_Payments_Claim FOREIGN KEY (ClaimID) REFERENCES dbo.UserPromotionClaims(ClaimID),
+
+    CONSTRAINT CK_Payments_Status CHECK (Status IN ('PENDING','SUCCESS','FAILED','CANCELLED')),
+    CONSTRAINT CK_Payments_Target CHECK (
+        (OrderID IS NOT NULL AND CustomerMembershipID IS NULL)
+        OR (OrderID IS NULL AND CustomerMembershipID IS NOT NULL)
+    ),
+    CONSTRAINT CK_Payments_Money CHECK (
+        OriginalAmount >= 0 AND DiscountAmount >= 0 AND Amount >= 0
+        AND DiscountAmount <= OriginalAmount
+        AND Amount = (OriginalAmount - DiscountAmount)
+    )
+);
+GO
+
+CREATE UNIQUE INDEX UX_Payments_PayOS_PaymentLinkId
+ON dbo.Payments(PayOS_PaymentLinkId)
+WHERE PayOS_PaymentLinkId IS NOT NULL;
+GO
+
+-- Option 2: only one PENDING payment per order
+CREATE UNIQUE INDEX UX_Payments_OnePendingPerOrder
+ON dbo.Payments(OrderID)
+WHERE Status = 'PENDING' AND OrderID IS NOT NULL;
+GO
+
+-- Option 2: only one PENDING payment per membership
+CREATE UNIQUE INDEX UX_Payments_OnePendingPerMembership
+ON dbo.Payments(CustomerMembershipID)
+WHERE Status = 'PENDING' AND CustomerMembershipID IS NOT NULL;
+GO
+
+/* Validate Payment Claim:
+   - claim must belong to same customer (Order.CustomerID or Membership.CustomerID)
+   - claim unused
+   - promotion still valid
+*/
+CREATE TRIGGER dbo.TRG_Payments_ValidateClaim
+ON dbo.Payments
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @now DATETIME2 = SYSDATETIME();
+
+    -- Membership payments
+    IF EXISTS (
+        SELECT 1
+        FROM inserted pay
+        JOIN dbo.UserPromotionClaims c ON c.ClaimID = pay.ClaimID
+        JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+        JOIN dbo.CustomerMemberships m ON m.CustomerMembershipID = pay.CustomerMembershipID
+        WHERE pay.ClaimID IS NOT NULL
+          AND pay.CustomerMembershipID IS NOT NULL
+          AND (
+                c.UserID <> m.CustomerID
+             OR c.UsedAt IS NOT NULL
+             OR p.IsActive = 0
+             OR @now < p.ValidFrom OR @now > p.ValidTo
+          )
+    )
+    BEGIN
+        RAISERROR('Invalid claim for membership payment.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+
+    -- Order payments (if you ever set ClaimID here too)
+    IF EXISTS (
+        SELECT 1
+        FROM inserted pay
+        JOIN dbo.UserPromotionClaims c ON c.ClaimID = pay.ClaimID
+        JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+        JOIN dbo.Orders o ON o.OrderID = pay.OrderID
+        WHERE pay.ClaimID IS NOT NULL
+          AND pay.OrderID IS NOT NULL
+          AND (
+                c.UserID <> o.CustomerID
+             OR c.UsedAt IS NOT NULL
+             OR p.IsActive = 0
+             OR @now < p.ValidFrom OR @now > p.ValidTo
+          )
+    )
+    BEGIN
+        RAISERROR('Invalid claim for order payment.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* =========================
+   REVENUE VIEWS
+========================= */
+CREATE VIEW dbo.vw_Revenue_ProductOrders
+AS
+SELECT
+    CAST(pay.PaidAt AS DATE) AS RevenueDate,
+    SUM(pay.Amount) AS RevenueAmount,
+    COUNT(DISTINCT pay.OrderID) AS PaidOrders
+FROM dbo.Payments pay
+WHERE pay.Status = 'SUCCESS' AND pay.OrderID IS NOT NULL
+GROUP BY CAST(pay.PaidAt AS DATE);
+GO
+
+CREATE VIEW dbo.vw_Revenue_Memberships
+AS
+SELECT
+    CAST(pay.PaidAt AS DATE) AS RevenueDate,
+    SUM(pay.Amount) AS RevenueAmount,
+    COUNT(DISTINCT pay.CustomerMembershipID) AS PaidMemberships
+FROM dbo.Payments pay
+WHERE pay.Status = 'SUCCESS' AND pay.CustomerMembershipID IS NOT NULL
+GROUP BY CAST(pay.PaidAt AS DATE);
+GO
+
+/* =========================
+   DAILY JOB STORED PROCEDURE
+   - create membership expiry countdown notifications (7..1 days left)
+   - expire memberships (EndDate < today)
+   - cancel PT sessions if customer has NO ACTIVE membership after expiry
+========================= */
+CREATE OR ALTER PROCEDURE dbo.sp_RunDailyMembershipJobs
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @today DATE = CAST(GETDATE() AS DATE);
+
+    /* 1) Countdown notifications (7..1 days left) for ACTIVE memberships */
+    ;WITH ActiveM AS (
+        SELECT m.CustomerMembershipID, m.CustomerID, m.EndDate,
+               DATEDIFF(DAY, @today, m.EndDate) AS DaysLeft
+        FROM dbo.CustomerMemberships m
+        WHERE m.Status = 'ACTIVE'
+    )
+    INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
+    SELECT
+        a.CustomerID,
+        'MEMBERSHIP_EXPIRES_COUNTDOWN',
+        N'Membership expiring soon',
+        CONCAT(N'Your membership expires in ', a.DaysLeft, N' day(s). If you do not renew, all PT schedules will be cancelled.'),
+        N'/membership',
+        a.CustomerMembershipID,
+        CONCAT('DAYSLEFT_', a.DaysLeft)
+    FROM ActiveM a
+    WHERE a.DaysLeft BETWEEN 1 AND 7
+      AND NOT EXISTS (
+            SELECT 1 FROM dbo.Notifications n
+            WHERE n.UserID = a.CustomerID
+              AND n.NotificationType = 'MEMBERSHIP_EXPIRES_COUNTDOWN'
+              AND n.RefId = a.CustomerMembershipID
+              AND n.ExtraKey = CONCAT('DAYSLEFT_', a.DaysLeft)
+      );
+
+    /* 2) Expire memberships that ended before today */
+    UPDATE dbo.CustomerMemberships
+    SET Status = 'EXPIRED', UpdatedAt = SYSDATETIME()
+    WHERE Status = 'ACTIVE' AND EndDate < @today;
+
+    /* 3) Cancel PT sessions ONLY for customers who now have NO ACTIVE membership */
+    ;WITH NoActive AS (
+        SELECT DISTINCT c.CustomerID
+        FROM dbo.Customers c
+        WHERE NOT EXISTS (
+            SELECT 1 FROM dbo.CustomerMemberships m
+            WHERE m.CustomerID = c.CustomerID AND m.Status = 'ACTIVE'
+        )
+    )
+    UPDATE s
+    SET s.Status = 'CANCELLED',
+        s.CancelReason = 'Membership expired',
+        s.UpdatedAt = SYSDATETIME()
+    FROM dbo.PTSessions s
+    JOIN NoActive na ON na.CustomerID = s.CustomerID
+    WHERE s.Status = 'SCHEDULED'
+      AND s.SessionDate >= @today;
+
+    /* 4) Notify customers whose PT got cancelled */
+    INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
+    SELECT DISTINCT
+        s.CustomerID,
+        'PT_CANCELLED_MEMBERSHIP_EXPIRED',
+        N'PT schedule cancelled',
+        N'Your membership expired, so all PT schedules were cancelled. Renew to book again.',
+        N'/schedule',
+        NULL,
+        NULL
+    FROM dbo.PTSessions s
+    WHERE s.Status = 'CANCELLED'
+      AND s.CancelReason = 'Membership expired'
+      AND s.UpdatedAt >= DATEADD(MINUTE, -5, SYSDATETIME()); -- avoid spam if SP reruns quickly
+END;
+GO
+
+/* Helpful indexes */
+CREATE INDEX IX_Users_RoleID ON dbo.Users(RoleID);
+CREATE INDEX IX_Notifications_User_Time ON dbo.Notifications(UserID, CreatedAt);
+CREATE INDEX IX_Orders_Customer_Date ON dbo.Orders(CustomerID, OrderDate);
+CREATE INDEX IX_Payments_Status_Time ON dbo.Payments(Status, CreatedAt);
+CREATE INDEX IX_CheckIns_Customer_Time ON dbo.CheckIns(CustomerID, CheckInTime);
+GO

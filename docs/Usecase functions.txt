@@ -1,0 +1,119 @@
+
+1) (GymCore scope)
+A. Account & Authentication
+Guest
+•	Register
+•	Login (Email/Password)
+•	Login via Google
+Authenticated User (Admin/Coach/Receptionist/Customer)
+•	Logout
+•	Forgot Password
+•	Change Password 
+•	View Profile
+•	Edit Profile
+________________________________________
+B. Customer & User Management
+Receptionist
+•	Search Customer
+•	View Customer’s Membership Plan
+Admin
+•	Create Staff Account (Admin/Coach/Receptionist)
+•	Lock Account
+•	Unlock Account
+________________________________________
+C. Membership & Payment (PayOS redirect)
+Customer
+•	View Membership Plan List
+•	View Membership Plan Detail
+•	Purchase Membership Plan (PayOS)
+•	View Current Membership Status
+Admin
+•	Create Membership Plan
+•	Update Membership Plan
+Business rules
+•	3 types: Gym Only, Day Pass (unlimited check-ins that day), Gym + Coach
+•	Only ONE ACTIVE membership at a time
+•	Renew: extend current membership from its EndDate (no downtime, PT keeps going)
+•	Upgrade: apply immediately (old ends today, new starts today), full price
+•	Day pass is active until midnight (StartDate = EndDate)
+________________________________________
+D. Check-in & Personal Health
+Customer
+•	Show Check-in QR Code
+•	View Check-in History
+•	Enter Height/Weight (system calculates BMI) 
+•	View Personal Health (current height/weight/BMI stays until updated + history)
+•	View Coach Notes
+Receptionist
+•	Scan Check-in QR Code
+•	Check Membership Validity
+________________________________________
+E. Coach Booking & Training Support
+Customer
+•	Set Desired PT Schedule (weekly recurring day+slot)
+•	Match Coach (full match list + partial match list)
+•	View Coach List
+•	View Coach Details
+•	View Coach Schedule
+•	Request Booking Coach (recurring)
+•	View PT Schedule
+•	Cancel / Reschedule Coach Session
+•	Feedback Coach (rating + comment)
+Coach
+•	Update Available Slots (weekly availability)
+•	View Coach Schedule
+•	View Customer List
+•	View Customer Profile
+•	View Training History
+•	Update Training Progress
+•	Update Notes
+•	View Customer Feedback
+•	View Average Rating
+Admin
+•	View Coach’s Students
+•	View Customer Feedback
+________________________________________
+F. Products Sales & Payment
+Customer
+•	View Product List
+•	View Product Detail
+•	Add to Cart
+•	Update Cart (qty/remove)
+•	Checkout Order (PayOS)
+•	View Purchase History
+•	Write Product Review (only if purchased)
+Admin
+•	Add Product
+•	Update Product
+•	View Product Reviews
+________________________________________
+G. Promotions, Coupons, Notifications, Revenue
+Customer
+•	View Promotion
+•	Save Coupon Code (Claim to wallet)
+•	Apply Saved Coupon at checkout (Order OR Membership)
+•	View Notifications (badge count)
+Admin
+•	Create Coupon Code
+•	Update Coupon Code
+•	Create Promotion Post
+•	Update Promotion Post
+•	View Revenue Report
+•	Export reports to PDF (backend feature)
+Coupon rule
+•	Must claim first, then apply at payment
+•	One-time per customer per coupon (one claim, one use)
+Notifications rule
+•	Membership expiry countdown notifications: 7 → 1 days left (daily job)
+•	If membership expires and not renewed: cancel PT schedules (daily job) + notify
+________________________________________
+H. Workout & Food Info Pages + AI chatbot (workout only)
+Customer
+•	View Workout Categories
+•	View Workout Detail
+•	View Food Categories
+•	View Food Detail
+AI Chatbot
+•	Recommend workouts only → link to workout pages
+•	Assist PT booking using the same matching rules (no food suggestion)
+
