@@ -260,6 +260,122 @@ BEGIN TRY
           AND m.FoodCategoryID = c.FoodCategoryID
     );
 
+    /* Fitness goals */
+    INSERT INTO dbo.FitnessGoals (GoalCode, GoalName, Description)
+    SELECT v.GoalCode, v.GoalName, v.Description
+    FROM (VALUES
+        (N'LOSE_FAT', N'Lose fat', N'Focus on calorie deficit and cardio/strength mix.'),
+        (N'GAIN_MUSCLE', N'Gain muscle', N'Focus on progressive overload and sufficient protein.'),
+        (N'MAINTAIN', N'Maintain', N'Maintain current fitness and body composition.')
+    ) AS v(GoalCode, GoalName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.FitnessGoals g WHERE g.GoalCode = v.GoalCode
+    );
+
+    DECLARE @GoalLoseFat INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'LOSE_FAT');
+    DECLARE @GoalGainMuscle INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'GAIN_MUSCLE');
+    DECLARE @GoalMaintain INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'MAINTAIN');
+
+    /* Meal categories */
+    INSERT INTO dbo.MealCategories (CategoryName, Description)
+    SELECT v.CategoryName, v.Description
+    FROM (VALUES
+        (N'Breakfast', N'Morning meals'),
+        (N'Lunch', N'Midday meals'),
+        (N'Dinner', N'Evening meals')
+    ) AS v(CategoryName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.MealCategories mc WHERE mc.CategoryName = v.CategoryName
+    );
+
+    /* Meals */
+    INSERT INTO dbo.Meals (MealName, ImageUrl, Description, Recipe, Calories, Protein, Carbs, Fat, UpdatedBy)
+    SELECT v.MealName, v.ImageUrl, v.Description, v.Recipe, v.Calories, v.Protein, v.Carbs, v.Fat, @AdminID
+    FROM (VALUES
+        (
+            N'Chicken Salad Bowl',
+            NULL,
+            N'High-protein salad bowl.',
+            N'1) Grill chicken breast. 2) Mix greens + tomatoes. 3) Add chicken + olive oil + salt/pepper.',
+            420,
+            CAST(45.00 AS DECIMAL(6,2)),
+            CAST(18.00 AS DECIMAL(6,2)),
+            CAST(18.00 AS DECIMAL(6,2))
+        ),
+        (
+            N'Oatmeal with Banana',
+            NULL,
+            N'Quick breakfast with complex carbs.',
+            N'1) Cook oats with water. 2) Add sliced banana. 3) Add cinnamon to taste.',
+            350,
+            CAST(10.00 AS DECIMAL(6,2)),
+            CAST(62.00 AS DECIMAL(6,2)),
+            CAST(6.00 AS DECIMAL(6,2))
+        )
+    ) AS v(MealName, ImageUrl, Description, Recipe, Calories, Protein, Carbs, Fat)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Meals m WHERE m.MealName = v.MealName
+    );
+
+    DECLARE @MealChickenSalad INT = (SELECT MealID FROM dbo.Meals WHERE MealName = N'Chicken Salad Bowl');
+    DECLARE @MealOatmealBanana INT = (SELECT MealID FROM dbo.Meals WHERE MealName = N'Oatmeal with Banana');
+
+    /* Meal categories map */
+    INSERT INTO dbo.MealCategoryMap (MealID, MealCategoryID)
+    SELECT m.MealID, c.MealCategoryID
+    FROM dbo.Meals m
+    JOIN dbo.MealCategories c
+      ON (m.MealName = N'Chicken Salad Bowl' AND c.CategoryName = N'Lunch')
+      OR (m.MealName = N'Oatmeal with Banana' AND c.CategoryName = N'Breakfast')
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.MealCategoryMap mm
+        WHERE mm.MealID = m.MealID AND mm.MealCategoryID = c.MealCategoryID
+    );
+
+    /* Goal mappings (foods + meals) */
+    IF @GoalLoseFat IS NOT NULL AND @GoalGainMuscle IS NOT NULL AND @GoalMaintain IS NOT NULL
+    BEGIN
+        INSERT INTO dbo.FoodGoalMap (FoodID, GoalID)
+        SELECT f.FoodID, g.GoalID
+        FROM dbo.Foods f
+        JOIN dbo.FitnessGoals g ON 1=1
+        WHERE
+            (
+                (f.FoodName = N'Chicken Breast' AND g.GoalCode IN (N'LOSE_FAT', N'GAIN_MUSCLE'))
+                OR (f.FoodName = N'Oatmeal' AND g.GoalCode IN (N'GAIN_MUSCLE', N'MAINTAIN'))
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM dbo.FoodGoalMap fg
+                WHERE fg.FoodID = f.FoodID AND fg.GoalID = g.GoalID
+            );
+
+        INSERT INTO dbo.MealGoalMap (MealID, GoalID)
+        SELECT m.MealID, g.GoalID
+        FROM dbo.Meals m
+        JOIN dbo.FitnessGoals g ON 1=1
+        WHERE
+            (
+                (m.MealName = N'Chicken Salad Bowl' AND g.GoalCode IN (N'LOSE_FAT', N'GAIN_MUSCLE'))
+                OR (m.MealName = N'Oatmeal with Banana' AND g.GoalCode IN (N'GAIN_MUSCLE', N'MAINTAIN'))
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM dbo.MealGoalMap mg
+                WHERE mg.MealID = m.MealID AND mg.GoalID = g.GoalID
+            );
+    END;
+
+    /* Allergens (structured - used to block items in AI recommendations) */
+    INSERT INTO dbo.Allergens (AllergenCode, AllergenName, Description, UpdatedBy)
+    SELECT v.AllergenCode, v.AllergenName, v.Description, @AdminID
+    FROM (VALUES
+        (N'MILK', N'Milk', N'Dairy products'),
+        (N'EGG', N'Egg', N'Egg and egg products'),
+        (N'PEANUT', N'Peanut', N'Peanuts and peanut products')
+    ) AS v(AllergenCode, AllergenName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Allergens a WHERE a.AllergenCode = v.AllergenCode
+    );
+
     /* Products */
     INSERT INTO dbo.Products (ProductName, Description, Price, ImageUrl, UpdatedBy)
     SELECT v.ProductName, v.Description, v.Price, NULL, @AdminID

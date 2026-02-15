@@ -54,6 +54,35 @@ public class ContentController {
                 contentService.execute("get-food-detail", Map.of("foodId", foodId)));
     }
 
+    @GetMapping("/meals/categories")
+    public ApiResponse<Map<String, Object>> getMealCategories() {
+        return ApiResponse.ok("Meal categories endpoint ready for implementation",
+                contentService.execute("get-meal-categories", null));
+    }
+
+    @GetMapping("/meals")
+    public ApiResponse<Map<String, Object>> getMeals() {
+        return ApiResponse.ok("Meals endpoint ready for implementation", contentService.execute("get-meals", null));
+    }
+
+    @GetMapping("/meals/{mealId}")
+    public ApiResponse<Map<String, Object>> getMealDetail(@PathVariable Integer mealId) {
+        return ApiResponse.ok("Meal detail endpoint ready for implementation",
+                contentService.execute("get-meal-detail", Map.of("mealId", mealId)));
+    }
+
+    @GetMapping("/goals")
+    public ApiResponse<Map<String, Object>> getFitnessGoals() {
+        return ApiResponse.ok("Fitness goals endpoint ready for implementation",
+                contentService.execute("get-fitness-goals", null));
+    }
+
+    @GetMapping("/allergens")
+    public ApiResponse<Map<String, Object>> getAllergens() {
+        return ApiResponse.ok("Allergens endpoint ready for implementation",
+                contentService.execute("get-allergens", null));
+    }
+
     @PostMapping("/ai/workout-assistant")
     public ApiResponse<Map<String, Object>> askWorkoutAssistant(@RequestBody Map<String, Object> payload) {
         return ApiResponse.ok("Workout assistant endpoint ready for implementation",
@@ -64,5 +93,11 @@ public class ContentController {
     public ApiResponse<Map<String, Object>> askCoachBookingAssistant(@RequestBody Map<String, Object> payload) {
         return ApiResponse.ok("Coach booking assistant endpoint ready for implementation",
                 contentService.execute("ai-coach-booking-assistant", payload));
+    }
+
+    @PostMapping("/ai/recommendations")
+    public ApiResponse<Map<String, Object>> getAiRecommendations(@RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("AI recommendations endpoint ready for implementation",
+                contentService.execute("ai-recommendations", payload));
     }
 }
