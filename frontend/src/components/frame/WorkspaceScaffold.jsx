@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { Dumbbell } from 'lucide-react'
+import AuthHeaderActions from '../common/AuthHeaderActions'
 
 function WorkspaceScaffold({ title, subtitle, children, links }) {
   return (
@@ -12,7 +13,27 @@ function WorkspaceScaffold({ title, subtitle, children, links }) {
             </span>
             <span className="font-bold">GymCore</span>
           </Link>
-          <nav className="flex flex-wrap items-center gap-3 text-xs font-medium sm:text-sm">
+          <div className="flex items-center gap-3">
+            <nav className="hidden flex-wrap items-center gap-3 text-xs font-medium sm:flex sm:text-sm">
+              {links.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) =>
+                    isActive
+                      ? 'rounded-md bg-gym-100 px-2 py-1 text-gym-900'
+                      : 'rounded-md px-2 py-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900'
+                  }
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </nav>
+            <AuthHeaderActions />
+          </div>
+        </div>
+        <div className="mx-auto max-w-7xl px-4 pb-3 sm:hidden sm:px-6">
+          <nav className="flex flex-wrap gap-2 text-xs font-medium">
             {links.map((link) => (
               <NavLink
                 key={link.to}

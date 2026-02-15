@@ -5,7 +5,10 @@ function ChangePasswordPage() {
   const [form, setForm] = useState({
     oldPassword: '',
     newPassword: '',
+    confirmPassword: '',
   })
+  const [message, setMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
 
   function handleChange(event) {
     setForm((prev) => ({
@@ -16,8 +19,19 @@ function ChangePasswordPage() {
 
   async function handleSubmit(event) {
     event.preventDefault()
-    await authApi.changePassword(form)
-    alert('Change-password API wired.')
+    try {
+      setErrorMessage('')
+      setMessage('')
+      await authApi.changePassword(form)
+      setMessage('Password updated successfully.')
+      setForm({
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      })
+    } catch (error) {
+      setErrorMessage(error?.response?.data?.message || 'Could not change password.')
+    }
   }
 
   return (
@@ -48,6 +62,19 @@ function ChangePasswordPage() {
             required
           />
         </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-slate-700">Confirm password</span>
+          <input
+            type="password"
+            name="confirmPassword"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            required
+          />
+        </label>
+        {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
         <button type="submit" className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700">
           Update password
         </button>

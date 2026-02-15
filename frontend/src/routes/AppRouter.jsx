@@ -3,6 +3,7 @@ import LandingPage from '../pages/public/LandingPage'
 import LoginPage from '../pages/public/LoginPage'
 import RegisterPage from '../pages/public/RegisterPage'
 import ForgotPasswordPage from '../pages/public/ForgotPasswordPage'
+import ForgotPasswordResetPage from '../pages/public/ForgotPasswordResetPage'
 import ChangePasswordPage from '../pages/public/ChangePasswordPage'
 import ProfilePage from '../pages/common/ProfilePage'
 import CustomerMembershipPage from '../pages/customer/CustomerMembershipPage'
@@ -32,6 +33,7 @@ function AppRouter() {
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/auth/forgot-password/reset" element={<ForgotPasswordResetPage />} />
       <Route path="/auth/change-password" element={<ChangePasswordPage />} />
       <Route path="/profile" element={<ProfilePage />} />
 

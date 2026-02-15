@@ -63,15 +63,22 @@ BEGIN TRY
         THROW 50001, 'Missing one or more required roles.', 1;
     END;
 
-    /* Users (PasswordHash placeholders, backend will hash real passwords) */
-    INSERT INTO dbo.Users (RoleID, FullName, Email, Phone, PasswordHash)
-    SELECT v.RoleID, v.FullName, v.Email, v.Phone, v.PasswordHash
+    /* Users
+       NOTE: PasswordHash must be a real bcrypt hash. You DO NOT login using the hash value.
+       Default seeded passwords (plain text):
+       - Admin: Admin123456!
+       - Receptionist: Reception123456!
+       - Coach: Coach123456!
+       - Customer: Customer123456!
+    */
+    INSERT INTO dbo.Users (RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+    SELECT v.RoleID, v.FullName, v.Email, v.Phone, v.PasswordHash, v.IsEmailVerified, v.EmailVerifiedAt
     FROM (VALUES
-        (@RoleAdmin,        N'Admin GymCore',        N'admin@gymcore.local',      N'0900000001', N'HASHED_ADMIN'),
-        (@RoleReceptionist, N'Receptionist GymCore', N'reception@gymcore.local',  N'0900000002', N'HASHED_RECEPTION'),
-        (@RoleCoach,        N'Coach Alex',           N'coach@gymcore.local',      N'0900000003', N'HASHED_COACH'),
-        (@RoleCustomer,     N'Customer Minh',        N'customer@gymcore.local',   N'0900000004', N'HASHED_CUSTOMER')
-    ) AS v(RoleID, FullName, Email, Phone, PasswordHash)
+        (@RoleAdmin,        N'Admin GymCore',        N'admin@gymcore.local',      N'0900000001', N'$2a$10$Ms9kKRlpN/13o7CqvZrpMup4lz2MXD1NbKEFZ54qigrtgXlUjzsKO', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleReceptionist, N'Receptionist GymCore', N'reception@gymcore.local',  N'0900000002', N'$2a$10$g/lpvbVBJEUBB4mgSE41d.2Fk.8OnV0Mjoi6zwo1DiLKTV/R/Q/VW', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleCoach,        N'Coach Alex',           N'coach@gymcore.local',      N'0900000003', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleCustomer,     N'Customer Minh',        N'customer@gymcore.local',   N'0900000004', N'$2a$10$EiimMLC5OYOJCTSB.tc0uuOpVpi4IpeFwPqfytKuyd6HohAoerL1m', CAST(1 AS BIT), SYSDATETIME())
+    ) AS v(RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
     WHERE NOT EXISTS (
         SELECT 1 FROM dbo.Users u WHERE u.Email = v.Email
     );
@@ -81,6 +88,28 @@ BEGIN TRY
     SELECT @CoachID = UserID FROM dbo.Users WHERE Email = N'coach@gymcore.local';
     SELECT @CustomerID = UserID FROM dbo.Users WHERE Email = N'customer@gymcore.local';
 
+    UPDATE dbo.Users
+    SET IsEmailVerified = 1,
+        EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME())
+    WHERE Email IN (
+        N'admin@gymcore.local',
+        N'reception@gymcore.local',
+        N'coach@gymcore.local',
+        N'customer@gymcore.local'
+    );
+
+    /* Ensure seeded accounts have valid bcrypt hashes even if they already existed */
+    UPDATE dbo.Users
+    SET PasswordHash = CASE Email
+        WHEN N'admin@gymcore.local' THEN N'$2a$10$Ms9kKRlpN/13o7CqvZrpMup4lz2MXD1NbKEFZ54qigrtgXlUjzsKO'
+        WHEN N'reception@gymcore.local' THEN N'$2a$10$g/lpvbVBJEUBB4mgSE41d.2Fk.8OnV0Mjoi6zwo1DiLKTV/R/Q/VW'
+        WHEN N'coach@gymcore.local' THEN N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G'
+        WHEN N'customer@gymcore.local' THEN N'$2a$10$EiimMLC5OYOJCTSB.tc0uuOpVpi4IpeFwPqfytKuyd6HohAoerL1m'
+        ELSE PasswordHash
+    END
+    WHERE Email IN (N'admin@gymcore.local', N'reception@gymcore.local', N'coach@gymcore.local', N'customer@gymcore.local')
+      AND (PasswordHash IS NULL OR PasswordHash LIKE N'HASHED_%' OR PasswordHash NOT LIKE N'$2%');
+
     IF @AdminID IS NULL OR @ReceptionistID IS NULL OR @CoachID IS NULL OR @CustomerID IS NULL
     BEGIN
         THROW 50002, 'Missing one or more required users.', 1;
@@ -89,8 +118,8 @@ BEGIN TRY
     /* Profiles */
     IF NOT EXISTS (SELECT 1 FROM dbo.Coaches WHERE CoachID = @CoachID)
     BEGIN
-        INSERT INTO dbo.Coaches (CoachID, ExperienceYears, Bio)
-        VALUES (@CoachID, 5, N'Strength and conditioning coach.');
+        INSERT INTO dbo.Coaches (CoachID, DateOfBirth, Gender, ExperienceYears, Bio)
+        VALUES (@CoachID, '1998-01-01', N'Male', 5, N'Strength and conditioning coach.');
     END;
 
     IF NOT EXISTS (SELECT 1 FROM dbo.Customers WHERE CustomerID = @CustomerID)

@@ -2,6 +2,8 @@
    GymCore - MS SQL Server (Fresh Schema)
    - PayOS Hosted Checkout: Payments table (reuse pending link)
    - Coupon wallet: claim first, one-time use per user per promo
+   - Auth hardening: email verification OTP + refresh token persistence
+   - Profile avatars: store avatar URL + source (GOOGLE/CUSTOM) in Users
    - Membership renew vs upgrade supported (logic in backend)
    - Day pass: active until midnight (StartDate=EndDate)
    - Daily job SP included for:
@@ -43,8 +45,14 @@ CREATE TABLE dbo.Users (
     LockReason NVARCHAR(200) NULL,
 
     IsActive BIT NOT NULL CONSTRAINT DF_Users_IsActive DEFAULT 1,
+    IsEmailVerified BIT NOT NULL CONSTRAINT DF_Users_IsEmailVerified DEFAULT 0,
+    EmailVerifiedAt DATETIME2 NULL,
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Users_CreatedAt DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 NULL,
+
+    -- Profile avatar
+    AvatarUrl NVARCHAR(500) NULL,
+    AvatarSource NVARCHAR(20) NULL, -- 'GOOGLE' | 'CUSTOM'
 
     -- Check-in QR token (immutable)
     QrCodeToken NVARCHAR(64) NOT NULL
@@ -53,7 +61,8 @@ CREATE TABLE dbo.Users (
         CONSTRAINT DF_Users_QrIssuedAt DEFAULT SYSDATETIME(),
 
     CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleID) REFERENCES dbo.Roles(RoleID),
-    CONSTRAINT UQ_Users_QrCodeToken UNIQUE (QrCodeToken)
+    CONSTRAINT UQ_Users_QrCodeToken UNIQUE (QrCodeToken),
+    CONSTRAINT CK_Users_AvatarSource CHECK (AvatarSource IS NULL OR AvatarSource IN ('GOOGLE','CUSTOM'))
 );
 GO
 
@@ -66,7 +75,8 @@ CREATE TABLE dbo.UserAuthProviders (
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_UserAuthProviders_CreatedAt DEFAULT SYSDATETIME(),
 
     CONSTRAINT FK_UserAuthProviders_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
-    CONSTRAINT UQ_UserAuthProviders UNIQUE (Provider, ProviderUserId)
+    CONSTRAINT UQ_UserAuthProviders UNIQUE (Provider, ProviderUserId),
+    CONSTRAINT UQ_UserAuthProviders_UserProvider UNIQUE (UserID, Provider)
 );
 GO
 
@@ -79,6 +89,39 @@ CREATE TABLE dbo.PasswordResetTokens (
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PasswordResetTokens_CreatedAt DEFAULT SYSDATETIME(),
 
     CONSTRAINT FK_PasswordResetTokens_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TABLE dbo.EmailVerificationTokens (
+    EmailVerificationTokenID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+    OtpHash NVARCHAR(255) NOT NULL,
+    ExpiresAt DATETIME2 NOT NULL,
+    ResendAvailableAt DATETIME2 NOT NULL,
+    UsedAt DATETIME2 NULL,
+    InvalidatedAt DATETIME2 NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_EmailVerificationTokens_CreatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_EmailVerificationTokens_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT CK_EmailVerificationTokens_Expires CHECK (ExpiresAt > CreatedAt),
+    CONSTRAINT CK_EmailVerificationTokens_State CHECK (NOT (UsedAt IS NOT NULL AND InvalidatedAt IS NOT NULL))
+);
+GO
+
+CREATE TABLE dbo.UserRefreshTokens (
+    RefreshTokenID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+    TokenHash NVARCHAR(255) NOT NULL,
+    ExpiresAt DATETIME2 NOT NULL,
+    RevokedAt DATETIME2 NULL,
+    ReplacedByRefreshTokenID INT NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_UserRefreshTokens_CreatedAt DEFAULT SYSDATETIME(),
+    UserAgent NVARCHAR(300) NULL,
+    IpAddress NVARCHAR(64) NULL,
+
+    CONSTRAINT FK_UserRefreshTokens_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT FK_UserRefreshTokens_ReplacedBy FOREIGN KEY (ReplacedByRefreshTokenID) REFERENCES dbo.UserRefreshTokens(RefreshTokenID),
+    CONSTRAINT CK_UserRefreshTokens_Expires CHECK (ExpiresAt > CreatedAt)
 );
 GO
 
@@ -110,6 +153,8 @@ GO
 
 CREATE TABLE dbo.Coaches (
     CoachID INT PRIMARY KEY,        -- same as Users.UserID
+    DateOfBirth DATE NULL,
+    Gender NVARCHAR(10) NULL,
     ExperienceYears INT NULL,
     Bio NVARCHAR(500) NULL,
     CONSTRAINT FK_Coaches_Users FOREIGN KEY (CoachID) REFERENCES dbo.Users(UserID)
@@ -435,6 +480,33 @@ CREATE TABLE dbo.ProductReviews (
     CONSTRAINT CK_ProductReviews_Rating CHECK (Rating BETWEEN 1 AND 5),
     CONSTRAINT UQ_ProductReviews UNIQUE (ProductID, CustomerID)
 );
+GO
+
+CREATE TRIGGER dbo.TRG_ProductReviews_RequirePurchase
+ON dbo.ProductReviews
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted r
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM dbo.Orders o
+            JOIN dbo.OrderItems oi ON oi.OrderID = o.OrderID
+            WHERE o.CustomerID = r.CustomerID
+              AND oi.ProductID = r.ProductID
+              AND o.Status = 'PAID'
+        )
+    )
+    BEGIN
+        RAISERROR('Review blocked: customer must have a PAID order for this product.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
 GO
 
 CREATE TRIGGER dbo.TRG_Orders_ValidateClaim
@@ -806,6 +878,11 @@ ON dbo.Payments(CustomerMembershipID)
 WHERE Status = 'PENDING' AND CustomerMembershipID IS NOT NULL;
 GO
 
+ALTER TABLE dbo.UserPromotionClaims
+ADD CONSTRAINT FK_UserPromotionClaims_UsedPayment
+FOREIGN KEY (UsedPaymentID) REFERENCES dbo.Payments(PaymentID);
+GO
+
 /* Validate Payment Claim:
    - claim must belong to same customer (Order.CustomerID or Membership.CustomerID)
    - claim unused
@@ -971,6 +1048,12 @@ GO
 
 /* Helpful indexes */
 CREATE INDEX IX_Users_RoleID ON dbo.Users(RoleID);
+CREATE INDEX IX_Users_EmailVerified ON dbo.Users(IsEmailVerified, IsActive);
+CREATE INDEX IX_PasswordResetTokens_User_Expires ON dbo.PasswordResetTokens(UserID, ExpiresAt);
+CREATE INDEX IX_EmailVerificationTokens_User_Time ON dbo.EmailVerificationTokens(UserID, CreatedAt, ExpiresAt);
+CREATE INDEX IX_EmailVerificationTokens_OtpHash ON dbo.EmailVerificationTokens(OtpHash);
+CREATE UNIQUE INDEX UX_UserRefreshTokens_TokenHash ON dbo.UserRefreshTokens(TokenHash);
+CREATE INDEX IX_UserRefreshTokens_User_State ON dbo.UserRefreshTokens(UserID, RevokedAt, ExpiresAt);
 CREATE INDEX IX_Notifications_User_Time ON dbo.Notifications(UserID, CreatedAt);
 CREATE INDEX IX_Orders_Customer_Date ON dbo.Orders(CustomerID, OrderDate);
 CREATE INDEX IX_Payments_Status_Time ON dbo.Payments(Status, CreatedAt);

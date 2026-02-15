@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Dumbbell, HeartPulse, ShieldCheck, Users } from 'lucide-react'
+import AuthHeaderActions from '../../components/common/AuthHeaderActions'
 
 const programs = [
   {
@@ -53,20 +54,7 @@ function LandingPage() {
             </span>
             <span className="text-lg font-bold">GymCore</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/auth/login"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Login
-            </Link>
-            <Link
-              to="/auth/register"
-              className="rounded-lg bg-gym-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
-            >
-              Register
-            </Link>
-          </div>
+          <AuthHeaderActions />
         </div>
       </header>
 
