@@ -107,13 +107,26 @@ Notifications rule
 •	Membership expiry countdown notifications: 7 → 1 days left (daily job)
 •	If membership expires and not renewed: cancel PT schedules (daily job) + notify
 ________________________________________
-H. Workout & Food Info Pages + AI chatbot (workout only)
+H. Workout, Food, Meal Info Pages + AI Assistant
 Customer
 •	View Workout Categories
 •	View Workout Detail
 •	View Food Categories
 •	View Food Detail
-AI Chatbot
-•	Recommend workouts only → link to workout pages
-•	Assist PT booking using the same matching rules (no food suggestion)
+•	View Meal Categories
+•	View Meal Detail
+•	Set Fitness Goals (multi-select)
+•	Set Allergies (multi-select)
+Admin
+•	CRUD Fitness Goals
+•	CRUD Meal Categories
+•	CRUD Meals
+•	CRUD Allergens
+•	Map Goals ↔ Workouts/Foods/Meals
+•	Map Allergens ↔ Foods/Meals
+AI Assistant
+•	Recommend workouts + foods + meals based on saved goals
+•	Exclude foods/meals that match customer allergies (strict block)
+•	Show which goal(s) each recommendation fits
+•	Assist PT booking using the same matching rules
 
