@@ -1,0 +1,757 @@
+/*
+Optional example/testing seed data.
+
+Recommended run order:
+1) docs/GymCore.txt
+2) docs/InsertValues.txt          -- must-have baseline
+3) docs/InsertTestingValues.txt   -- extra sample/test records
+
+Notes:
+- This file is idempotent (uses NOT EXISTS / MERGE), safe to re-run for local testing.
+- It intentionally seeds additional records for membership/product/promotion/PT/check-in flows.
+*/
+USE GymCore;
+GO
+
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+
+BEGIN TRY
+    BEGIN TRAN;
+
+    DECLARE @RoleCustomer INT;
+    DECLARE @RoleCoach INT;
+    DECLARE @RoleReceptionist INT;
+    DECLARE @RoleAdmin INT;
+
+    DECLARE @AdminID INT;
+    DECLARE @ReceptionistID INT;
+    DECLARE @CoachID INT;
+    DECLARE @CustomerID INT;
+
+    DECLARE @PlanGymCoach INT;
+    DECLARE @PlanGymOnly1M INT;
+    DECLARE @CustomerMembershipID INT;
+    DECLARE @CartID INT;
+    DECLARE @ProdCreatine INT;
+    DECLARE @ProdWhey INT;
+    DECLARE @PromoID INT;
+    DECLARE @PostID INT;
+    DECLARE @ClaimID INT;
+    DECLARE @OrderID INT;
+    DECLARE @Slot1 INT;
+    DECLARE @Slot2 INT;
+    DECLARE @PTRequestID INT;
+    DECLARE @Start DATE = CAST(GETDATE() AS DATE);
+    DECLARE @End DATE = DATEADD(DAY, 179, @Start);
+    DECLARE @CurrentActiveEnd DATE;
+    DECLARE @ScheduledStart DATE;
+    DECLARE @ScheduledEnd DATE;
+    DECLARE @PTBaseStart DATE;
+    DECLARE @PayOSLinkId NVARCHAR(80);
+
+    /* Roles */
+    INSERT INTO dbo.Roles (RoleName)
+    SELECT v.RoleName
+    FROM (VALUES
+        (N'Customer'),
+        (N'Coach'),
+        (N'Receptionist'),
+        (N'Admin')
+    ) AS v(RoleName)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Roles r WHERE r.RoleName = v.RoleName
+    );
+
+    SELECT @RoleCustomer = RoleID FROM dbo.Roles WHERE RoleName = N'Customer';
+    SELECT @RoleCoach = RoleID FROM dbo.Roles WHERE RoleName = N'Coach';
+    SELECT @RoleReceptionist = RoleID FROM dbo.Roles WHERE RoleName = N'Receptionist';
+    SELECT @RoleAdmin = RoleID FROM dbo.Roles WHERE RoleName = N'Admin';
+
+    IF @RoleCustomer IS NULL OR @RoleCoach IS NULL OR @RoleReceptionist IS NULL OR @RoleAdmin IS NULL
+    BEGIN
+        THROW 50001, 'Missing one or more required roles.', 1;
+    END;
+
+    /* Users
+       NOTE: PasswordHash must be a real bcrypt hash. You DO NOT login using the hash value.
+       Default seeded passwords (plain text):
+       - Admin: Admin123456!
+       - Receptionist: Reception123456!
+       - Coach: Coach123456!
+       - Customer: Customer123456!
+    */
+    INSERT INTO dbo.Users (RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+    SELECT v.RoleID, v.FullName, v.Email, v.Phone, v.PasswordHash, v.IsEmailVerified, v.EmailVerifiedAt
+    FROM (VALUES
+        (@RoleAdmin,        N'Admin GymCore',        N'admin@gymcore.local',      N'0900000001', N'$2a$10$Ms9kKRlpN/13o7CqvZrpMup4lz2MXD1NbKEFZ54qigrtgXlUjzsKO', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleReceptionist, N'Receptionist GymCore', N'reception@gymcore.local',  N'0900000002', N'$2a$10$g/lpvbVBJEUBB4mgSE41d.2Fk.8OnV0Mjoi6zwo1DiLKTV/R/Q/VW', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleCoach,        N'Coach Alex',           N'coach@gymcore.local',      N'0900000003', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleCustomer,     N'Customer Minh',        N'customer@gymcore.local',   N'0900000004', N'$2a$10$EiimMLC5OYOJCTSB.tc0uuOpVpi4IpeFwPqfytKuyd6HohAoerL1m', CAST(1 AS BIT), SYSDATETIME())
+    ) AS v(RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Users u WHERE u.Email = v.Email
+    );
+
+    SELECT @AdminID = UserID FROM dbo.Users WHERE Email = N'admin@gymcore.local';
+    SELECT @ReceptionistID = UserID FROM dbo.Users WHERE Email = N'reception@gymcore.local';
+    SELECT @CoachID = UserID FROM dbo.Users WHERE Email = N'coach@gymcore.local';
+    SELECT @CustomerID = UserID FROM dbo.Users WHERE Email = N'customer@gymcore.local';
+
+    UPDATE dbo.Users
+    SET IsEmailVerified = 1,
+        EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME())
+    WHERE Email IN (
+        N'admin@gymcore.local',
+        N'reception@gymcore.local',
+        N'coach@gymcore.local',
+        N'customer@gymcore.local'
+    );
+
+    /* Ensure seeded accounts have valid bcrypt hashes even if they already existed */
+    UPDATE dbo.Users
+    SET PasswordHash = CASE Email
+        WHEN N'admin@gymcore.local' THEN N'$2a$10$Ms9kKRlpN/13o7CqvZrpMup4lz2MXD1NbKEFZ54qigrtgXlUjzsKO'
+        WHEN N'reception@gymcore.local' THEN N'$2a$10$g/lpvbVBJEUBB4mgSE41d.2Fk.8OnV0Mjoi6zwo1DiLKTV/R/Q/VW'
+        WHEN N'coach@gymcore.local' THEN N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G'
+        WHEN N'customer@gymcore.local' THEN N'$2a$10$EiimMLC5OYOJCTSB.tc0uuOpVpi4IpeFwPqfytKuyd6HohAoerL1m'
+        ELSE PasswordHash
+    END
+    WHERE Email IN (N'admin@gymcore.local', N'reception@gymcore.local', N'coach@gymcore.local', N'customer@gymcore.local')
+      AND (PasswordHash IS NULL OR PasswordHash LIKE N'HASHED_%' OR PasswordHash NOT LIKE N'$2%');
+
+    IF @AdminID IS NULL OR @ReceptionistID IS NULL OR @CoachID IS NULL OR @CustomerID IS NULL
+    BEGIN
+        THROW 50002, 'Missing one or more required users.', 1;
+    END;
+
+    /* Profiles */
+    IF NOT EXISTS (SELECT 1 FROM dbo.Coaches WHERE CoachID = @CoachID)
+    BEGIN
+        INSERT INTO dbo.Coaches (CoachID, DateOfBirth, Gender, ExperienceYears, Bio)
+        VALUES (@CoachID, '1998-01-01', N'Male', 5, N'Strength and conditioning coach.');
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Customers WHERE CustomerID = @CustomerID)
+    BEGIN
+        INSERT INTO dbo.Customers (CustomerID, DateOfBirth, Gender)
+        VALUES (@CustomerID, '2003-01-01', N'Male');
+    END;
+
+    /* TimeSlots: 8 slots/day, 90 mins, ends at 19:00 */
+    INSERT INTO dbo.TimeSlots (SlotIndex, StartTime, EndTime)
+    SELECT v.SlotIndex, v.StartTime, v.EndTime
+    FROM (VALUES
+        (1, CAST('07:00' AS TIME), CAST('08:30' AS TIME)),
+        (2, CAST('08:30' AS TIME), CAST('10:00' AS TIME)),
+        (3, CAST('10:00' AS TIME), CAST('11:30' AS TIME)),
+        (4, CAST('11:30' AS TIME), CAST('13:00' AS TIME)),
+        (5, CAST('13:00' AS TIME), CAST('14:30' AS TIME)),
+        (6, CAST('14:30' AS TIME), CAST('16:00' AS TIME)),
+        (7, CAST('16:00' AS TIME), CAST('17:30' AS TIME)),
+        (8, CAST('17:30' AS TIME), CAST('19:00' AS TIME))
+    ) AS v(SlotIndex, StartTime, EndTime)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.TimeSlots ts WHERE ts.SlotIndex = v.SlotIndex
+    );
+
+    /* Membership plans */
+    INSERT INTO dbo.MembershipPlans (PlanName, PlanType, Price, DurationDays, AllowsCoachBooking, UpdatedBy)
+    SELECT v.PlanName, v.PlanType, v.Price, v.DurationDays, v.AllowsCoachBooking, @AdminID
+    FROM (VALUES
+        (N'Day Pass',                N'DAY_PASS',       CAST(80000    AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym Only - 1 Month',      N'GYM_ONLY',       CAST(500000   AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Gym Only - 6 Months',     N'GYM_ONLY',       CAST(2700000  AS DECIMAL(12,2)), 180, CAST(0 AS BIT)),
+        (N'Gym Only - 12 Months',    N'GYM_ONLY',       CAST(5000000  AS DECIMAL(12,2)), 365, CAST(0 AS BIT)),
+        (N'Gym Only - 24 Months',    N'GYM_ONLY',       CAST(9200000  AS DECIMAL(12,2)), 730, CAST(0 AS BIT)),
+        (N'Gym + Coach - 1 Month',   N'GYM_PLUS_COACH', CAST(1200000  AS DECIMAL(12,2)),  30, CAST(1 AS BIT)),
+        (N'Gym + Coach - 6 Months',  N'GYM_PLUS_COACH', CAST(5000000  AS DECIMAL(12,2)), 180, CAST(1 AS BIT)),
+        (N'Gym + Coach - 12 Months', N'GYM_PLUS_COACH', CAST(9500000  AS DECIMAL(12,2)), 365, CAST(1 AS BIT)),
+        (N'Gym + Coach - 24 Months', N'GYM_PLUS_COACH', CAST(18000000 AS DECIMAL(12,2)), 730, CAST(1 AS BIT))
+    ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.MembershipPlans mp
+        WHERE mp.PlanName = v.PlanName
+          AND mp.PlanType = v.PlanType
+          AND mp.DurationDays = v.DurationDays
+    );
+
+    SELECT TOP (1) @PlanGymCoach = MembershipPlanID
+    FROM dbo.MembershipPlans
+    WHERE PlanName = N'Gym + Coach - 6 Months'
+    ORDER BY MembershipPlanID DESC;
+
+    SELECT TOP (1) @PlanGymOnly1M = MembershipPlanID
+    FROM dbo.MembershipPlans
+    WHERE PlanName = N'Gym Only - 1 Month'
+    ORDER BY MembershipPlanID DESC;
+
+    IF @PlanGymCoach IS NULL
+    BEGIN
+        THROW 50003, 'Gym + Coach membership plan was not found.', 1;
+    END;
+
+    IF @PlanGymOnly1M IS NULL
+    BEGIN
+        THROW 50010, 'Gym Only - 1 Month membership plan was not found.', 1;
+    END;
+
+    /* Give customer an ACTIVE Gym+Coach membership if none exists */
+    IF NOT EXISTS (
+        SELECT 1 FROM dbo.CustomerMemberships
+        WHERE CustomerID = @CustomerID AND Status = 'ACTIVE'
+    )
+    BEGIN
+        INSERT INTO dbo.CustomerMemberships (CustomerID, MembershipPlanID, Status, StartDate, EndDate)
+        VALUES (@CustomerID, @PlanGymCoach, 'ACTIVE', @Start, @End);
+    END;
+
+    SELECT TOP (1) @CustomerMembershipID = CustomerMembershipID
+    FROM dbo.CustomerMemberships
+    WHERE CustomerID = @CustomerID AND Status = 'ACTIVE'
+    ORDER BY EndDate DESC, CustomerMembershipID DESC;
+
+    IF @CustomerMembershipID IS NULL
+    BEGIN
+        THROW 50004, 'Active membership was not found for seeded customer.', 1;
+    END;
+
+    /*
+      Seed one SCHEDULED membership example for queue/activation testing:
+      Customer has an ACTIVE plan now, and a queued 1-month plan that starts after ACTIVE ends.
+    */
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.CustomerMemberships
+        WHERE CustomerID = @CustomerID AND Status = 'SCHEDULED'
+    )
+    BEGIN
+        SELECT TOP (1) @CurrentActiveEnd = EndDate
+        FROM dbo.CustomerMemberships
+        WHERE CustomerID = @CustomerID AND Status = 'ACTIVE'
+        ORDER BY EndDate DESC, CustomerMembershipID DESC;
+
+        IF @CurrentActiveEnd IS NULL
+            SET @CurrentActiveEnd = @End;
+
+        SET @ScheduledStart = DATEADD(DAY, 1, @CurrentActiveEnd);
+        SET @ScheduledEnd = DATEADD(DAY, 29, @ScheduledStart);
+
+        INSERT INTO dbo.CustomerMemberships (CustomerID, MembershipPlanID, Status, StartDate, EndDate)
+        VALUES (@CustomerID, @PlanGymOnly1M, 'SCHEDULED', @ScheduledStart, @ScheduledEnd);
+    END;
+
+    /* Workout categories + workouts */
+    INSERT INTO dbo.WorkoutCategories (CategoryName, Description)
+    SELECT v.CategoryName, v.Description
+    FROM (VALUES
+        (N'Calisthenics', N'Bodyweight movements'),
+        (N'HIIT', N'High intensity interval training')
+    ) AS v(CategoryName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.WorkoutCategories wc WHERE wc.CategoryName = v.CategoryName
+    );
+
+    INSERT INTO dbo.Workouts (WorkoutName, Description, Instructions)
+    SELECT v.WorkoutName, v.Description, v.Instructions
+    FROM (VALUES
+        (N'Push-up', N'Upper body bodyweight exercise', N'Keep body straight. Lower chest to near floor. Push back up.'),
+        (N'Burpee', N'Full body conditioning exercise', N'Squat down, kick back to plank, jump up.')
+    ) AS v(WorkoutName, Description, Instructions)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Workouts w WHERE w.WorkoutName = v.WorkoutName
+    );
+
+    INSERT INTO dbo.WorkoutCategoryMap (WorkoutID, WorkoutCategoryID)
+    SELECT w.WorkoutID, c.WorkoutCategoryID
+    FROM dbo.Workouts w
+    JOIN dbo.WorkoutCategories c
+        ON (w.WorkoutName = N'Push-up' AND c.CategoryName = N'Calisthenics')
+        OR (w.WorkoutName = N'Burpee' AND c.CategoryName = N'HIIT')
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.WorkoutCategoryMap m
+        WHERE m.WorkoutID = w.WorkoutID
+          AND m.WorkoutCategoryID = c.WorkoutCategoryID
+    );
+
+    /* Food categories + foods */
+    INSERT INTO dbo.FoodCategories (CategoryName, Description)
+    SELECT v.CategoryName, v.Description
+    FROM (VALUES
+        (N'Increase Weight', N'High calorie foods'),
+        (N'Lose Weight', N'Lower calorie foods'),
+        (N'Increase Muscle', N'High protein foods')
+    ) AS v(CategoryName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.FoodCategories fc WHERE fc.CategoryName = v.CategoryName
+    );
+
+    INSERT INTO dbo.Foods (FoodName, Description, Recipe, Calories, Protein, Carbs, Fat)
+    SELECT v.FoodName, v.Description, v.Recipe, v.Calories, v.Protein, v.Carbs, v.Fat
+    FROM (VALUES
+        (N'Chicken Breast', N'Lean protein source', N'Grill or boil. Season to taste.', 165, CAST(31.00 AS DECIMAL(6,2)), CAST(0.00 AS DECIMAL(6,2)), CAST(3.60 AS DECIMAL(6,2))),
+        (N'Oatmeal', N'Complex carbs', N'Cook oats with water or milk. Add fruit.', 150, CAST(5.00 AS DECIMAL(6,2)), CAST(27.00 AS DECIMAL(6,2)), CAST(3.00 AS DECIMAL(6,2)))
+    ) AS v(FoodName, Description, Recipe, Calories, Protein, Carbs, Fat)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Foods f WHERE f.FoodName = v.FoodName
+    );
+
+    INSERT INTO dbo.FoodCategoryMap (FoodID, FoodCategoryID)
+    SELECT f.FoodID, c.FoodCategoryID
+    FROM dbo.Foods f
+    JOIN dbo.FoodCategories c
+        ON (f.FoodName = N'Chicken Breast' AND c.CategoryName IN (N'Increase Muscle', N'Lose Weight'))
+        OR (f.FoodName = N'Oatmeal' AND c.CategoryName IN (N'Increase Weight', N'Increase Muscle'))
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.FoodCategoryMap m
+        WHERE m.FoodID = f.FoodID
+          AND m.FoodCategoryID = c.FoodCategoryID
+    );
+
+    /* Fitness goals */
+    INSERT INTO dbo.FitnessGoals (GoalCode, GoalName, Description)
+    SELECT v.GoalCode, v.GoalName, v.Description
+    FROM (VALUES
+        (N'LOSE_FAT', N'Lose fat', N'Focus on calorie deficit and cardio/strength mix.'),
+        (N'GAIN_MUSCLE', N'Gain muscle', N'Focus on progressive overload and sufficient protein.'),
+        (N'MAINTAIN', N'Maintain', N'Maintain current fitness and body composition.')
+    ) AS v(GoalCode, GoalName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.FitnessGoals g WHERE g.GoalCode = v.GoalCode
+    );
+
+    DECLARE @GoalLoseFat INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'LOSE_FAT');
+    DECLARE @GoalGainMuscle INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'GAIN_MUSCLE');
+    DECLARE @GoalMaintain INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'MAINTAIN');
+
+    /* Meal categories */
+    INSERT INTO dbo.MealCategories (CategoryName, Description)
+    SELECT v.CategoryName, v.Description
+    FROM (VALUES
+        (N'Breakfast', N'Morning meals'),
+        (N'Lunch', N'Midday meals'),
+        (N'Dinner', N'Evening meals')
+    ) AS v(CategoryName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.MealCategories mc WHERE mc.CategoryName = v.CategoryName
+    );
+
+    /* Meals */
+    INSERT INTO dbo.Meals (MealName, ImageUrl, Description, Recipe, Calories, Protein, Carbs, Fat, UpdatedBy)
+    SELECT v.MealName, v.ImageUrl, v.Description, v.Recipe, v.Calories, v.Protein, v.Carbs, v.Fat, @AdminID
+    FROM (VALUES
+        (
+            N'Chicken Salad Bowl',
+            NULL,
+            N'High-protein salad bowl.',
+            N'1) Grill chicken breast. 2) Mix greens + tomatoes. 3) Add chicken + olive oil + salt/pepper.',
+            420,
+            CAST(45.00 AS DECIMAL(6,2)),
+            CAST(18.00 AS DECIMAL(6,2)),
+            CAST(18.00 AS DECIMAL(6,2))
+        ),
+        (
+            N'Oatmeal with Banana',
+            NULL,
+            N'Quick breakfast with complex carbs.',
+            N'1) Cook oats with water. 2) Add sliced banana. 3) Add cinnamon to taste.',
+            350,
+            CAST(10.00 AS DECIMAL(6,2)),
+            CAST(62.00 AS DECIMAL(6,2)),
+            CAST(6.00 AS DECIMAL(6,2))
+        )
+    ) AS v(MealName, ImageUrl, Description, Recipe, Calories, Protein, Carbs, Fat)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Meals m WHERE m.MealName = v.MealName
+    );
+
+    DECLARE @MealChickenSalad INT = (SELECT MealID FROM dbo.Meals WHERE MealName = N'Chicken Salad Bowl');
+    DECLARE @MealOatmealBanana INT = (SELECT MealID FROM dbo.Meals WHERE MealName = N'Oatmeal with Banana');
+
+    /* Meal categories map */
+    INSERT INTO dbo.MealCategoryMap (MealID, MealCategoryID)
+    SELECT m.MealID, c.MealCategoryID
+    FROM dbo.Meals m
+    JOIN dbo.MealCategories c
+      ON (m.MealName = N'Chicken Salad Bowl' AND c.CategoryName = N'Lunch')
+      OR (m.MealName = N'Oatmeal with Banana' AND c.CategoryName = N'Breakfast')
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.MealCategoryMap mm
+        WHERE mm.MealID = m.MealID AND mm.MealCategoryID = c.MealCategoryID
+    );
+
+    /* Goal mappings (foods + meals) */
+    IF @GoalLoseFat IS NOT NULL AND @GoalGainMuscle IS NOT NULL AND @GoalMaintain IS NOT NULL
+    BEGIN
+        INSERT INTO dbo.FoodGoalMap (FoodID, GoalID)
+        SELECT f.FoodID, g.GoalID
+        FROM dbo.Foods f
+        JOIN dbo.FitnessGoals g ON 1=1
+        WHERE
+            (
+                (f.FoodName = N'Chicken Breast' AND g.GoalCode IN (N'LOSE_FAT', N'GAIN_MUSCLE'))
+                OR (f.FoodName = N'Oatmeal' AND g.GoalCode IN (N'GAIN_MUSCLE', N'MAINTAIN'))
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM dbo.FoodGoalMap fg
+                WHERE fg.FoodID = f.FoodID AND fg.GoalID = g.GoalID
+            );
+
+        INSERT INTO dbo.MealGoalMap (MealID, GoalID)
+        SELECT m.MealID, g.GoalID
+        FROM dbo.Meals m
+        JOIN dbo.FitnessGoals g ON 1=1
+        WHERE
+            (
+                (m.MealName = N'Chicken Salad Bowl' AND g.GoalCode IN (N'LOSE_FAT', N'GAIN_MUSCLE'))
+                OR (m.MealName = N'Oatmeal with Banana' AND g.GoalCode IN (N'GAIN_MUSCLE', N'MAINTAIN'))
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM dbo.MealGoalMap mg
+                WHERE mg.MealID = m.MealID AND mg.GoalID = g.GoalID
+            );
+    END;
+
+    /* Allergens (structured - used to block items in AI recommendations) */
+    INSERT INTO dbo.Allergens (AllergenCode, AllergenName, Description, UpdatedBy)
+    SELECT v.AllergenCode, v.AllergenName, v.Description, @AdminID
+    FROM (VALUES
+        (N'MILK', N'Milk', N'Dairy products'),
+        (N'EGG', N'Egg', N'Egg and egg products'),
+        (N'PEANUT', N'Peanut', N'Peanuts and peanut products')
+    ) AS v(AllergenCode, AllergenName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Allergens a WHERE a.AllergenCode = v.AllergenCode
+    );
+
+    /* Products */
+    INSERT INTO dbo.Products (ProductName, Description, Price, ImageUrl, UpdatedBy)
+    SELECT v.ProductName, v.Description, v.Price, NULL, @AdminID
+    FROM (VALUES
+        (N'Creatine Monohydrate', N'Performance supplement', CAST(350000 AS DECIMAL(12,2))),
+        (N'Whey Protein',         N'Protein powder',         CAST(900000 AS DECIMAL(12,2)))
+    ) AS v(ProductName, Description, Price)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Products p WHERE p.ProductName = v.ProductName
+    );
+
+    /* Cart */
+    IF NOT EXISTS (SELECT 1 FROM dbo.Carts WHERE CustomerID = @CustomerID)
+    BEGIN
+        INSERT INTO dbo.Carts (CustomerID) VALUES (@CustomerID);
+    END;
+
+    SELECT @CartID = CartID FROM dbo.Carts WHERE CustomerID = @CustomerID;
+    SELECT @ProdCreatine = ProductID FROM dbo.Products WHERE ProductName = N'Creatine Monohydrate';
+    SELECT @ProdWhey = ProductID FROM dbo.Products WHERE ProductName = N'Whey Protein';
+
+    IF @CartID IS NULL OR @ProdCreatine IS NULL OR @ProdWhey IS NULL
+    BEGIN
+        THROW 50005, 'Cart or product IDs could not be resolved.', 1;
+    END;
+
+    MERGE dbo.CartItems AS tgt
+    USING (VALUES
+        (@CartID, @ProdCreatine, 1),
+        (@CartID, @ProdWhey, 1)
+    ) AS src(CartID, ProductID, Quantity)
+    ON tgt.CartID = src.CartID AND tgt.ProductID = src.ProductID
+    WHEN MATCHED THEN
+        UPDATE SET Quantity = src.Quantity
+    WHEN NOT MATCHED THEN
+        INSERT (CartID, ProductID, Quantity)
+        VALUES (src.CartID, src.ProductID, src.Quantity);
+
+    /* Promotion + post + claim */
+    IF NOT EXISTS (SELECT 1 FROM dbo.Promotions WHERE PromoCode = N'WELCOME10')
+    BEGIN
+        INSERT INTO dbo.Promotions (
+            PromoCode, Description, DiscountPercent, DiscountAmount, BonusDurationDays, ValidFrom, ValidTo, IsActive
+        )
+        VALUES (
+            N'WELCOME10',
+            N'10% off for claimed users',
+            CAST(10.00 AS DECIMAL(5,2)),
+            NULL,
+            0,
+            DATEADD(DAY, -1, SYSDATETIME()),
+            DATEADD(DAY, 30, SYSDATETIME()),
+            1
+        );
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Promotions WHERE PromoCode = N'SUMMERPLUS30')
+    BEGIN
+        INSERT INTO dbo.Promotions (
+            PromoCode, Description, DiscountPercent, DiscountAmount, BonusDurationDays, ValidFrom, ValidTo, IsActive
+        )
+        VALUES (
+            N'SUMMERPLUS30',
+            N'Summer promo: 5% off and +30 days membership bonus',
+            CAST(5.00 AS DECIMAL(5,2)),
+            NULL,
+            30,
+            DATEADD(DAY, -1, SYSDATETIME()),
+            DATEADD(DAY, 30, SYSDATETIME()),
+            1
+        );
+    END;
+
+    SELECT @PromoID = PromotionID FROM dbo.Promotions WHERE PromoCode = N'WELCOME10';
+
+    IF @PromoID IS NULL
+    BEGIN
+        THROW 50006, 'Promotion WELCOME10 was not found.', 1;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.PromotionPosts
+        WHERE PromotionID = @PromoID
+          AND Title = N'Welcome Promo'
+    )
+    BEGIN
+        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
+        VALUES (
+            N'Welcome Promo',
+            N'Claim WELCOME10 and use at checkout.',
+            NULL,
+            @PromoID,
+            DATEADD(DAY, -1, SYSDATETIME()),
+            DATEADD(DAY, 30, SYSDATETIME()),
+            1,
+            @AdminID
+        );
+    END;
+
+    SELECT TOP (1) @PostID = PromotionPostID
+    FROM dbo.PromotionPosts
+    WHERE PromotionID = @PromoID
+      AND Title = N'Welcome Promo'
+    ORDER BY PromotionPostID DESC;
+
+    IF @PostID IS NULL
+    BEGIN
+        THROW 50007, 'Promotion post for WELCOME10 was not found.', 1;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM dbo.UserPromotionClaims
+        WHERE UserID = @CustomerID AND PromotionID = @PromoID
+    )
+    BEGIN
+        INSERT INTO dbo.UserPromotionClaims (UserID, PromotionID, SourcePostID)
+        VALUES (@CustomerID, @PromoID, @PostID);
+    END;
+
+    SELECT @ClaimID = ClaimID
+    FROM dbo.UserPromotionClaims
+    WHERE UserID = @CustomerID AND PromotionID = @PromoID;
+
+    IF @ClaimID IS NULL
+    BEGIN
+        THROW 50008, 'Promotion claim was not found for seeded customer.', 1;
+    END;
+
+    /* Create or reuse a pending order */
+    SELECT TOP (1) @OrderID = OrderID
+    FROM dbo.Orders
+    WHERE CustomerID = @CustomerID
+      AND ClaimID = @ClaimID
+      AND Status = 'PENDING'
+    ORDER BY OrderID DESC;
+
+    IF @OrderID IS NULL
+    BEGIN
+        INSERT INTO dbo.Orders (CustomerID, ClaimID, Subtotal, DiscountApplied, TotalAmount, Status)
+        VALUES (@CustomerID, @ClaimID, 1250000, 125000, 1125000, 'PENDING');
+
+        SET @OrderID = SCOPE_IDENTITY();
+    END;
+
+    MERGE dbo.OrderItems AS tgt
+    USING (VALUES
+        (@OrderID, @ProdCreatine, 1, CAST(350000 AS DECIMAL(12,2))),
+        (@OrderID, @ProdWhey,     1, CAST(900000 AS DECIMAL(12,2)))
+    ) AS src(OrderID, ProductID, Quantity, UnitPrice)
+    ON tgt.OrderID = src.OrderID AND tgt.ProductID = src.ProductID
+    WHEN MATCHED THEN
+        UPDATE SET Quantity = src.Quantity, UnitPrice = src.UnitPrice
+    WHEN NOT MATCHED THEN
+        INSERT (OrderID, ProductID, Quantity, UnitPrice)
+        VALUES (src.OrderID, src.ProductID, src.Quantity, src.UnitPrice);
+
+    /* Payment attempt (PENDING) linked to order */
+    SET @PayOSLinkId = N'PAYOS_LINK_ORDER_' + CONVERT(NVARCHAR(20), @OrderID);
+
+    IF NOT EXISTS (
+        SELECT 1 FROM dbo.Payments
+        WHERE OrderID = @OrderID AND Status = 'PENDING'
+    )
+    BEGIN
+        INSERT INTO dbo.Payments (
+            OriginalAmount, DiscountAmount, Amount, Status, OrderID,
+            PayOS_PaymentLinkId, PayOS_CheckoutUrl, PayOS_Status
+        )
+        VALUES (
+            1125000, 0, 1125000, 'PENDING', @OrderID,
+            @PayOSLinkId, N'https://payos.vn/checkout/example', N'PENDING'
+        );
+    END;
+
+    /* Health: enter height/weight, history trigger updates current */
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.CustomerHealthHistory
+        WHERE CustomerID = @CustomerID
+          AND HeightCm = CAST(170.00 AS DECIMAL(5,2))
+          AND WeightKg = CAST(65.00 AS DECIMAL(5,2))
+          AND CAST(RecordedAt AS DATE) = @Start
+    )
+    BEGIN
+        INSERT INTO dbo.CustomerHealthHistory (CustomerID, HeightCm, WeightKg)
+        VALUES (@CustomerID, 170.00, 65.00);
+    END;
+
+    /*
+      Manual SQL for check-in testing without purchase flow:
+
+      DECLARE @CustomerId INT = (SELECT UserID FROM dbo.Users WHERE Email = N'customer@gymcore.local');
+      DECLARE @PlanId INT = (
+          SELECT TOP (1) MembershipPlanID
+          FROM dbo.MembershipPlans
+          WHERE PlanType = N'GYM_ONLY'
+          ORDER BY MembershipPlanID DESC
+      );
+      DECLARE @Today DATE = CAST(GETDATE() AS DATE);
+
+      IF @CustomerId IS NOT NULL AND @PlanId IS NOT NULL
+      BEGIN
+          INSERT INTO dbo.CustomerMemberships (CustomerID, MembershipPlanID, Status, StartDate, EndDate)
+          SELECT @CustomerId, @PlanId, N'ACTIVE', @Today, DATEADD(DAY, 29, @Today)
+          WHERE NOT EXISTS (
+              SELECT 1
+              FROM dbo.CustomerMemberships
+              WHERE CustomerID = @CustomerId
+                AND Status = N'ACTIVE'
+          );
+      END;
+    */
+    /* Check-in example (requires ACTIVE membership) */
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.CheckIns
+        WHERE CustomerID = @CustomerID
+          AND CustomerMembershipID = @CustomerMembershipID
+          AND CAST(CheckInTime AS DATE) = @Start
+    )
+    BEGIN
+        INSERT INTO dbo.CheckIns (CustomerID, CustomerMembershipID, CheckedByUserID)
+        VALUES (@CustomerID, @CustomerMembershipID, @ReceptionistID);
+    END;
+
+    /* Coach availability (Mon/Wed/Fri slot 1 and 2) */
+    SELECT @Slot1 = TimeSlotID FROM dbo.TimeSlots WHERE SlotIndex = 1;
+    SELECT @Slot2 = TimeSlotID FROM dbo.TimeSlots WHERE SlotIndex = 2;
+
+    IF @Slot1 IS NULL OR @Slot2 IS NULL
+    BEGIN
+        THROW 50009, 'Required timeslots were not found.', 1;
+    END;
+
+    INSERT INTO dbo.CoachWeeklyAvailability (CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    SELECT v.CoachID, v.DayOfWeek, v.TimeSlotID, v.IsAvailable
+    FROM (VALUES
+        (@CoachID, 1, @Slot1, CAST(1 AS BIT)),
+        (@CoachID, 3, @Slot1, CAST(1 AS BIT)),
+        (@CoachID, 5, @Slot1, CAST(1 AS BIT)),
+        (@CoachID, 1, @Slot2, CAST(1 AS BIT)),
+        (@CoachID, 3, @Slot2, CAST(1 AS BIT)),
+        (@CoachID, 5, @Slot2, CAST(1 AS BIT))
+    ) AS v(CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CoachWeeklyAvailability cwa
+        WHERE cwa.CoachID = v.CoachID
+          AND cwa.DayOfWeek = v.DayOfWeek
+          AND cwa.TimeSlotID = v.TimeSlotID
+    );
+
+    /* PT Request + sessions */
+    SELECT TOP (1) @PTRequestID = PTRequestID
+    FROM dbo.PTRecurringRequests
+    WHERE CustomerID = @CustomerID
+      AND Status = 'APPROVED'
+    ORDER BY PTRequestID DESC;
+
+    IF @PTRequestID IS NULL
+    BEGIN
+        INSERT INTO dbo.PTRecurringRequests (
+            CustomerID, CoachID, CustomerMembershipID, StartDate, EndDate, Status
+        )
+        VALUES (
+            @CustomerID, @CoachID, @CustomerMembershipID, @Start, DATEADD(DAY, 28, @Start), 'APPROVED'
+        );
+
+        SET @PTRequestID = SCOPE_IDENTITY();
+    END;
+
+    SELECT @PTBaseStart = StartDate
+    FROM dbo.PTRecurringRequests
+    WHERE PTRequestID = @PTRequestID;
+
+    IF @PTBaseStart IS NULL
+    BEGIN
+        SET @PTBaseStart = @Start;
+    END;
+
+    INSERT INTO dbo.PTRequestSlots (PTRequestID, DayOfWeek, TimeSlotID)
+    SELECT v.PTRequestID, v.DayOfWeek, v.TimeSlotID
+    FROM (VALUES
+        (@PTRequestID, 1, @Slot1),
+        (@PTRequestID, 3, @Slot1),
+        (@PTRequestID, 5, @Slot1)
+    ) AS v(PTRequestID, DayOfWeek, TimeSlotID)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.PTRequestSlots prs
+        WHERE prs.PTRequestID = v.PTRequestID
+          AND prs.DayOfWeek = v.DayOfWeek
+          AND prs.TimeSlotID = v.TimeSlotID
+    );
+
+    INSERT INTO dbo.PTSessions (PTRequestID, CustomerID, CoachID, SessionDate, DayOfWeek, TimeSlotID, Status)
+    SELECT v.PTRequestID, v.CustomerID, v.CoachID, v.SessionDate, v.DayOfWeek, v.TimeSlotID, v.Status
+    FROM (VALUES
+        (@PTRequestID, @CustomerID, @CoachID, DATEADD(DAY, 1, @PTBaseStart), 1, @Slot1, N'SCHEDULED'),
+        (@PTRequestID, @CustomerID, @CoachID, DATEADD(DAY, 3, @PTBaseStart), 3, @Slot1, N'SCHEDULED'),
+        (@PTRequestID, @CustomerID, @CoachID, DATEADD(DAY, 5, @PTBaseStart), 5, @Slot1, N'SCHEDULED')
+    ) AS v(PTRequestID, CustomerID, CoachID, SessionDate, DayOfWeek, TimeSlotID, Status)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.PTSessions s
+        WHERE s.PTRequestID = v.PTRequestID
+          AND s.SessionDate = v.SessionDate
+          AND s.TimeSlotID = v.TimeSlotID
+    );
+
+    COMMIT TRAN;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRAN;
+    THROW;
+END CATCH;
+
+
+
+

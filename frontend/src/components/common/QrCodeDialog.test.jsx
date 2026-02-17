@@ -32,6 +32,8 @@ describe('QrCodeDialog', () => {
 
     expect(await screen.findByText(/Your Check-in QR/i)).toBeInTheDocument()
     expect(await screen.findByRole('img', { name: /QR code/i })).toHaveAttribute('src', 'data:image/png;base64,QR')
+    expect(screen.queryByText(/Token/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Copy token/i })).toBeNull()
 
     // Close button exists and works.
     await user.click(screen.getByRole('button', { name: /Close/i }))
@@ -43,4 +45,3 @@ describe('QrCodeDialog', () => {
     expect(await screen.findByText('Unauthorized')).toBeInTheDocument()
   })
 })
-
