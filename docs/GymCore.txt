@@ -1088,6 +1088,44 @@ BEGIN
 END;
 GO
 
+/* Webhook helper: when payment is confirmed by PayOS, mark payment as SUCCESS and update target entity.
+   - For product orders: set Orders.Status = 'PAID'
+   - For memberships: set CustomerMemberships.Status = 'ACTIVE'
+   The backend application is responsible for invoking this logic safely after verifying PayOS webhook signature. */
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
+    @PaymentID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.Payments
+    SET Status = 'SUCCESS',
+        PaidAt = COALESCE(PaidAt, SYSDATETIME()),
+        PayOS_Status = COALESCE(PayOS_Status, 'SUCCESS')
+    WHERE PaymentID = @PaymentID
+      AND Status = 'PENDING';
+
+    IF @@ROWCOUNT = 0
+        RETURN;
+
+    UPDATE dbo.Orders
+    SET Status = 'PAID',
+        UpdatedAt = SYSDATETIME()
+    WHERE OrderID = (
+        SELECT OrderID FROM dbo.Payments WHERE PaymentID = @PaymentID
+    )
+      AND Status = 'PENDING';
+
+    UPDATE dbo.CustomerMemberships
+    SET Status = 'ACTIVE',
+        UpdatedAt = SYSDATETIME()
+    WHERE CustomerMembershipID = (
+        SELECT CustomerMembershipID FROM dbo.Payments WHERE PaymentID = @PaymentID
+    )
+      AND Status = 'PENDING';
+END;
+GO
+
 /* =========================
    REVENUE VIEWS
 ========================= */
