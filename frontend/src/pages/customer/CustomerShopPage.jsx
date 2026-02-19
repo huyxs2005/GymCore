@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
@@ -12,6 +12,15 @@ function CustomerShopPage() {
   const [selectedProductId, setSelectedProductId] = useState(null)
   const [reviewText, setReviewText] = useState('')
   const [reviewRating, setReviewRating] = useState(5)
+  const [showShippingModal, setShowShippingModal] = useState(false)
+  const [shippingInfo, setShippingInfo] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    address: '',
+    paymentMethod: 'PayOS',
+  })
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -60,10 +69,17 @@ function CustomerShopPage() {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] })
       queryClient.invalidateQueries({ queryKey: ['cart'] })
+      // response is the body from orderApi.checkout, which follows ApiResponse { status, message, data }
       const checkoutUrl = response?.data?.checkoutUrl
       if (checkoutUrl) {
         window.location.href = checkoutUrl
+      } else {
+        alert('Checkout URL not found in API response. Please check backend logs.')
       }
+    },
+    onError: (error) => {
+      const message = error.response?.data?.message || error.message || 'Checkout failed. Please try again.'
+      alert(message)
     },
   })
 
@@ -97,8 +113,30 @@ function CustomerShopPage() {
 
   const handleCheckout = () => {
     if (!cart.items || cart.items.length === 0) return
-    checkoutMutation.mutate({})
+    setShowShippingModal(true)
   }
+
+  const confirmCheckout = () => {
+    checkoutMutation.mutate(shippingInfo)
+    setShowShippingModal(false)
+  }
+
+  // Effect to handle post-payment redirect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const status = urlParams.get('status')
+    if (status === 'PAID' || status === 'SUCCESS') {
+      setShowSuccessMessage(true)
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false)
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }, 3000)
+      return () => clearTimeout(timer)
+    } else if (status === 'CANCELLED') {
+      // Just clear the URL if cancelled
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [])
 
   const handleSubmitReview = (event) => {
     event.preventDefault()
@@ -112,10 +150,98 @@ function CustomerShopPage() {
 
   return (
     <WorkspaceScaffold
-      title="Customer Product Shop"
+      title="GymCore Product Shop"
       subtitle="Browse gym products, manage your cart, checkout with PayOS, and track your purchase history."
       links={customerNav}
     >
+      {showSuccessMessage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="animate-in fade-in zoom-in rounded-3xl bg-white p-8 text-center shadow-2xl duration-300">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <Star size={32} className="fill-emerald-600" />
+            </div>
+            <h2 className="mb-2 text-2xl font-bold text-slate-900">Order Successful!</h2>
+            <p className="text-slate-600">Your payment was confirmed. Returning to shop...</p>
+          </div>
+        </div>
+      )}
+
+      {showShippingModal && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-in fade-in zoom-in rounded-3xl bg-white p-6 shadow-2xl duration-200">
+            <h3 className="mb-4 text-xl font-bold text-slate-900">Shipping Information</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
+                <input
+                  type="text"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={shippingInfo.fullName}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, fullName: e.target.value })}
+                  placeholder="Enter your full name"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Phone Number</label>
+                <input
+                  type="text"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={shippingInfo.phone}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, phone: e.target.value })}
+                  placeholder="Enter your phone number"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Email Address</label>
+                <input
+                  type="email"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={shippingInfo.email}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, email: e.target.value })}
+                  placeholder="Enter your email address"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Shipping Address</label>
+                <textarea
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  rows={3}
+                  value={shippingInfo.address}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
+                  placeholder="Enter your shipping address"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Payment Method</label>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={shippingInfo.paymentMethod}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, paymentMethod: e.target.value })}
+                >
+                  <option value="PayOS">PayOS (Online Payment)</option>
+                  <option value="COD">Cash on Delivery (COD)</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowShippingModal(false)}
+                className="flex-1 rounded-full border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCheckout}
+                disabled={!shippingInfo.fullName || !shippingInfo.phone || !shippingInfo.email || !shippingInfo.address}
+                className="flex-1 rounded-full bg-gym-600 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:bg-slate-300"
+              >
+                Confirm Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,2fr)]">
         {/* Product list */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -136,11 +262,10 @@ function CustomerShopPage() {
                 key={product.productId}
                 type="button"
                 onClick={() => setSelectedProductId(product.productId)}
-                className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
-                  selectedProductId === product.productId
-                    ? 'border-gym-300 bg-gym-50'
-                    : 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50/60'
-                }`}
+                className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition ${selectedProductId === product.productId
+                  ? 'border-gym-300 bg-gym-50'
+                  : 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50/60'
+                  }`}
               >
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-slate-900">{product.name}</p>

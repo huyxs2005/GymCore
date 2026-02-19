@@ -53,34 +53,50 @@ public class PayOsService {
                 && checksumKey != null && !checksumKey.isBlank();
     }
 
-    /**
-     * Create a hosted checkout payment link on PayOS for a given payment/order.
-     * <p>
-     * This method follows the official PayOS "Create Payment Link" structure:
-     * https://docs.payos.money/hosted-checkout
-     * but keeps the implementation defensive:
-     * - if PayOS is not configured or the HTTP call fails, a fallback demo URL is returned
-     *   so that the rest of the checkout flow still works in development.
-     */
-    public PayOsLink createPaymentLink(int paymentId, BigDecimal amount, String description) {
+    public record PayOsItem(String name, int quantity, int price, String unit, Integer taxPercentage) {
+    }
+
+    public PayOsLink createPaymentLink(int paymentId, BigDecimal amount, String description,
+            String buyerName, String buyerPhone, String buyerEmail, String buyerAddress,
+            List<PayOsItem> items) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment amount must be positive.");
         }
 
-        // Fallback for development when PayOS credentials are missing.
         if (!isConfigured()) {
-            String demoUrl = "https://payos.vn/checkout/example?paymentId=" + paymentId;
-            return new PayOsLink(null, demoUrl, "PENDING");
+            System.err.println("PayOS configuration missing! ClientID: "
+                    + (clientId == null ? "null" : (clientId.isBlank() ? "blank" : "present")));
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "PayOS is not configured. Please check .env file and restart server.");
         }
 
         long orderCode = paymentId;
+        long amountVal = amount.longValue();
+        String descStr = description == null || description.isBlank() ? "Gym #" + orderCode : description;
+        if (descStr.length() > 25) {
+            descStr = descStr.substring(0, 25);
+        }
 
         Map<String, Object> body = new HashMap<>();
         body.put("orderCode", orderCode);
-        body.put("amount", amount.longValue());
-        body.put("description", description == null || description.isBlank() ? "GymCore order #" + orderCode : description);
+        body.put("amount", amountVal);
+        body.put("description", descStr);
+        body.put("buyerName", buyerName);
+        body.put("buyerPhone", buyerPhone);
+        body.put("buyerEmail", buyerEmail);
+        body.put("buyerAddress", buyerAddress);
+        body.put("items", items);
         body.put("returnUrl", returnUrl);
         body.put("cancelUrl", cancelUrl);
+
+        // Sign the data (PayOS v2 requires signing a specific subset of fields)
+        // Signature =
+        // hmac_sha256(amount=VAL&cancelUrl=VAL&description=VAL&orderCode=VAL&returnUrl=VAL,
+        // checksumKey)
+        String signData = String.format("amount=%d&cancelUrl=%s&description=%s&orderCode=%d&returnUrl=%s",
+                amountVal, cancelUrl, descStr, orderCode, returnUrl);
+        String signature = hmacSha256Hex(signData, checksumKey);
+        body.put("signature", signature);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -90,14 +106,26 @@ public class PayOsService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
+            System.out.println("PayOS Request Headers: x-client-id=" + clientId);
+            System.out.println("PayOS Request Body: " + body);
+            System.out.println("PayOS Sign Data: " + signData);
+
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restTemplate.postForObject(
                     baseUrl + "/v2/payment-requests",
                     request,
-                    Map.class
-            );
+                    Map.class);
+
             if (response == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty response from PayOS.");
+            }
+
+            String code = valueAsString(response.get("code"));
+            String desc = valueAsString(response.get("desc"));
+            if (!"00".equals(code)) {
+                System.err.println("PayOS API Response Error: " + desc + " (Code: " + code + ")");
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "PayOS Error: " + desc + " (Code: " + code + ")");
             }
 
             @SuppressWarnings("unchecked")
@@ -111,17 +139,22 @@ public class PayOsService {
             }
 
             return new PayOsLink(paymentLinkId, checkoutUrl, status);
+        } catch (org.springframework.web.client.HttpStatusCodeException exception) {
+            String errorBody = exception.getResponseBodyAsString();
+            System.err.println("PayOS API HTTP " + exception.getStatusCode() + ": " + errorBody);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "PayOS API Error: " + errorBody);
         } catch (RestClientException exception) {
-            // In dev, fall back to demo URL instead of failing the whole checkout.
-            String demoUrl = "https://payos.vn/checkout/example?paymentId=" + paymentId;
-            return new PayOsLink(null, demoUrl, "PENDING");
+            System.err.println("PayOS Connection Error: " + exception.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Failed to connect to PayOS: " + exception.getMessage());
         }
     }
 
     /**
      * Verify PayOS webhook signature using checksum key (HMAC-SHA256).
      * <p>
-     * The exact canonicalization format may vary by integration – here we use a stable,
+     * The exact canonicalization format may vary by integration – here we use a
+     * stable,
      * deterministic representation of the payload:
      * - Flatten top-level JSON keys into "key=value" pairs
      * - Sort pairs by key (lexicographically)
@@ -132,7 +165,8 @@ public class PayOsService {
      * - x-payos-signature
      * - X-Signature
      * <p>
-     * You should adjust this method to match your official PayOS documentation if header
+     * You should adjust this method to match your official PayOS documentation if
+     * header
      * or format differs.
      */
     public void verifyWebhookSignature(HttpHeaders headers, Map<String, Object> body) {
@@ -140,9 +174,8 @@ public class PayOsService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "PayOS checksum key is not configured.");
         }
-        String signature =
-                headers.getFirst("X-PayOS-Signature") != null ? headers.getFirst("X-PayOS-Signature")
-                        : headers.getFirst("x-payos-signature") != null ? headers.getFirst("x-payos-signature")
+        String signature = headers.getFirst("X-PayOS-Signature") != null ? headers.getFirst("X-PayOS-Signature")
+                : headers.getFirst("x-payos-signature") != null ? headers.getFirst("x-payos-signature")
                         : headers.getFirst("X-Signature");
         if (signature == null || signature.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing PayOS signature header.");
@@ -210,4 +243,3 @@ public class PayOsService {
     public record PayOsLink(String paymentLinkId, String checkoutUrl, String status) {
     }
 }
-

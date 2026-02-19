@@ -1,5 +1,9 @@
 {
   "devDependencies": {
     "babel-plugin-react-compiler": "^1.0.0"
+  },
+  "dependencies": {
+    "@payos/node": "^2.0.4",
+    "express": "^5.2.1"
   }
 }

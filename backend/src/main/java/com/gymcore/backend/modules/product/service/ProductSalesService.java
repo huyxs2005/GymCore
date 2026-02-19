@@ -24,7 +24,8 @@ public class ProductSalesService {
     private final CurrentUserService currentUserService;
     private final PayOsService payOsService;
 
-    public ProductSalesService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService, PayOsService payOsService) {
+    public ProductSalesService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
+            PayOsService payOsService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.payOsService = payOsService;
@@ -36,33 +37,34 @@ public class ProductSalesService {
             // Customer: products
             case "customer-get-products" -> customerGetProducts();
             case "customer-get-product-detail" ->
-                    customerGetProductDetail(authorizationHeader, safePayload);
+                customerGetProductDetail(authorizationHeader, safePayload);
             case "customer-create-review" ->
-                    customerCreateReview(authorizationHeader, safePayload);
+                customerCreateReview(authorizationHeader, safePayload);
 
             // Customer: cart + orders
             case "customer-get-cart" -> customerGetCart(authorizationHeader);
             case "customer-add-cart-item" ->
-                    customerAddCartItem(authorizationHeader, safePayload);
+                customerAddCartItem(authorizationHeader, safePayload);
             case "customer-update-cart-item" ->
-                    customerUpdateCartItem(authorizationHeader, safePayload);
+                customerUpdateCartItem(authorizationHeader, safePayload);
             case "customer-delete-cart-item" ->
-                    customerDeleteCartItem(authorizationHeader, safePayload);
+                customerDeleteCartItem(authorizationHeader, safePayload);
             case "customer-checkout" ->
-                    customerCheckout(authorizationHeader);
+                customerCheckout(authorizationHeader, safePayload);
             case "customer-get-my-orders" ->
-                    customerGetMyOrders(authorizationHeader);
+                customerGetMyOrders(authorizationHeader);
 
             // Admin: products + reviews
             case "admin-get-products" -> adminGetProducts(authorizationHeader);
             case "admin-create-product" ->
-                    adminCreateProduct(authorizationHeader, safePayload);
+                adminCreateProduct(authorizationHeader, safePayload);
             case "admin-update-product" ->
-                    adminUpdateProduct(authorizationHeader, safePayload);
+                adminUpdateProduct(authorizationHeader, safePayload);
             case "admin-get-product-reviews" ->
-                    adminGetProductReviews(authorizationHeader);
+                adminGetProductReviews(authorizationHeader);
 
-            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported product action: " + action);
+            default ->
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported product action: " + action);
         };
     }
 
@@ -111,7 +113,8 @@ public class ProductSalesService {
                 GROUP BY p.ProductID, p.ProductName, p.Description, p.Price, p.ImageUrl, p.IsActive
                 """;
 
-        List<Map<String, Object>> products = jdbcTemplate.query(productSql, (rs, rowNum) -> mapProductWithRating(rs), productId);
+        List<Map<String, Object>> products = jdbcTemplate.query(productSql, (rs, rowNum) -> mapProductWithRating(rs),
+                productId);
         if (products.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found.");
         }
@@ -160,7 +163,8 @@ public class ProductSalesService {
         try {
             jdbcTemplate.update(sql, productId, user.userId(), rating, comment);
         } catch (DataAccessException exception) {
-            // Surface friendly messages for common constraint failures (purchase required, one review per product, etc.)
+            // Surface friendly messages for common constraint failures (purchase required,
+            // one review per product, etc.)
             String message = exception.getMostSpecificCause() != null
                     ? exception.getMostSpecificCause().getMessage()
                     : exception.getMessage();
@@ -194,7 +198,7 @@ public class ProductSalesService {
                 """;
 
         List<Map<String, Object>> items = new ArrayList<>();
-        final BigDecimal[] subtotalHolder = new BigDecimal[]{BigDecimal.ZERO};
+        final BigDecimal[] subtotalHolder = new BigDecimal[] { BigDecimal.ZERO };
 
         jdbcTemplate.query(sql, ps -> ps.setInt(1, cartId), new org.springframework.jdbc.core.RowCallbackHandler() {
             @Override
@@ -282,10 +286,16 @@ public class ProductSalesService {
 
     // CUSTOMER: CHECKOUT + ORDERS
 
-    private Map<String, Object> customerCheckout(String authorizationHeader) {
+    private Map<String, Object> customerCheckout(String authorizationHeader, Map<String, Object> payload) {
         UserInfo user = currentUserService.requireCustomer(authorizationHeader);
         int customerId = user.userId();
         int cartId = ensureCartForCustomer(customerId);
+
+        String fullName = asNullableString(payload.get("fullName"));
+        String phone = asNullableString(payload.get("phone"));
+        String email = asNullableString(payload.get("email"));
+        String address = asNullableString(payload.get("address"));
+        String paymentMethod = asNullableString(payload.get("paymentMethod"));
 
         String itemsSql = """
                 SELECT ci.ProductID,
@@ -298,12 +308,13 @@ public class ProductSalesService {
                 """;
 
         List<CartLine> lines = new ArrayList<>();
-        jdbcTemplate.query(itemsSql, ps -> ps.setInt(1, cartId), new org.springframework.jdbc.core.RowCallbackHandler() {
-            @Override
-            public void processRow(ResultSet rs) throws SQLException {
-                lines.add(toCartLine(rs));
-            }
-        });
+        jdbcTemplate.query(itemsSql, ps -> ps.setInt(1, cartId),
+                new org.springframework.jdbc.core.RowCallbackHandler() {
+                    @Override
+                    public void processRow(ResultSet rs) throws SQLException {
+                        lines.add(toCartLine(rs));
+                    }
+                });
 
         if (lines.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cart is empty.");
@@ -317,8 +328,8 @@ public class ProductSalesService {
         BigDecimal discount = BigDecimal.ZERO;
         BigDecimal total = subtotal.subtract(discount);
 
-        // Create order
-        int orderId = insertOrder(customerId, subtotal, discount, total);
+        // Create order with shipping info
+        int orderId = insertOrder(customerId, subtotal, discount, total, fullName, phone, address, paymentMethod);
 
         // Upsert order items to match current cart
         jdbcTemplate.update("DELETE FROM dbo.OrderItems WHERE OrderID = ?", orderId);
@@ -331,7 +342,14 @@ public class ProductSalesService {
 
         // Create payment row and call PayOS
         int paymentId = insertPaymentForOrder(orderId, subtotal, discount, total);
-        PayOsService.PayOsLink link = payOsService.createPaymentLink(paymentId, total, "GymCore product order #" + orderId);
+
+        List<PayOsService.PayOsItem> payOsItems = lines.stream()
+                .map(l -> new PayOsService.PayOsItem(l.name(), l.quantity(), l.price().intValue(), "serving", 0))
+                .toList();
+
+        PayOsService.PayOsLink link = payOsService.createPaymentLink(
+                paymentId, total, "Order #" + orderId,
+                fullName, phone, email, address, payOsItems);
 
         jdbcTemplate.update("""
                 UPDATE dbo.Payments
@@ -547,8 +565,7 @@ public class ProductSalesService {
                 rs.getInt("ProductID"),
                 rs.getString("ProductName"),
                 rs.getBigDecimal("Price"),
-                rs.getInt("Quantity")
-        );
+                rs.getInt("Quantity"));
     }
 
     private int ensureCartForCustomer(int customerId) {
@@ -570,7 +587,7 @@ public class ProductSalesService {
             var ps = connection.prepareStatement("""
                     INSERT INTO dbo.Carts (CustomerID)
                     VALUES (?)
-                    """, new String[]{"CartID"});
+                    """, new String[] { "CartID" });
             ps.setInt(1, customerId);
             return ps;
         }, keyHolder);
@@ -592,17 +609,23 @@ public class ProductSalesService {
         }
     }
 
-    private int insertOrder(int customerId, BigDecimal subtotal, BigDecimal discount, BigDecimal total) {
+    private int insertOrder(int customerId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,
+            String fullName, String phone, String address, String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
-                    INSERT INTO dbo.Orders (CustomerID, Subtotal, DiscountApplied, TotalAmount, Status)
-                    VALUES (?, ?, ?, ?, 'PENDING')
-                    """, new String[]{"OrderID"});
+                    INSERT INTO dbo.Orders (CustomerID, Subtotal, DiscountApplied, TotalAmount, Status,
+                                         ShippingFullName, ShippingPhone, ShippingAddress, PaymentMethod)
+                    VALUES (?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
+                    """, new String[] { "OrderID" });
             ps.setInt(1, customerId);
             ps.setBigDecimal(2, subtotal);
             ps.setBigDecimal(3, discount);
             ps.setBigDecimal(4, total);
+            ps.setString(5, fullName);
+            ps.setString(6, phone);
+            ps.setString(7, address);
+            ps.setString(8, paymentMethod);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -618,7 +641,7 @@ public class ProductSalesService {
             var ps = connection.prepareStatement("""
                     INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID)
                     VALUES (?, ?, ?, 'PENDING', ?)
-                    """, new String[]{"PaymentID"});
+                    """, new String[] { "PaymentID" });
             ps.setBigDecimal(1, originalAmount);
             ps.setBigDecimal(2, discount);
             ps.setBigDecimal(3, amount);
@@ -713,4 +736,3 @@ public class ProductSalesService {
         return rating;
     }
 }
-
