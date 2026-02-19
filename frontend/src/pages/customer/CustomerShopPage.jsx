@@ -6,6 +6,7 @@ import { customerNav } from '../../config/navigation'
 import { productApi } from '../../features/product/api/productApi'
 import { cartApi } from '../../features/product/api/cartApi'
 import { orderApi } from '../../features/product/api/orderApi'
+import { promotionApi } from '../../features/promotion/api/promotionApi'
 
 function CustomerShopPage() {
   const queryClient = useQueryClient()
@@ -19,6 +20,7 @@ function CustomerShopPage() {
     email: '',
     address: '',
     paymentMethod: 'PayOS',
+    promoCode: '',
   })
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
 
@@ -42,6 +44,14 @@ function CustomerShopPage() {
     queryFn: () => productApi.getProductDetail(selectedProductId),
     enabled: !!selectedProductId,
   })
+
+  const { data: claimsData } = useQuery({
+    queryKey: ['myClaims'],
+    queryFn: () => promotionApi.getMyClaims(),
+  })
+
+  const myClaims = claimsData?.data?.claims || []
+  const availableCoupons = myClaims.filter(c => !c.UsedAt)
 
   const addToCartMutation = useMutation({
     mutationFn: cartApi.addItem,
@@ -221,6 +231,24 @@ function CustomerShopPage() {
                   <option value="PayOS">PayOS (Online Payment)</option>
                   <option value="COD">Cash on Delivery (COD)</option>
                 </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Apply Coupon (Optional)</label>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={shippingInfo.promoCode}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, promoCode: e.target.value })}
+                >
+                  <option value="">No coupon applied</option>
+                  {availableCoupons.map((claim) => (
+                    <option key={claim.ClaimID} value={claim.PromoCode}>
+                      {claim.PromoCode} - {claim.DiscountPercent ? `${claim.DiscountPercent}% off` : `${claim.DiscountAmount.toLocaleString()} VND off`}
+                    </option>
+                  ))}
+                </select>
+                {availableCoupons.length === 0 && (
+                  <p className="mt-1 text-[10px] text-slate-400">No available coupons in your wallet. Claim some in the Promotions page!</p>
+                )}
               </div>
             </div>
             <div className="mt-6 flex gap-3">
@@ -485,7 +513,7 @@ function CustomerShopPage() {
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">Discount</span>
-              <span className="font-medium text-slate-600">0</span>
+              <span className="font-medium text-gym-600">Calculated at PayOS</span>
             </div>
           </div>
 

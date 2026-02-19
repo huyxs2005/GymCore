@@ -1,10 +1,13 @@
 import { Link, NavLink } from 'react-router-dom'
 import { Dumbbell } from 'lucide-react'
 import AuthHeaderActions from '../common/AuthHeaderActions'
+import NotificationDropdown from '../common/NotificationDropdown'
+import { Toaster } from 'react-hot-toast'
 
 function WorkspaceScaffold({ title, subtitle, children, links }) {
   return (
     <div className="min-h-screen bg-slate-50">
+      <Toaster position="top-right" reverseOrder={false} />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <Link to="/" className="inline-flex items-center gap-2 text-slate-900">
@@ -29,7 +32,10 @@ function WorkspaceScaffold({ title, subtitle, children, links }) {
                 </NavLink>
               ))}
             </nav>
-            <AuthHeaderActions />
+            <div className="flex items-center gap-3">
+              <NotificationDropdown />
+              <AuthHeaderActions />
+            </div>
           </div>
         </div>
         <div className="mx-auto max-w-7xl px-4 pb-3 sm:hidden sm:px-6">

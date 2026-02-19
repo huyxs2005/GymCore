@@ -16,4 +16,14 @@ export const adminPromotionApi = {
   updatePost(postId, payload) {
     return apiClient.put(`/v1/admin/promotions/posts/${postId}`, payload).then((response) => response.data)
   },
+  getPosts() {
+    return apiClient.get('/v1/promotions/posts').then((response) => response.data)
+  },
+  getRevenueReport() {
+    return apiClient.get('/v1/admin/promotions/revenue-report').then((response) => response.data)
+  },
+  exportRevenuePdf() {
+    return apiClient.get('/v1/admin/promotions/revenue-report/pdf', { responseType: 'blob' })
+      .then((response) => response.data)
+  },
 }

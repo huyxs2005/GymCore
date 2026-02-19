@@ -326,6 +326,44 @@ public class ProductSalesService {
         }
 
         BigDecimal discount = BigDecimal.ZERO;
+        Integer claimId = null;
+
+        String promoCode = asNullableString(payload.get("promoCode"));
+        if (promoCode != null) {
+            // Check if user has claimed this promo code and it's not used
+            String claimSql = """
+                    SELECT c.ClaimID, p.PromotionID, p.DiscountPercent, p.DiscountAmount
+                    FROM dbo.UserPromotionClaims c
+                    JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                    WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
+                      AND ? BETWEEN p.ValidFrom AND p.ValidTo
+                      AND p.IsActive = 1
+                    """;
+
+            java.util.Date now = new java.util.Date();
+            List<Map<String, Object>> claims = jdbcTemplate.queryForList(claimSql, customerId, promoCode, now);
+
+            if (claims.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or already used coupon code.");
+            }
+
+            Map<String, Object> claim = claims.get(0);
+            claimId = (Integer) claim.get("ClaimID");
+            BigDecimal pct = (BigDecimal) claim.get("DiscountPercent");
+            BigDecimal amt = (BigDecimal) claim.get("DiscountAmount");
+
+            if (pct != null) {
+                discount = subtotal.multiply(pct).divide(BigDecimal.valueOf(100));
+            } else if (amt != null) {
+                discount = amt;
+            }
+
+            // Ensure discount doesn't exceed subtotal
+            if (discount.compareTo(subtotal) > 0) {
+                discount = subtotal;
+            }
+        }
+
         BigDecimal total = subtotal.subtract(discount);
 
         // Create order with shipping info
@@ -342,6 +380,17 @@ public class ProductSalesService {
 
         // Create payment row and call PayOS
         int paymentId = insertPaymentForOrder(orderId, subtotal, discount, total);
+
+        // Mark coupon as used if applied
+        if (claimId != null) {
+            jdbcTemplate.update("""
+                    UPDATE dbo.UserPromotionClaims
+                    SET UsedAt = SYSDATETIME(),
+                        UsedPaymentID = ?,
+                        UsedOnOrderID = ?
+                    WHERE ClaimID = ?
+                    """, paymentId, orderId, claimId);
+        }
 
         List<PayOsService.PayOsItem> payOsItems = lines.stream()
                 .map(l -> new PayOsService.PayOsItem(l.name(), l.quantity(), l.price().intValue(), "serving", 0))
