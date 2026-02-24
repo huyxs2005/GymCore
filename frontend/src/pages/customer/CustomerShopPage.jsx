@@ -121,22 +121,34 @@ function CustomerShopPage() {
     setShowShippingModal(false)
   }
 
+  // Check if customer has a PAID order for the selected product
+  const hasPaidForProduct = (productId) => {
+    if (!productId || !orders) return false
+    return orders.some(order =>
+      order.status === 'PAID' &&
+      order.items?.some(item => item.productId === productId)
+    )
+  }
+
   // Effect to handle post-payment redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const status = urlParams.get('status')
     if (status === 'PAID' || status === 'SUCCESS') {
       setShowSuccessMessage(true)
+      // Refresh orders and products to show new status and update review availability
+      queryClient.invalidateQueries({ queryKey: ['orders'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+
       const timer = setTimeout(() => {
         setShowSuccessMessage(false)
         window.history.replaceState({}, document.title, window.location.pathname)
       }, 3000)
       return () => clearTimeout(timer)
     } else if (status === 'CANCELLED') {
-      // Just clear the URL if cancelled
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [])
+  }, [queryClient])
 
   const handleSubmitReview = (event) => {
     event.preventDefault()
@@ -222,6 +234,44 @@ function CustomerShopPage() {
                   <option value="COD">Cash on Delivery (COD)</option>
                 </select>
               </div>
+<<<<<<< Updated upstream
+=======
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Apply Coupon (Optional)</label>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={shippingInfo.promoCode}
+                  onChange={(e) => setShippingInfo({ ...shippingInfo, promoCode: e.target.value })}
+                >
+                  <option value="">No coupon applied</option>
+                  {availableCoupons.map((claim) => (
+                    <option key={claim.ClaimID} value={claim.PromoCode}>
+                      {claim.PromoCode} - {claim.DiscountPercent ? `${claim.DiscountPercent}% off` : `${claim.DiscountAmount.toLocaleString()} VND off`}
+                    </option>
+                  ))}
+                </select>
+                {availableCoupons.length === 0 && (
+                  <p className="mt-1 text-[10px] text-slate-400">No available coupons in your wallet. Claim some in the Promotions page!</p>
+                )}
+                {shippingInfo.promoCode && (
+                  <div className="mt-2 p-3 rounded-xl bg-gym-50 border border-gym-100 flex justify-between items-center animate-in slide-in-from-top-1">
+                    <div>
+                      <span className="block text-[10px] font-bold text-gym-500 uppercase">Discount Applied</span>
+                      <span className="text-sm font-bold text-gym-700">Coupon "{shippingInfo.promoCode}"</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-xs font-extrabold text-gym-600">
+                        -{availableCoupons.find(c => c.PromoCode === shippingInfo.promoCode)?.DiscountPercent
+                          ? `${availableCoupons.find(c => c.PromoCode === shippingInfo.promoCode).DiscountPercent}%`
+                          : `${Number(availableCoupons.find(c => c.PromoCode === shippingInfo.promoCode).DiscountAmount).toLocaleString()} VND`
+                        }
+                      </span>
+                      <span className="block text-[10px] text-slate-400 italic">Subtotal: {cart.subtotal?.toLocaleString()} VND</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+>>>>>>> Stashed changes
             </div>
             <div className="mt-6 flex gap-3">
               <button
@@ -343,14 +393,23 @@ function CustomerShopPage() {
               </article>
 
               <article className="space-y-3 rounded-xl border border-slate-100 bg-white p-4">
-                <h4 className="text-sm font-semibold text-slate-900">Write a review</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-slate-900">Write a review</h4>
+                  {!hasPaidForProduct(selectedProductId) && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 border border-amber-100 uppercase">
+                      Purchase required
+                    </span>
+                  )}
+                </div>
+
                 <form onSubmit={handleSubmitReview} className="space-y-3">
                   <div className="flex items-center gap-3">
                     <label className="text-xs font-medium text-slate-600">Rating</label>
                     <select
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-sm"
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-sm disabled:bg-slate-50 disabled:text-slate-400"
                       value={reviewRating}
                       onChange={(event) => setReviewRating(Number(event.target.value))}
+                      disabled={!hasPaidForProduct(selectedProductId)}
                     >
                       {[5, 4, 3, 2, 1].map((value) => (
                         <option key={value} value={value}>
@@ -360,18 +419,23 @@ function CustomerShopPage() {
                     </select>
                   </div>
                   <textarea
-                    className="min-h-[80px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
-                    placeholder="Share your experience with this product (only customers who purchased can submit)."
+                    className="min-h-[80px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    placeholder={hasPaidForProduct(selectedProductId)
+                      ? "Share your experience with this product..."
+                      : "You can only review products after a successful purchase."}
                     value={reviewText}
                     onChange={(event) => setReviewText(event.target.value)}
+                    disabled={!hasPaidForProduct(selectedProductId)}
                   />
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-slate-500">
-                      Reviews are only accepted if you have at least one paid order for this product.
+                      {hasPaidForProduct(selectedProductId)
+                        ? "Thank you for your feedback!"
+                        : "Reviews are only accepted if you have at least one paid order for this product."}
                     </p>
                     <button
                       type="submit"
-                      disabled={createReviewMutation.isPending || reviewText.trim().length === 0}
+                      disabled={createReviewMutation.isPending || reviewText.trim().length === 0 || !hasPaidForProduct(selectedProductId)}
                       className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
                       <Star size={14} />
