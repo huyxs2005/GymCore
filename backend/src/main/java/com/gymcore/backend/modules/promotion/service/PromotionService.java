@@ -1,21 +1,17 @@
 package com.gymcore.backend.modules.promotion.service;
 
-import java.util.LinkedHashMap;
+import com.gymcore.backend.modules.admin.service.ReportService;
+import com.gymcore.backend.modules.auth.service.CurrentUserService;
+import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PromotionService {
 
-<<<<<<< Updated upstream
-    public Map<String, Object> execute(String action, Object payload) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("module", "promotion");
-        response.put("action", action);
-        response.put("status", "TODO");
-        response.put("payload", payload == null ? Map.of() : payload);
-        return response;
-=======
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
     private final ReportService reportService;
@@ -58,10 +54,7 @@ public class PromotionService {
 
     private Map<String, Object> adminGetCoupons(String auth) {
         currentUserService.requireAdmin(auth);
-        String sql = "SELECT * FROM dbo.Promotions ORDER BY CreatedAt DESC";
-        // Note: I'll assume CreatedAt exists or just order by ID if not.
-        // Actually, let's use PromotionID DESC.
-        sql = "SELECT * FROM dbo.Promotions ORDER BY PromotionID DESC";
+        String sql = "SELECT * FROM dbo.Promotions ORDER BY PromotionID DESC";
         return Map.of("coupons", jdbcTemplate.queryForList(sql));
     }
 
@@ -145,7 +138,6 @@ public class PromotionService {
     }
 
     private Map<String, Object> customerGetPosts(String auth) {
-        // External users can see posts too, but auth is optional
         String sql = """
                 SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount
                 FROM dbo.PromotionPosts p
@@ -162,8 +154,6 @@ public class PromotionService {
         int promotionId = (int) payload.get("promotionId");
         int sourcePostId = (int) payload.get("sourcePostId");
 
-        // Idempotent check: check if already claimed to avoid UNIQUE constraint
-        // violation
         String checkSql = "SELECT COUNT(*) FROM dbo.UserPromotionClaims WHERE UserID = ? AND PromotionID = ?";
         Integer count = jdbcTemplate.queryForObject(checkSql, Integer.class, user.userId(), promotionId);
 
@@ -205,6 +195,5 @@ public class PromotionService {
         jdbcTemplate.update("UPDATE dbo.Notifications SET IsRead = 1 WHERE NotificationID = ? AND UserID = ?",
                 notificationId, user.userId());
         return Map.of("success", true);
->>>>>>> Stashed changes
     }
 }

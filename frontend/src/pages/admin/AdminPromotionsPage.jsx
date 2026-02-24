@@ -1,8 +1,8 @@
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
-import StarterPage from '../../components/common/StarterPage'
 import { adminNav } from '../../config/navigation'
-<<<<<<< Updated upstream
-=======
+import { adminPromotionApi } from '../../features/promotion/api/adminPromotionApi'
 import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
@@ -63,33 +63,13 @@ const AdminPromotionsPage = () => {
 
   const coupons = couponsData?.data?.coupons || []
   const posts = postsData?.data?.posts || []
->>>>>>> Stashed changes
 
-function AdminPromotionsPage() {
   return (
     <WorkspaceScaffold
       title="Admin Promotions"
       subtitle="Manage coupon codes and promotion posts."
       links={adminNav}
     >
-<<<<<<< Updated upstream
-      <StarterPage
-        title="Coupon + post administration"
-        subtitle="Support coupon validity windows and one-time-per-user claim rule."
-        endpoints={[
-          'GET /api/v1/admin/promotions/coupons',
-          'POST /api/v1/admin/promotions/coupons',
-          'PUT /api/v1/admin/promotions/coupons/{promotionId}',
-          'POST /api/v1/admin/promotions/posts',
-          'PUT /api/v1/admin/promotions/posts/{postId}',
-        ]}
-        frontendFiles={['src/pages/admin/AdminPromotionsPage.jsx', 'src/features/promotion/api/adminPromotionApi.js']}
-        backendFiles={[
-          'src/main/java/com/gymcore/backend/modules/promotion/controller/PromotionController.java',
-          'src/main/java/com/gymcore/backend/modules/promotion/service/PromotionService.java',
-        ]}
-      />
-=======
       <div className="space-y-6">
         {/* Tabs */}
         <div className="flex border-b border-slate-200">
@@ -366,7 +346,6 @@ function AdminPromotionsPage() {
           </div>
         )}
       </div>
->>>>>>> Stashed changes
     </WorkspaceScaffold>
   )
 }

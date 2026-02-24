@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff } from 'lucide-react'
+import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff, Ticket } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { productApi } from '../../features/product/api/productApi'
 import { cartApi } from '../../features/product/api/cartApi'
 import { orderApi } from '../../features/product/api/orderApi'
+import { promotionApi } from '../../features/promotion/api/promotionApi'
 
 function CustomerShopPage() {
   const queryClient = useQueryClient()
@@ -19,6 +20,7 @@ function CustomerShopPage() {
     email: '',
     address: '',
     paymentMethod: 'PayOS',
+    promoCode: '',
   })
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
 
@@ -41,6 +43,11 @@ function CustomerShopPage() {
     queryKey: ['product', selectedProductId],
     queryFn: () => productApi.getProductDetail(selectedProductId),
     enabled: !!selectedProductId,
+  })
+
+  const myClaimsQuery = useQuery({
+    queryKey: ['myClaims'],
+    queryFn: promotionApi.getMyClaims,
   })
 
   const addToCartMutation = useMutation({
@@ -69,7 +76,6 @@ function CustomerShopPage() {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] })
       queryClient.invalidateQueries({ queryKey: ['cart'] })
-      // response is the body from orderApi.checkout, which follows ApiResponse { status, message, data }
       const checkoutUrl = response?.data?.checkoutUrl
       if (checkoutUrl) {
         window.location.href = checkoutUrl
@@ -98,6 +104,7 @@ function CustomerShopPage() {
   const cart = cartQuery.data?.data ?? { items: [], subtotal: 0, currency: 'VND' }
   const orders = ordersQuery.data?.data?.orders ?? []
   const productDetail = productDetailQuery.data?.data ?? null
+  const availableCoupons = myClaimsQuery.data?.data?.claims ?? []
 
   const handleAddToCart = (product) => {
     addToCartMutation.mutate({ productId: product.productId, quantity: 1 })
@@ -136,7 +143,6 @@ function CustomerShopPage() {
     const status = urlParams.get('status')
     if (status === 'PAID' || status === 'SUCCESS') {
       setShowSuccessMessage(true)
-      // Refresh orders and products to show new status and update review availability
       queryClient.invalidateQueries({ queryKey: ['orders'] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
 
@@ -234,8 +240,6 @@ function CustomerShopPage() {
                   <option value="COD">Cash on Delivery (COD)</option>
                 </select>
               </div>
-<<<<<<< Updated upstream
-=======
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Apply Coupon (Optional)</label>
                 <select
@@ -271,7 +275,6 @@ function CustomerShopPage() {
                   </div>
                 )}
               </div>
->>>>>>> Stashed changes
             </div>
             <div className="mt-6 flex gap-3">
               <button
@@ -549,7 +552,16 @@ function CustomerShopPage() {
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">Discount</span>
-              <span className="font-medium text-slate-600">0</span>
+              <span className="font-medium text-slate-600">
+                {shippingInfo.promoCode ? (
+                  <span className="text-gym-600">
+                    -{availableCoupons.find(c => c.PromoCode === shippingInfo.promoCode)?.DiscountPercent
+                      ? `${availableCoupons.find(c => c.PromoCode === shippingInfo.promoCode).DiscountPercent}%`
+                      : `${Number(availableCoupons.find(c => c.PromoCode === shippingInfo.promoCode).DiscountAmount).toLocaleString()} VND`
+                    }
+                  </span>
+                ) : '0'}
+              </span>
             </div>
           </div>
 
