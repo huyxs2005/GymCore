@@ -28,8 +28,11 @@ public class PromotionService {
             case "admin-get-coupons" -> adminGetCoupons(auth);
             case "admin-create-coupon" -> adminCreateCoupon(auth, payload);
             case "admin-update-coupon" -> adminUpdateCoupon(auth, payload);
+            case "admin-delete-coupon" -> adminDeleteCoupon(auth, payload);
+            case "admin-get-posts" -> adminGetPosts(auth);
             case "admin-create-promotion-post" -> adminCreatePost(auth, payload);
             case "admin-update-promotion-post" -> adminUpdatePost(auth, payload);
+            case "admin-delete-promotion-post" -> adminDeletePost(auth, payload);
             case "admin-get-revenue-report" -> adminGetRevenueReport(auth);
             case "customer-get-promotion-posts" -> customerGetPosts(auth);
             case "customer-claim-coupon" -> customerClaimCoupon(auth, payload);
@@ -100,9 +103,28 @@ public class PromotionService {
                 body.get("discountAmount"),
                 body.get("validFrom"),
                 body.get("validTo"),
-                body.get("isActive"),
+                body.getOrDefault("isActive", 1).equals(true) || body.getOrDefault("isActive", 1).equals(1) ? 1 : 0,
                 promotionId);
         return Map.of("success", true);
+    }
+
+    private Map<String, Object> adminDeleteCoupon(String auth, Map<String, Object> payload) {
+        currentUserService.requireAdmin(auth);
+        int promotionId = (int) payload.get("promotionId");
+        // Check for dependencies or just deactivate
+        jdbcTemplate.update("UPDATE dbo.Promotions SET IsActive = 0 WHERE PromotionID = ?", promotionId);
+        return Map.of("success", true);
+    }
+
+    private Map<String, Object> adminGetPosts(String auth) {
+        currentUserService.requireAdmin(auth);
+        String sql = """
+                SELECT p.*, r.PromoCode
+                FROM dbo.PromotionPosts p
+                JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
+                ORDER BY p.PromotionPostID DESC
+                """;
+        return Map.of("posts", jdbcTemplate.queryForList(sql));
     }
 
     private Map<String, Object> adminCreatePost(String auth, Map<String, Object> payload) {
@@ -131,7 +153,7 @@ public class PromotionService {
 
         jdbcTemplate.update("""
                 UPDATE dbo.PromotionPosts
-                SET Title = ?, Content = ?, BannerUrl = ?, StartAt = ?, EndAt = ?, IsActive = ?
+                SET Title = ?, Content = ?, BannerUrl = ?, StartAt = ?, EndAt = ?, IsActive = ?, PromotionID = ?
                 WHERE PromotionPostID = ?
                 """,
                 body.get("title"),
@@ -139,28 +161,64 @@ public class PromotionService {
                 body.get("bannerUrl"),
                 body.get("startAt"),
                 body.get("endAt"),
-                body.get("isActive"),
+                body.getOrDefault("isActive", 1).equals(true) || body.getOrDefault("isActive", 1).equals(1) ? 1 : 0,
+                body.get("promotionId"),
                 postId);
         return Map.of("success", true);
     }
 
+    private Map<String, Object> adminDeletePost(String auth, Map<String, Object> payload) {
+        currentUserService.requireAdmin(auth);
+        int postId = (int) payload.get("postId");
+        jdbcTemplate.update("UPDATE dbo.PromotionPosts SET IsActive = 0 WHERE PromotionPostID = ?", postId);
+        return Map.of("success", true);
+    }
+
     private Map<String, Object> customerGetPosts(String auth) {
-        // External users can see posts too, but auth is optional
-        String sql = """
-                SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount
-                FROM dbo.PromotionPosts p
-                JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
-                WHERE p.IsActive = 1 AND r.IsActive = 1
-                AND SYSDATETIME() BETWEEN p.StartAt AND p.EndAt
-                ORDER BY p.CreatedAt DESC
-                """;
-        return Map.of("posts", jdbcTemplate.queryForList(sql));
+        CurrentUserService.UserInfo user = currentUserService.findUser(auth).orElse(null);
+        String sql;
+        List<Map<String, Object>> posts;
+
+        if (user != null) {
+            sql = """
+                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount,
+                           CASE WHEN c.ClaimID IS NOT NULL THEN 1 ELSE 0 END as IsClaimed
+                    FROM dbo.PromotionPosts p
+                    JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
+                    LEFT JOIN dbo.UserPromotionClaims c ON c.PromotionID = r.PromotionID AND c.UserID = ?
+                    WHERE p.IsActive = 1 AND r.IsActive = 1
+                    AND SYSDATETIME() BETWEEN p.StartAt AND p.EndAt
+                    ORDER BY p.CreatedAt DESC
+                    """;
+            posts = jdbcTemplate.queryForList(sql, user.userId());
+        } else {
+            sql = """
+                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount,
+                           0 as IsClaimed
+                    FROM dbo.PromotionPosts p
+                    JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
+                    WHERE p.IsActive = 1 AND r.IsActive = 1
+                    AND SYSDATETIME() BETWEEN p.StartAt AND p.EndAt
+                    ORDER BY p.CreatedAt DESC
+                    """;
+            posts = jdbcTemplate.queryForList(sql);
+        }
+        return Map.of("posts", posts);
     }
 
     private Map<String, Object> customerClaimCoupon(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
         int promotionId = (int) payload.get("promotionId");
         int sourcePostId = (int) payload.get("sourcePostId");
+
+        // Idempotency check
+        Integer existing = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dbo.UserPromotionClaims WHERE UserID = ? AND PromotionID = ?",
+                Integer.class, user.userId(), promotionId);
+
+        if (existing != null && existing > 0) {
+            return Map.of("success", true, "message", "You have already claimed this coupon!");
+        }
 
         jdbcTemplate.update("""
                 INSERT INTO dbo.UserPromotionClaims (UserID, PromotionID, SourcePostID)
