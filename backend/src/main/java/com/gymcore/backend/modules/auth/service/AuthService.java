@@ -118,6 +118,14 @@ public class AuthService {
     @Transactional
     public Map<String, Object> loginWithPassword(String email, String password, HttpServletRequest request, HttpServletResponse response) {
         UserRecord user = requireUserByEmail(email);
+        // Tài khoản mẫu (*@gymcore.local): luôn cho phép đăng nhập dù chưa verify email (tránh lỗi khi chạy demo)
+        if (!user.emailVerified && email != null && email.toLowerCase(java.util.Locale.ROOT).endsWith("@gymcore.local")) {
+            jdbcTemplate.update("""
+                    UPDATE dbo.Users SET IsEmailVerified = 1, EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME()), UpdatedAt = SYSDATETIME()
+                    WHERE UserID = ?
+                    """, user.userId);
+            user = requireUserById(user.userId);
+        }
         ensureLoginAllowed(user, true);
 
         if (user.passwordHash == null || user.passwordHash.isBlank()) {

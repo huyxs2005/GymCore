@@ -20,7 +20,8 @@ import ReceptionCustomersPage from '../pages/reception/ReceptionCustomersPage'
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage'
 import AdminUsersPage from '../pages/admin/AdminUsersPage'
 import AdminMembershipsPage from '../pages/admin/AdminMembershipsPage'
-import AdminCoachInsightsPage from '../pages/admin/AdminCoachInsightsPage'
+import AdminCoachManagementPage from '../pages/admin/AdminCoachManagementPage'
+import CoachBookingManagementPage from '../pages/coach/CoachBookingManagementPage'
 import AdminProductsPage from '../pages/admin/AdminProductsPage'
 import AdminPromotionsPage from '../pages/admin/AdminPromotionsPage'
 import AdminReportsPage from '../pages/admin/AdminReportsPage'
@@ -69,6 +70,7 @@ function AppRouter() {
       <Route path="/customer/knowledge" element={withRole(['CUSTOMER'], <CustomerKnowledgePage />)} />
 
       <Route path="/coach/schedule" element={withRole(['COACH'], <CoachSchedulePage />)} />
+      <Route path="/coach/booking-requests" element={withRole(['COACH'], <CoachBookingManagementPage />)} />
       <Route path="/coach/customers" element={withRole(['COACH'], <CoachCustomersPage />)} />
 
       <Route path="/reception/checkin" element={withRole(['RECEPTIONIST'], <ReceptionCheckinPage />)} />
@@ -77,7 +79,7 @@ function AppRouter() {
       <Route path="/admin/dashboard" element={withRole(['ADMIN'], <AdminDashboardPage />)} />
       <Route path="/admin/users" element={withRole(['ADMIN'], <AdminUsersPage />)} />
       <Route path="/admin/memberships" element={withRole(['ADMIN'], <AdminMembershipsPage />)} />
-      <Route path="/admin/coach-insights" element={withRole(['ADMIN'], <AdminCoachInsightsPage />)} />
+      <Route path="/admin/coach-management" element={withRole(['ADMIN'], <AdminCoachManagementPage />)} />
       <Route path="/admin/products" element={withRole(['ADMIN'], <AdminProductsPage />)} />
       <Route path="/admin/promotions" element={withRole(['ADMIN'], <AdminPromotionsPage />)} />
       <Route path="/admin/reports" element={withRole(['ADMIN'], <AdminReportsPage />)} />
