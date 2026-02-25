@@ -61,10 +61,7 @@ public class PromotionService {
 
     private Map<String, Object> adminGetCoupons(String auth) {
         currentUserService.requireAdmin(auth);
-        String sql = "SELECT * FROM dbo.Promotions ORDER BY CreatedAt DESC";
-        // Note: I'll assume CreatedAt exists or just order by ID if not.
-        // Actually, let's use PromotionID DESC.
-        sql = "SELECT * FROM dbo.Promotions ORDER BY PromotionID DESC";
+        String sql = "SELECT * FROM dbo.Promotions ORDER BY PromotionID DESC";
         return Map.of("coupons", jdbcTemplate.queryForList(sql));
     }
 
@@ -77,17 +74,17 @@ public class PromotionService {
                         """,
                 payload.get("promoCode"),
                 payload.get("description"),
-                payload.get("discountPercent"),
-                payload.get("discountAmount"),
+                requireDecimal(payload.get("discountPercent")),
+                requireDecimal(payload.get("discountAmount")),
                 payload.get("validFrom"),
                 payload.get("validTo"),
-                payload.getOrDefault("isActive", 1));
+                requireBit(payload.getOrDefault("isActive", 1)));
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminUpdateCoupon(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
-        int promotionId = (int) payload.get("promotionId");
+        int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
 
@@ -99,19 +96,18 @@ public class PromotionService {
                         """,
                 body.get("promoCode"),
                 body.get("description"),
-                body.get("discountPercent"),
-                body.get("discountAmount"),
+                requireDecimal(body.get("discountPercent")),
+                requireDecimal(body.get("discountAmount")),
                 body.get("validFrom"),
                 body.get("validTo"),
-                body.getOrDefault("isActive", 1).equals(true) || body.getOrDefault("isActive", 1).equals(1) ? 1 : 0,
+                requireBit(body.getOrDefault("isActive", 1)),
                 promotionId);
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminDeleteCoupon(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
-        int promotionId = (int) payload.get("promotionId");
-        // Check for dependencies or just deactivate
+        int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         jdbcTemplate.update("UPDATE dbo.Promotions SET IsActive = 0 WHERE PromotionID = ?", promotionId);
         return Map.of("success", true);
     }
@@ -137,17 +133,17 @@ public class PromotionService {
                 payload.get("title"),
                 payload.get("content"),
                 payload.get("bannerUrl"),
-                payload.get("promotionId"),
+                requireInt(payload.get("promotionId"), "Promotion ID is required."),
                 payload.get("startAt"),
                 payload.get("endAt"),
-                payload.getOrDefault("isActive", 1),
+                requireBit(payload.getOrDefault("isActive", 1)),
                 admin.userId());
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminUpdatePost(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
-        int postId = (int) payload.get("postId");
+        int postId = requireInt(payload.get("postId"), "Post ID is required.");
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
 
@@ -161,15 +157,15 @@ public class PromotionService {
                 body.get("bannerUrl"),
                 body.get("startAt"),
                 body.get("endAt"),
-                body.getOrDefault("isActive", 1).equals(true) || body.getOrDefault("isActive", 1).equals(1) ? 1 : 0,
-                body.get("promotionId"),
+                requireBit(body.getOrDefault("isActive", 1)),
+                requireInt(body.get("promotionId"), "Promotion ID is required."),
                 postId);
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminDeletePost(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
-        int postId = (int) payload.get("postId");
+        int postId = requireInt(payload.get("postId"), "Post ID is required.");
         jdbcTemplate.update("UPDATE dbo.PromotionPosts SET IsActive = 0 WHERE PromotionPostID = ?", postId);
         return Map.of("success", true);
     }
@@ -250,9 +246,54 @@ public class PromotionService {
 
     private Map<String, Object> customerMarkRead(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo user = currentUserService.requireUser(auth);
-        int notificationId = (int) payload.get("notificationId");
+        int notificationId = requireInt(payload.get("notificationId"), "Notification ID is required.");
         jdbcTemplate.update("UPDATE dbo.Notifications SET IsRead = 1 WHERE NotificationID = ? AND UserID = ?",
                 notificationId, user.userId());
         return Map.of("success", true);
+    }
+
+    private int requireInt(Object value, String message) {
+        if (value == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        try {
+            if (value instanceof Number number) {
+                return number.intValue();
+            }
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+    }
+
+    private java.math.BigDecimal requireDecimal(Object value) {
+        if (value == null || String.valueOf(value).isBlank()) {
+            return null;
+        }
+        try {
+            if (value instanceof java.math.BigDecimal decimal) {
+                return decimal;
+            }
+            if (value instanceof Number number) {
+                return java.math.BigDecimal.valueOf(number.doubleValue());
+            }
+            return new java.math.BigDecimal(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private int requireBit(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool ? 1 : 0;
+        }
+        if (value instanceof Number number) {
+            return number.intValue() > 0 ? 1 : 0;
+        }
+        if (value == null) {
+            return 0;
+        }
+        String s = String.valueOf(value).trim().toLowerCase();
+        return s.equals("true") || s.equals("1") || s.equals("on") ? 1 : 0;
     }
 }

@@ -329,36 +329,30 @@ public class ProductSalesService {
         Integer claimId = null;
 
         String promoCode = asNullableString(payload.get("promoCode"));
-        if (promoCode != null) {
-            // Check if user has claimed this promo code and it's not used
-            String claimSql = """
-                    SELECT c.ClaimID, p.PromotionID, p.DiscountPercent, p.DiscountAmount
+        if (promoCode != null && !promoCode.isBlank()) {
+            List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
+                    SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount
                     FROM dbo.UserPromotionClaims c
                     JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                     WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
-                      AND ? BETWEEN p.ValidFrom AND p.ValidTo
-                      AND p.IsActive = 1
-                    """;
-
-            java.util.Date now = new java.util.Date();
-            List<Map<String, Object>> claims = jdbcTemplate.queryForList(claimSql, customerId, promoCode, now);
+                    AND p.IsActive = 1 AND SYSDATETIME() BETWEEN p.ValidFrom AND p.ValidTo
+                    """, customerId, promoCode);
 
             if (claims.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or already used coupon code.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired promo code.");
             }
 
             Map<String, Object> claim = claims.get(0);
             claimId = (Integer) claim.get("ClaimID");
-            BigDecimal pct = (BigDecimal) claim.get("DiscountPercent");
-            BigDecimal amt = (BigDecimal) claim.get("DiscountAmount");
+            BigDecimal pct = requireDecimal(claim.get("DiscountPercent"), "Invalid percent");
+            BigDecimal amt = requireDecimal(claim.get("DiscountAmount"), "Invalid amount");
 
-            if (pct != null) {
-                discount = subtotal.multiply(pct).divide(BigDecimal.valueOf(100));
+            if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
+                discount = subtotal.multiply(pct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
             } else if (amt != null) {
                 discount = amt;
             }
 
-            // Ensure discount doesn't exceed subtotal
             if (discount.compareTo(subtotal) > 0) {
                 discount = subtotal;
             }

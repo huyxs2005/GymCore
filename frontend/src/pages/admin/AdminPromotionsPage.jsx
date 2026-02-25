@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminPromotionApi } from '../../features/promotion/api/adminPromotionApi'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
-import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, Trash2, Calendar, FileText, Layout } from 'lucide-react'
+import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, Trash2, Calendar, FileText, Layout, Sparkles } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 const AdminPromotionsPage = () => {
@@ -86,7 +86,42 @@ const AdminPromotionsPage = () => {
       subtitle="Create and manage discount coupons and marketing campaign posts."
       links={adminNav}
     >
-      <div className="space-y-6">
+      <div className="space-y-8">
+        {/* Quick Create Section */}
+        <section className="relative overflow-hidden bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-gym-200/50 group">
+          <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-96 h-96 bg-gym-600/20 rounded-full blur-[80px] group-hover:bg-gym-600/30 transition-colors duration-700"></div>
+          <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-64 h-64 bg-blue-600/10 rounded-full blur-[60px]"></div>
+
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+            <div className="max-w-xl">
+              <h2 className="text-3xl font-black mb-3 flex items-center gap-3">
+                <Sparkles className="text-gym-400 animate-pulse" />
+                Create New Promotion
+              </h2>
+              <p className="text-slate-400 font-medium text-lg leading-relaxed">
+                Launch a new marketing campaign or create standalone discount coupons to drive customer engagement and sales.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={() => { setEditingItem(null); setIsCouponModalOpen(true); }}
+                className="px-8 py-4 bg-gym-600 hover:bg-gym-700 text-white rounded-2xl font-bold flex items-center gap-3 transition-all active:scale-95 shadow-lg shadow-gym-600/20"
+              >
+                <Ticket size={20} />
+                New Coupon
+              </button>
+              <button
+                onClick={() => { setEditingItem(null); setIsPostModalOpen(true); }}
+                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl font-bold flex items-center gap-3 transition-all active:scale-95 backdrop-blur-md"
+              >
+                <Layout size={20} />
+                New Marketing Post
+              </button>
+            </div>
+          </div>
+        </section>
+
         <div className="flex border-b border-slate-200">
           <button
             onClick={() => setActiveTab('coupons')}

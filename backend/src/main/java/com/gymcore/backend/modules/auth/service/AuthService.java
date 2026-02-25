@@ -43,10 +43,13 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String REFRESH_COOKIE_NAME = "gymcore_refresh_token";
     private static final String GOOGLE_PROVIDER = "GOOGLE";
     private static final int OTP_LENGTH = 6;
@@ -89,17 +92,16 @@ public class AuthService {
 
     private final RowMapper<UserRecord> userRowMapper = (rs, rowNum) -> toUserRecord(rs);
     private final RowMapper<RefreshTokenRecord> refreshTokenRowMapper = (rs, rowNum) -> toRefreshTokenRecord(rs);
-    private final RowMapper<EmailVerificationTokenRecord> emailVerificationTokenRowMapper =
-            (rs, rowNum) -> toEmailVerificationTokenRecord(rs);
-    private final RowMapper<PasswordResetTokenRecord> passwordResetTokenRowMapper =
-            (rs, rowNum) -> toPasswordResetTokenRecord(rs);
+    private final RowMapper<EmailVerificationTokenRecord> emailVerificationTokenRowMapper = (rs,
+            rowNum) -> toEmailVerificationTokenRecord(rs);
+    private final RowMapper<PasswordResetTokenRecord> passwordResetTokenRowMapper = (rs,
+            rowNum) -> toPasswordResetTokenRecord(rs);
 
     public AuthService(
             JdbcTemplate jdbcTemplate,
             PasswordEncoder passwordEncoder,
             AuthMailService authMailService,
-            RestTemplate restTemplate
-    ) {
+            RestTemplate restTemplate) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
         this.authMailService = authMailService;
@@ -116,22 +118,41 @@ public class AuthService {
     }
 
     @Transactional
-    public Map<String, Object> loginWithPassword(String email, String password, HttpServletRequest request, HttpServletResponse response) {
-        UserRecord user = requireUserByEmail(email);
-        ensureLoginAllowed(user, true);
+    public Map<String, Object> loginWithPassword(String email, String password, HttpServletRequest request,
+            HttpServletResponse response) {
+        log.info("Attempting password login for email: {}", email);
+        UserRecord user;
+        try {
+            user = requireUserByEmail(email);
+        } catch (ResponseStatusException e) {
+            log.warn("Login failed: User not found for email: {}", email);
+            throw e;
+        }
+
+        try {
+            ensureLoginAllowed(user, true);
+        } catch (ResponseStatusException e) {
+            log.warn("Login failed: Access denied for email: {}. Reason: {}", email, e.getReason());
+            throw e;
+        }
 
         if (user.passwordHash == null || user.passwordHash.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Password login is not available for this account.");
+            log.warn("Login failed: Password login not available for account: {}", email);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Password login is not available for this account.");
         }
         if (!passwordEncoder.matches(password, user.passwordHash)) {
+            log.warn("Login failed: Invalid password for email: {}", email);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password.");
         }
 
+        log.info("Login successful for email: {}", email);
         return issueSession(user, request, response);
     }
 
     @Transactional
-    public Map<String, Object> loginWithGoogle(String idToken, HttpServletRequest request, HttpServletResponse response) {
+    public Map<String, Object> loginWithGoogle(String idToken, HttpServletRequest request,
+            HttpServletResponse response) {
         GoogleTokenInfo tokenInfo = verifyGoogleIdToken(idToken);
 
         UserRecord user = findUserByGoogleSub(tokenInfo.sub).orElse(null);
@@ -139,7 +160,8 @@ public class AuthService {
             user = findUserByEmail(tokenInfo.email).orElse(null);
             if (user == null) {
                 int customerRoleId = getRoleIdByName("Customer");
-                int userId = insertUser(customerRoleId, tokenInfo.displayName(), tokenInfo.email, null, null, true, Instant.now());
+                int userId = insertUser(customerRoleId, tokenInfo.displayName(), tokenInfo.email, null, null, true,
+                        Instant.now());
                 ensureCustomerProfile(userId);
                 user = requireUserById(userId);
             } else {
@@ -147,14 +169,17 @@ public class AuthService {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin accounts cannot use Google login.");
                 }
                 if (!isGoogleAllowedRole(user.roleApiName)) {
-                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Google login is not allowed for this role.");
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Google login is not allowed for this role.");
                 }
                 if (!user.emailVerified) {
-                    jdbcTemplate.update("""
-                            UPDATE dbo.Users
-                            SET IsEmailVerified = 1, EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME()), UpdatedAt = SYSDATETIME()
-                            WHERE UserID = ?
-                            """, user.userId);
+                    jdbcTemplate.update(
+                            """
+                                    UPDATE dbo.Users
+                                    SET IsEmailVerified = 1, EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME()), UpdatedAt = SYSDATETIME()
+                                    WHERE UserID = ?
+                                    """,
+                            user.userId);
                     user = requireUserById(user.userId);
                 }
             }
@@ -167,11 +192,13 @@ public class AuthService {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Google login is not allowed for this role.");
             }
             if (!normalizeEmail(user.email).equals(tokenInfo.email)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Google account does not match the linked email.");
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Google account does not match the linked email.");
             }
         }
 
-        // Update avatar from Google unless the user explicitly uploaded a custom avatar.
+        // Update avatar from Google unless the user explicitly uploaded a custom
+        // avatar.
         if (maybeApplyGoogleAvatar(user, tokenInfo.pictureUrl)) {
             user = requireUserById(user.userId);
         }
@@ -182,11 +209,11 @@ public class AuthService {
 
     @Transactional
     public Map<String, Object> refreshSession(HttpServletRequest request, HttpServletResponse response) {
-        String rawRefreshToken = extractRefreshCookie(request).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token is missing."));
+        String rawRefreshToken = extractRefreshCookie(request)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token is missing."));
 
-        RefreshTokenRecord currentToken = findRefreshTokenByHash(hashOpaqueToken(rawRefreshToken)).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token is invalid."));
+        RefreshTokenRecord currentToken = findRefreshTokenByHash(hashOpaqueToken(rawRefreshToken))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token is invalid."));
         if (currentToken.revokedAt != null || Instant.now().isAfter(currentToken.expiresAt)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token expired or revoked.");
         }
@@ -231,8 +258,7 @@ public class AuthService {
         String token = jdbcTemplate.queryForObject(
                 "SELECT QrCodeToken FROM dbo.Users WHERE UserID = ?",
                 String.class,
-                user.userId
-        );
+                user.userId);
         if (token == null || token.isBlank()) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "QR token is missing for this user.");
         }
@@ -245,8 +271,7 @@ public class AuthService {
             String fullName,
             String phone,
             String dateOfBirth,
-            String gender
-    ) {
+            String gender) {
         UserRecord currentUser = requireUserFromAccessToken(authorizationHeader);
         String normalizedName = requireText(fullName, "Full name is required.");
         String normalizedPhone = normalizePhoneOrThrow(phone);
@@ -300,7 +325,8 @@ public class AuthService {
         try {
             Files.createDirectories(userDir);
         } catch (Exception exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create avatar storage folder.");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to create avatar storage folder.");
         }
 
         String filename = UUID.randomUUID().toString().replace("-", "") + "." + extension;
@@ -329,10 +355,12 @@ public class AuthService {
     }
 
     @Transactional
-    public Map<String, Object> changePassword(String authorizationHeader, String oldPassword, String newPassword, String confirmPassword) {
+    public Map<String, Object> changePassword(String authorizationHeader, String oldPassword, String newPassword,
+            String confirmPassword) {
         validatePasswordPair(newPassword, confirmPassword);
         UserRecord user = requireUserFromAccessToken(authorizationHeader);
-        if (user.passwordHash == null || user.passwordHash.isBlank() || !passwordEncoder.matches(oldPassword, user.passwordHash)) {
+        if (user.passwordHash == null || user.passwordHash.isBlank()
+                || !passwordEncoder.matches(oldPassword, user.passwordHash)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Current password is incorrect.");
         }
 
@@ -342,7 +370,8 @@ public class AuthService {
         return Map.of("changed", true);
     }
 
-    private Map<String, Object> issueSession(UserRecord user, HttpServletRequest request, HttpServletResponse response) {
+    private Map<String, Object> issueSession(UserRecord user, HttpServletRequest request,
+            HttpServletResponse response) {
         RefreshIssue refreshIssue = createRefreshToken(user.userId, request);
         setRefreshCookie(response, refreshIssue.rawToken, refreshIssue.expiresAt);
         return authPayload(user, createAccessToken(user));
@@ -354,11 +383,12 @@ public class AuthService {
                 "tokenType", "Bearer",
                 "expiresInSeconds", accessTokenMinutes * 60,
                 "landingPath", landingPath(user.roleApiName),
-                "user", userToMap(user)
-        );
+                "user", userToMap(user));
     }
+
     @Transactional
-    public Map<String, Object> startRegistration(String fullName, String email, String phone, String password, String confirmPassword) {
+    public Map<String, Object> startRegistration(String fullName, String email, String phone, String password,
+            String confirmPassword) {
         validatePasswordPair(password, confirmPassword);
 
         String normalizedEmail = normalizeEmail(email);
@@ -376,7 +406,8 @@ public class AuthService {
         int userId;
         if (existing == null) {
             int roleId = getRoleIdByName("Customer");
-            userId = insertUser(roleId, normalizedName, normalizedEmail, normalizedPhone, passwordEncoder.encode(password), false, null);
+            userId = insertUser(roleId, normalizedName, normalizedEmail, normalizedPhone,
+                    passwordEncoder.encode(password), false, null);
         } else {
             userId = existing.userId;
             jdbcTemplate.update("""
@@ -396,22 +427,20 @@ public class AuthService {
                 userId,
                 passwordEncoder.encode(otp),
                 now.plusSeconds(otpExpirySeconds),
-                now.plusSeconds(otpResendCooldownSeconds)
-        );
+                now.plusSeconds(otpResendCooldownSeconds));
         authMailService.sendRegisterOtp(normalizedEmail, normalizedName, otp, otpExpirySeconds);
 
         return Map.of(
                 "email", normalizedEmail,
                 "expiresInSeconds", otpExpirySeconds,
-                "resendCooldownSeconds", otpResendCooldownSeconds
-        );
+                "resendCooldownSeconds", otpResendCooldownSeconds);
     }
 
     @Transactional
     public Map<String, Object> resendRegisterOtp(String email) {
         String normalizedEmail = normalizeEmail(email);
-        UserRecord user = findUserByEmail(normalizedEmail).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending registration was found."));
+        UserRecord user = findUserByEmail(normalizedEmail).orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending registration was found."));
 
         if (!"CUSTOMER".equals(user.roleApiName) || user.emailVerified) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending registration was found.");
@@ -431,15 +460,13 @@ public class AuthService {
                 user.userId,
                 passwordEncoder.encode(otp),
                 now.plusSeconds(otpExpirySeconds),
-                now.plusSeconds(otpResendCooldownSeconds)
-        );
+                now.plusSeconds(otpResendCooldownSeconds));
         authMailService.sendRegisterOtp(normalizedEmail, user.fullName, otp, otpExpirySeconds);
 
         return Map.of(
                 "email", normalizedEmail,
                 "expiresInSeconds", otpExpirySeconds,
-                "resendCooldownSeconds", otpResendCooldownSeconds
-        );
+                "resendCooldownSeconds", otpResendCooldownSeconds);
     }
 
     @Transactional
@@ -447,15 +474,15 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(email);
         String normalizedOtp = requireOtp(otp);
 
-        UserRecord user = findUserByEmail(normalizedEmail).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid OTP or email."));
+        UserRecord user = findUserByEmail(normalizedEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid OTP or email."));
 
         if (user.emailVerified) {
             return Map.of("verified", true, "email", normalizedEmail);
         }
 
-        EmailVerificationTokenRecord token = findLatestActiveEmailVerificationToken(user.userId).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "OTP not found. Please request a new OTP."));
+        EmailVerificationTokenRecord token = findLatestActiveEmailVerificationToken(user.userId).orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "OTP not found. Please request a new OTP."));
 
         if (Instant.now().isAfter(token.expiresAt)) {
             invalidateEmailVerificationToken(token.emailVerificationTokenId);
@@ -503,7 +530,8 @@ public class AuthService {
     }
 
     @Transactional
-    public Map<String, Object> resetPasswordWithOtp(String email, String otp, String newPassword, String confirmPassword) {
+    public Map<String, Object> resetPasswordWithOtp(String email, String otp, String newPassword,
+            String confirmPassword) {
         validatePasswordPair(newPassword, confirmPassword);
         UserRecord user = requireUserByEmail(email);
         PasswordResetTokenRecord token = requireLatestActivePasswordResetToken(user.userId);
@@ -527,8 +555,8 @@ public class AuthService {
 
     private Map<String, Object> issueForgotPasswordOtp(String email, boolean resend) {
         String normalizedEmail = normalizeEmail(email);
-        UserRecord user = findUserByEmail(normalizedEmail).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email not found."));
+        UserRecord user = findUserByEmail(normalizedEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email not found."));
         ensureLoginAllowed(user, false);
 
         PasswordResetTokenRecord existing = findLatestActivePasswordResetToken(user.userId).orElse(null);
@@ -550,8 +578,7 @@ public class AuthService {
                 "email", normalizedEmail,
                 "resend", resend,
                 "expiresInSeconds", otpExpirySeconds,
-                "resendCooldownSeconds", otpResendCooldownSeconds
-        );
+                "resendCooldownSeconds", otpResendCooldownSeconds);
     }
 
     private void ensureLoginAllowed(UserRecord user, boolean requireVerifiedEmail) {
@@ -596,11 +623,13 @@ public class AuthService {
                 .signWith(jwtSigningKey)
                 .compact();
     }
+
     private RefreshIssue createRefreshToken(int userId, HttpServletRequest request) {
         String rawToken = generateOpaqueToken();
         String tokenHash = hashOpaqueToken(rawToken);
         Instant expiresAt = Instant.now().plus(Duration.ofDays(refreshTokenDays));
-        int refreshTokenId = insertRefreshToken(userId, tokenHash, expiresAt, requestClientIp(request), requestUserAgent(request));
+        int refreshTokenId = insertRefreshToken(userId, tokenHash, expiresAt, requestClientIp(request),
+                requestUserAgent(request));
         return new RefreshIssue(refreshTokenId, rawToken, expiresAt);
     }
 
@@ -632,7 +661,8 @@ public class AuthService {
             return Optional.empty();
         }
         for (Cookie cookie : cookies) {
-            if (REFRESH_COOKIE_NAME.equals(cookie.getName()) && cookie.getValue() != null && !cookie.getValue().isBlank()) {
+            if (REFRESH_COOKIE_NAME.equals(cookie.getName()) && cookie.getValue() != null
+                    && !cookie.getValue().isBlank()) {
                 return Optional.of(cookie.getValue());
             }
         }
@@ -672,8 +702,7 @@ public class AuthService {
             Map<String, Object> payload = restTemplate.getForObject(
                     "https://oauth2.googleapis.com/tokeninfo?id_token={idToken}",
                     Map.class,
-                    idToken
-            );
+                    idToken);
             if (payload == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Google token is invalid.");
             }
@@ -727,8 +756,8 @@ public class AuthService {
     }
 
     private UserRecord requireUserByEmail(String email) {
-        return findUserByEmail(email).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password."));
+        return findUserByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password."));
     }
 
     private UserRecord requireUserById(int userId) {
@@ -791,23 +820,23 @@ public class AuthService {
     }
 
     private PasswordResetTokenRecord requireLatestActivePasswordResetToken(int userId) {
-        return findLatestActivePasswordResetToken(userId).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "OTP not found. Please request a new OTP."));
+        return findLatestActivePasswordResetToken(userId).orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "OTP not found. Please request a new OTP."));
     }
 
     private int getRoleIdByName(String roleName) {
         Integer roleId = jdbcTemplate.queryForObject(
                 "SELECT TOP (1) RoleID FROM dbo.Roles WHERE LOWER(RoleName) = LOWER(?)",
                 Integer.class,
-                roleName
-        );
+                roleName);
         if (roleId == null) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Required role not found: " + roleName);
         }
         return roleId;
     }
 
-    private int insertUser(int roleId, String fullName, String email, String phone, String passwordHash, boolean emailVerified, Instant emailVerifiedAt) {
+    private int insertUser(int roleId, String fullName, String email, String phone, String passwordHash,
+            boolean emailVerified, Instant emailVerifiedAt) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var statement = connection.prepareStatement("""
@@ -816,7 +845,7 @@ public class AuthService {
                         IsEmailVerified, EmailVerifiedAt
                     )
                     VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?)
-                    """, new String[]{"UserID"});
+                    """, new String[] { "UserID" });
             statement.setInt(1, roleId);
             statement.setString(2, fullName);
             statement.setString(3, email);
@@ -835,14 +864,16 @@ public class AuthService {
     }
 
     private void ensureCustomerProfile(int userId) {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM dbo.Customers WHERE CustomerID = ?", Integer.class, userId);
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM dbo.Customers WHERE CustomerID = ?",
+                Integer.class, userId);
         if (count != null && count == 0) {
             jdbcTemplate.update("INSERT INTO dbo.Customers (CustomerID) VALUES (?)", userId);
         }
     }
 
     private void ensureCoachProfile(int userId) {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?", Integer.class, userId);
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?", Integer.class,
+                userId);
         if (count != null && count == 0) {
             jdbcTemplate.update("INSERT INTO dbo.Coaches (CoachID) VALUES (?)", userId);
         }
@@ -881,8 +912,7 @@ public class AuthService {
 
         return Map.of(
                 "dateOfBirth", dateOfBirth == null ? "" : dateOfBirth,
-                "gender", gender == null ? "" : gender
-        );
+                "gender", gender == null ? "" : gender);
     }
 
     private void updateDemographics(UserRecord user, String dateOfBirth, String gender) {
@@ -898,7 +928,8 @@ public class AuthService {
             try {
                 parsedDob = LocalDate.parse(normalizedDob);
             } catch (Exception exception) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Date of birth must be in YYYY-MM-DD format.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Date of birth must be in YYYY-MM-DD format.");
             }
         }
 
@@ -998,7 +1029,8 @@ public class AuthService {
                 """, userId);
     }
 
-    private void insertEmailVerificationToken(int userId, String otpHash, Instant expiresAt, Instant resendAvailableAt) {
+    private void insertEmailVerificationToken(int userId, String otpHash, Instant expiresAt,
+            Instant resendAvailableAt) {
         jdbcTemplate.update("""
                 INSERT INTO dbo.EmailVerificationTokens (UserID, OtpHash, ExpiresAt, ResendAvailableAt)
                 VALUES (?, ?, ?, ?)
@@ -1052,13 +1084,14 @@ public class AuthService {
                 """, userId, exceptTokenId);
     }
 
-    private int insertRefreshToken(int userId, String tokenHash, Instant expiresAt, String ipAddress, String userAgent) {
+    private int insertRefreshToken(int userId, String tokenHash, Instant expiresAt, String ipAddress,
+            String userAgent) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var statement = connection.prepareStatement("""
                     INSERT INTO dbo.UserRefreshTokens (UserID, TokenHash, ExpiresAt, UserAgent, IpAddress)
                     VALUES (?, ?, ?, ?, ?)
-                    """, new String[]{"RefreshTokenID"});
+                    """, new String[] { "RefreshTokenID" });
             statement.setInt(1, userId);
             statement.setString(2, tokenHash);
             statement.setTimestamp(3, Timestamp.from(expiresAt));
@@ -1073,6 +1106,7 @@ public class AuthService {
         }
         return key.intValue();
     }
+
     private UserRecord toUserRecord(ResultSet rs) throws SQLException {
         String dbRoleName = rs.getString("RoleName");
         return new UserRecord(
@@ -1088,8 +1122,7 @@ public class AuthService {
                 rs.getBoolean("IsActive"),
                 rs.getBoolean("IsEmailVerified"),
                 rs.getString("AvatarUrl"),
-                rs.getString("AvatarSource")
-        );
+                rs.getString("AvatarSource"));
     }
 
     private RefreshTokenRecord toRefreshTokenRecord(ResultSet rs) throws SQLException {
@@ -1097,8 +1130,7 @@ public class AuthService {
                 rs.getInt("RefreshTokenID"),
                 rs.getInt("UserID"),
                 toInstant(rs.getTimestamp("ExpiresAt")),
-                toInstant(rs.getTimestamp("RevokedAt"))
-        );
+                toInstant(rs.getTimestamp("RevokedAt")));
     }
 
     private EmailVerificationTokenRecord toEmailVerificationTokenRecord(ResultSet rs) throws SQLException {
@@ -1106,8 +1138,7 @@ public class AuthService {
                 rs.getInt("EmailVerificationTokenID"),
                 rs.getString("OtpHash"),
                 toInstant(rs.getTimestamp("ExpiresAt")),
-                toInstant(rs.getTimestamp("ResendAvailableAt"))
-        );
+                toInstant(rs.getTimestamp("ResendAvailableAt")));
     }
 
     private PasswordResetTokenRecord toPasswordResetTokenRecord(ResultSet rs) throws SQLException {
@@ -1115,8 +1146,7 @@ public class AuthService {
                 rs.getInt("PasswordResetTokenID"),
                 rs.getString("TokenHash"),
                 toInstant(rs.getTimestamp("ExpiresAt")),
-                toInstant(rs.getTimestamp("CreatedAt"))
-        );
+                toInstant(rs.getTimestamp("CreatedAt")));
     }
 
     private Instant toInstant(Timestamp timestamp) {
@@ -1131,8 +1161,7 @@ public class AuthService {
                 "phone", user.phone == null ? "" : user.phone,
                 "role", user.roleApiName,
                 "avatarUrl", user.avatarUrl == null ? "" : user.avatarUrl,
-                "avatarSource", user.avatarSource == null ? "" : user.avatarSource
-        );
+                "avatarSource", user.avatarSource == null ? "" : user.avatarSource);
     }
 
     private String normalizeRoleName(String roleName) {
@@ -1176,7 +1205,8 @@ public class AuthService {
             return null;
         }
 
-        // Normalize keyboard/IME variants (e.g., fullwidth digits) into ASCII where possible.
+        // Normalize keyboard/IME variants (e.g., fullwidth digits) into ASCII where
+        // possible.
         String nfkc = Normalizer.normalize(normalized, Normalizer.Form.NFKC);
         if (nfkc == null) {
             return null;
@@ -1216,7 +1246,8 @@ public class AuthService {
             return null;
         }
 
-        // E.164 maximum is 15 digits (excluding '+'). Keep minimum loose for local VN numbers.
+        // E.164 maximum is 15 digits (excluding '+'). Keep minimum loose for local VN
+        // numbers.
         if (digits.length() < 8 || digits.length() > 15) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phone number is invalid.");
         }
@@ -1303,19 +1334,18 @@ public class AuthService {
             boolean active,
             boolean emailVerified,
             String avatarUrl,
-            String avatarSource
-    ) {
+            String avatarSource) {
     }
 
     record RefreshTokenRecord(int refreshTokenId, int userId, Instant expiresAt, Instant revokedAt) {
     }
 
     record EmailVerificationTokenRecord(int emailVerificationTokenId, String otpHash, Instant expiresAt,
-                                                Instant resendAvailableAt) {
+            Instant resendAvailableAt) {
     }
 
     record PasswordResetTokenRecord(int passwordResetTokenId, String tokenHash, Instant expiresAt,
-                                            Instant createdAt) {
+            Instant createdAt) {
     }
 
     record RefreshIssue(int refreshTokenId, String rawToken, Instant expiresAt) {

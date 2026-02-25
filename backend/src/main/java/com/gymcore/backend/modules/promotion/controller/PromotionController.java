@@ -130,4 +130,24 @@ public class PromotionController {
                                 promotionService.execute("admin-delete-promotion-post", authorization,
                                                 Map.of("postId", postId)));
         }
+
+        @GetMapping("/admin/promotions/posts")
+        public ApiResponse<Map<String, Object>> getAdminPosts(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
+                return ApiResponse.ok("Admin promotion posts retrieved",
+                                promotionService.execute("admin-get-posts", authorization, null));
+        }
+
+        @GetMapping("/admin/promotions/revenue-report")
+        public ApiResponse<Map<String, Object>> getRevenueReport(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
+                return ApiResponse.ok("Revenue report retrieved",
+                                promotionService.execute("admin-get-revenue-report", authorization, null));
+        }
+
+        @GetMapping("/admin/promotions/revenue-report/pdf")
+        public org.springframework.http.ResponseEntity<byte[]> exportRevenuePdf(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
+                return promotionService.exportRevenuePdf(authorization);
+        }
 }
