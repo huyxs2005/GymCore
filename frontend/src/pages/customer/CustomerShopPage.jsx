@@ -22,7 +22,11 @@ function CustomerShopPage() {
     paymentMethod: 'PayOS',
     promoCode: '',
   })
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(() => {
+    const status = new URLSearchParams(window.location.search).get('status')
+    const normalizedStatus = status ? status.trim().toUpperCase() : ''
+    return normalizedStatus === 'PAID' || normalizedStatus === 'SUCCESS'
+  })
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -102,12 +106,22 @@ function CustomerShopPage() {
         queryClient.invalidateQueries({ queryKey: ['product', selectedProductId] })
       }
     },
+    onError: (error) => {
+      const message = error.response?.data?.message || error.message || 'Unable to submit review.'
+      alert(message)
+    },
   })
 
   const products = productsQuery.data?.data?.products ?? []
   const cart = cartQuery.data?.data ?? { items: [], subtotal: 0, currency: 'VND' }
   const orders = ordersQuery.data?.data?.orders ?? []
   const productDetail = productDetailQuery.data?.data ?? null
+  const paidProductIds = new Set(
+    orders
+      .filter((order) => String(order.status || '').toUpperCase() === 'PAID')
+      .flatMap((order) => (order.items || []).map((item) => item.productId)),
+  )
+  const canReviewSelectedProduct = selectedProductId != null && paidProductIds.has(selectedProductId)
 
   const handleAddToCart = (product) => {
     addToCartMutation.mutate({ productId: product.productId, quantity: 1 })
@@ -134,9 +148,16 @@ function CustomerShopPage() {
   // Effect to handle post-payment redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
-    const status = urlParams.get('status')
+    const status = (urlParams.get('status') || '').trim().toUpperCase()
     if (status === 'PAID' || status === 'SUCCESS') {
-      setShowSuccessMessage(true)
+      const paymentReturnPayload = Object.fromEntries(urlParams.entries())
+      orderApi
+        .confirmPaymentReturn(paymentReturnPayload)
+        .catch(() => null)
+        .finally(() => {
+          queryClient.invalidateQueries({ queryKey: ['orders'] })
+          queryClient.invalidateQueries({ queryKey: ['cart'] })
+        })
       const timer = setTimeout(() => {
         setShowSuccessMessage(false)
         window.history.replaceState({}, document.title, window.location.pathname)
@@ -146,11 +167,15 @@ function CustomerShopPage() {
       // Just clear the URL if cancelled
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [])
+  }, [queryClient])
 
   const handleSubmitReview = (event) => {
     event.preventDefault()
     if (!selectedProductId) return
+    if (!canReviewSelectedProduct) {
+      alert('You can review this product only after you have a PAID order for it.')
+      return
+    }
     createReviewMutation.mutate({
       productId: selectedProductId,
       rating: reviewRating,
@@ -261,7 +286,7 @@ function CustomerShopPage() {
               <button
                 onClick={confirmCheckout}
                 disabled={!shippingInfo.fullName || !shippingInfo.phone || !shippingInfo.email || !shippingInfo.address}
-                className="flex-1 rounded-full bg-gym-600 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:bg-slate-300"
+                className="flex-1 rounded-full border border-gym-700 bg-gym-600 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300 disabled:text-slate-100"
               >
                 Confirm Order
               </button>
@@ -310,10 +335,10 @@ function CustomerShopPage() {
                       event.stopPropagation()
                       handleAddToCart(product)
                     }}
-                    className="inline-flex items-center gap-1 rounded-full bg-gym-600 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-gym-700"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-gym-700 bg-gym-600 px-4 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2"
                   >
                     <ShoppingCart size={14} />
-                    Add to cart
+                    Add to Cart
                   </button>
                 </div>
               </button>
@@ -362,10 +387,10 @@ function CustomerShopPage() {
                   <button
                     type="button"
                     onClick={() => handleAddToCart(productDetail.product)}
-                    className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gym-700"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2"
                   >
                     <ShoppingCart size={16} />
-                    Add to cart
+                    Add to Cart
                   </button>
                 </div>
               </article>
@@ -378,6 +403,7 @@ function CustomerShopPage() {
                     <select
                       className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-sm"
                       value={reviewRating}
+                      disabled={!canReviewSelectedProduct}
                       onChange={(event) => setReviewRating(Number(event.target.value))}
                     >
                       {[5, 4, 3, 2, 1].map((value) => (
@@ -389,17 +415,22 @@ function CustomerShopPage() {
                   </div>
                   <textarea
                     className="min-h-[80px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
-                    placeholder="Share your experience with this product (only customers who purchased can submit)."
+                    placeholder={canReviewSelectedProduct
+                      ? 'Share your experience with this product.'
+                      : 'Review is available only after payment is successful for this product.'}
+                    disabled={!canReviewSelectedProduct}
                     value={reviewText}
                     onChange={(event) => setReviewText(event.target.value)}
                   />
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-500">
-                      Reviews are only accepted if you have at least one paid order for this product.
+                    <p className={`text-xs ${canReviewSelectedProduct ? 'text-emerald-600' : 'text-slate-500'}`}>
+                      {canReviewSelectedProduct
+                        ? 'Payment verified. You can submit feedback for this product.'
+                        : 'Feedback is locked until this product is in a PAID order.'}
                     </p>
                     <button
                       type="submit"
-                      disabled={createReviewMutation.isPending || reviewText.trim().length === 0}
+                      disabled={createReviewMutation.isPending || reviewText.trim().length === 0 || !canReviewSelectedProduct}
                       className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
                       <Star size={14} />
@@ -521,7 +552,7 @@ function CustomerShopPage() {
             type="button"
             disabled={checkoutMutation.isPending || !cart.items || cart.items.length === 0}
             onClick={handleCheckout}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gym-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gym-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400 disabled:text-slate-100"
           >
             <CreditCard size={16} />
             {checkoutMutation.isPending ? 'Redirecting to PayOS...' : 'Checkout with PayOS'}

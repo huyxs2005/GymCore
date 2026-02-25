@@ -51,6 +51,8 @@ public class ProductSalesService {
                 customerDeleteCartItem(authorizationHeader, safePayload);
             case "customer-checkout" ->
                 customerCheckout(authorizationHeader, safePayload);
+            case "customer-confirm-payment-return" ->
+                customerConfirmPaymentReturn(authorizationHeader, safePayload);
             case "customer-get-my-orders" ->
                 customerGetMyOrders(authorizationHeader);
 
@@ -155,6 +157,11 @@ public class ProductSalesService {
         Map<String, Object> body = (Map<String, Object>) payload.getOrDefault("body", Map.of());
         int rating = requireRating(body.get("rating"));
         String comment = asNullableString(body.get("comment"));
+
+        if (!customerHasPaidOrderForProduct(user.userId(), productId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Review blocked: customer must have a PAID order for this product.");
+        }
 
         String sql = """
                 INSERT INTO dbo.ProductReviews (ProductID, CustomerID, Rating, Comment)
@@ -466,6 +473,56 @@ public class ProductSalesService {
         return response;
     }
 
+    private Map<String, Object> customerConfirmPaymentReturn(String authorizationHeader, Map<String, Object> payload) {
+        UserInfo user = currentUserService.requireCustomer(authorizationHeader);
+        Map<String, Object> safePayload = payload == null ? Map.of() : payload;
+
+        String status = upperText(firstNonNull(
+                safePayload.get("status"),
+                safePayload.get("payosStatus"),
+                safePayload.get("paymentStatus")));
+        String code = upperText(safePayload.get("code"));
+        String cancel = upperText(safePayload.get("cancel"));
+        Object successRaw = safePayload.get("success");
+
+        if (!isSuccessReturnStatus(status, code, cancel, successRaw)) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("handled", false);
+            response.put("reason", "Ignored non-success return status.");
+            return response;
+        }
+
+        Integer paymentId = resolvePaymentIdFromReturnPayload(safePayload);
+        if (paymentId == null || paymentId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to resolve payment ID from PayOS return.");
+        }
+
+        Integer ownershipCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Payments p
+                JOIN dbo.Orders o ON o.OrderID = p.OrderID
+                WHERE p.PaymentID = ?
+                  AND o.CustomerID = ?
+                """, Integer.class, paymentId, user.userId());
+
+        if (ownershipCount == null || ownershipCount == 0) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Payment does not belong to current customer.");
+        }
+
+        try {
+            jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to confirm payment from return URL.", exception);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("handled", true);
+        response.put("paymentId", paymentId);
+        response.put("status", "SUCCESS");
+        return response;
+    }
+
     // ADMIN
 
     private Map<String, Object> adminGetProducts(String authorizationHeader) {
@@ -650,6 +707,96 @@ public class ProductSalesService {
         if (count == null || count == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product is not available.");
         }
+    }
+
+    private boolean customerHasPaidOrderForProduct(int customerId, int productId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Orders o
+                JOIN dbo.OrderItems oi ON oi.OrderID = o.OrderID
+                WHERE o.CustomerID = ?
+                  AND oi.ProductID = ?
+                  AND o.Status = 'PAID'
+                """, Integer.class, customerId, productId);
+        return count != null && count > 0;
+    }
+
+    private Integer resolvePaymentIdFromReturnPayload(Map<String, Object> payload) {
+        Object rawPaymentId = firstNonNull(payload.get("paymentId"), payload.get("orderCode"));
+        Integer parsed = tryParsePositiveInt(rawPaymentId);
+        if (parsed != null) {
+            return parsed;
+        }
+
+        String paymentLinkId = asNullableString(firstNonNull(
+                payload.get("paymentLinkId"),
+                payload.get("id"),
+                payload.get("checkoutId")));
+        if (paymentLinkId == null) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT TOP 1 PaymentID
+                    FROM dbo.Payments
+                    WHERE PayOS_PaymentLinkId = ?
+                    ORDER BY PaymentID DESC
+                    """, Integer.class, paymentLinkId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
+            return null;
+        }
+    }
+
+    private Integer tryParsePositiveInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int parsed;
+            if (value instanceof Number number) {
+                parsed = number.intValue();
+            } else {
+                parsed = Integer.parseInt(String.valueOf(value).trim());
+            }
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private Object firstNonNull(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private boolean isSuccessReturnStatus(String status, String code, String cancel, Object successRaw) {
+        if ("TRUE".equals(cancel) || "1".equals(cancel)) {
+            return false;
+        }
+        if ("PAID".equals(status) || "SUCCESS".equals(status) || "COMPLETED".equals(status)) {
+            return true;
+        }
+        if ("00".equals(code)) {
+            return true;
+        }
+        if (successRaw instanceof Boolean bool) {
+            return bool;
+        }
+        return "TRUE".equals(upperText(successRaw));
+    }
+
+    private String upperText(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return String.valueOf(value).trim().toUpperCase();
     }
 
     private int insertOrder(int customerId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,

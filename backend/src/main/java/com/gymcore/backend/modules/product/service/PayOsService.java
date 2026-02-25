@@ -7,6 +7,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -37,10 +38,10 @@ public class PayOsService {
     @Value("${app.payos.base-url:https://api.payos.money}")
     private String baseUrl;
 
-    @Value("${app.payos.return-url:http://localhost:5173/payments/success}")
+    @Value("${app.payos.return-url:http://localhost:5173/customer/shop}")
     private String returnUrl;
 
-    @Value("${app.payos.cancel-url:http://localhost:5173/payments/cancel}")
+    @Value("${app.payos.cancel-url:http://localhost:5173/customer/shop?status=CANCELLED}")
     private String cancelUrl;
 
     public PayOsService(RestTemplate restTemplate) {
@@ -174,17 +175,32 @@ public class PayOsService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "PayOS checksum key is not configured.");
         }
+        Map<String, Object> safeBody = body == null ? Map.of() : body;
         String signature = headers.getFirst("X-PayOS-Signature") != null ? headers.getFirst("X-PayOS-Signature")
                 : headers.getFirst("x-payos-signature") != null ? headers.getFirst("x-payos-signature")
-                        : headers.getFirst("X-Signature");
+                        : headers.getFirst("X-Signature") != null ? headers.getFirst("X-Signature")
+                                : valueAsString(safeBody.get("signature"));
         if (signature == null || signature.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing PayOS signature header.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing PayOS signature (header/body).");
         }
 
-        String canonical = buildCanonicalBody(body == null ? Map.of() : body);
-        String expected = hmacSha256Hex(canonical, checksumKey);
+        Map<String, Object> payloadData = castToMap(safeBody.get("data"));
+        List<String> canonicalCandidates = new ArrayList<>();
+        canonicalCandidates.add(buildCanonicalBody(withoutSignatureFields(safeBody)));
+        if (!payloadData.isEmpty()) {
+            canonicalCandidates.add(buildCanonicalBody(withoutSignatureFields(payloadData)));
+        }
 
-        if (!constantTimeEquals(signature.trim(), expected)) {
+        boolean valid = false;
+        for (String candidate : canonicalCandidates) {
+            String expected = hmacSha256Hex(candidate, checksumKey);
+            if (constantTimeEquals(signature.trim(), expected)) {
+                valid = true;
+                break;
+            }
+        }
+
+        if (!valid) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid PayOS webhook signature.");
         }
     }
@@ -198,6 +214,25 @@ public class PayOsService {
             parts.add(key + "=" + (value == null ? "" : String.valueOf(value)));
         }
         return String.join("&", parts);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castToMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private Map<String, Object> withoutSignatureFields(Map<String, Object> input) {
+        Map<String, Object> cleaned = new HashMap<>(input);
+        cleaned.remove("signature");
+        cleaned.remove("Signature");
+        cleaned.remove("x-payos-signature");
+        cleaned.remove("X-PayOS-Signature");
+        cleaned.remove("x-signature");
+        cleaned.remove("X-Signature");
+        return cleaned;
     }
 
     private String hmacSha256Hex(String data, String secret) {
@@ -224,8 +259,8 @@ public class PayOsService {
         if (a == null || b == null) {
             return false;
         }
-        byte[] left = a.getBytes(StandardCharsets.UTF_8);
-        byte[] right = b.getBytes(StandardCharsets.UTF_8);
+        byte[] left = a.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+        byte[] right = b.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
         if (left.length != right.length) {
             return false;
         }
