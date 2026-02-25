@@ -11,6 +11,7 @@ import { promotionApi } from '../../features/promotion/api/promotionApi'
 function CustomerShopPage() {
   const queryClient = useQueryClient()
   const [selectedProductId, setSelectedProductId] = useState(null)
+  const [productSearch, setProductSearch] = useState('')
   const [reviewText, setReviewText] = useState('')
   const [reviewRating, setReviewRating] = useState(5)
   const [showShippingModal, setShowShippingModal] = useState(false)
@@ -113,6 +114,10 @@ function CustomerShopPage() {
   })
 
   const products = productsQuery.data?.data?.products ?? []
+  const normalizedSearch = productSearch.trim().toLowerCase()
+  const filteredProducts = normalizedSearch
+    ? products.filter((product) => String(product.name || '').toLowerCase().includes(normalizedSearch))
+    : products
   const cart = cartQuery.data?.data ?? { items: [], subtotal: 0, currency: 'VND' }
   const orders = ordersQuery.data?.data?.orders ?? []
   const productDetail = productDetailQuery.data?.data ?? null
@@ -300,8 +305,17 @@ function CustomerShopPage() {
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <header className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Products</h2>
-            <span className="text-xs text-slate-500">{products.length} items</span>
+            <span className="text-xs text-slate-500">{filteredProducts.length} / {products.length} items</span>
           </header>
+          <div>
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              placeholder="Search product by name..."
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-gym-500 focus:outline-none focus:ring-1 focus:ring-gym-500"
+            />
+          </div>
           <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
             {productsQuery.isLoading && <p className="text-sm text-slate-500">Loading products...</p>}
             {productsQuery.isError && (
@@ -310,7 +324,10 @@ function CustomerShopPage() {
             {!productsQuery.isLoading && products.length === 0 && (
               <p className="text-sm text-slate-500">No products available yet.</p>
             )}
-            {products.map((product) => (
+            {!productsQuery.isLoading && products.length > 0 && filteredProducts.length === 0 && (
+              <p className="text-sm text-slate-500">No products match your search.</p>
+            )}
+            {filteredProducts.map((product) => (
               <button
                 key={product.productId}
                 type="button"
