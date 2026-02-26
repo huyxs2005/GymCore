@@ -6,6 +6,36 @@ import { adminNav } from '../../config/navigation'
 import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, CircleOff, Calendar, FileText, Layout, Sparkles } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
+function toOptionalNumber(value) {
+  if (value == null) return null
+  const text = String(value).trim()
+  if (!text) return null
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function toNonNegativeInt(value) {
+  const parsed = Number.parseInt(String(value ?? '0'), 10)
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 0
+  return Math.max(0, parsed)
+}
+
+function formatCouponBenefit(coupon) {
+  const bonusDays = Number(coupon?.BonusDurationDays || 0)
+  const discountPercent = toOptionalNumber(coupon?.DiscountPercent)
+  const discountAmount = toOptionalNumber(coupon?.DiscountAmount)
+  const parts = []
+  if (discountPercent != null && discountPercent > 0) {
+    parts.push(`${discountPercent}% off`)
+  } else if (discountAmount != null && discountAmount > 0) {
+    parts.push(`${discountAmount.toLocaleString()} VND off`)
+  }
+  if (bonusDays > 0) {
+    parts.push(`+${bonusDays} membership day${bonusDays > 1 ? 's' : ''}`)
+  }
+  return parts.length > 0 ? parts.join(' + ') : 'No benefit configured'
+}
+
 const AdminPromotionsPage = () => {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('coupons')
@@ -179,7 +209,7 @@ const AdminPromotionsPage = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className="font-bold text-slate-900">
-                          {coupon.DiscountPercent ? `${coupon.DiscountPercent}%` : `${Number(coupon.DiscountAmount).toLocaleString()} VND`}
+                          {formatCouponBenefit(coupon)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-xs text-slate-500">
@@ -315,6 +345,9 @@ const AdminPromotionsPage = () => {
                 const raw = Object.fromEntries(formData);
                 const payload = {
                   ...raw,
+                  discountPercent: toOptionalNumber(raw.discountPercent),
+                  discountAmount: toOptionalNumber(raw.discountAmount),
+                  bonusDurationDays: toNonNegativeInt(raw.bonusDurationDays),
                   isActive: raw.isActive === 'on' ? 1 : 0
                 }
                 if (editingItem) {
@@ -340,6 +373,17 @@ const AdminPromotionsPage = () => {
                     <label className="text-xs font-bold text-slate-500 uppercase">Discount (VND)</label>
                     <input name="discountAmount" type="number" defaultValue={editingItem?.DiscountAmount} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
                   </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Bonus Membership Days</label>
+                  <input
+                    name="bonusDurationDays"
+                    type="number"
+                    min="0"
+                    defaultValue={editingItem?.BonusDurationDays ?? 0}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all"
+                    placeholder="0"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -403,7 +447,7 @@ const AdminPromotionsPage = () => {
                   <select name="promotionId" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all bg-white" defaultValue={editingItem?.PromotionID}>
                     <option value="">Select a coupon</option>
                     {coupons.map(c => (
-                      <option key={c.PromotionID} value={c.PromotionID}>{c.PromoCode} ({c.DiscountPercent ? `${c.DiscountPercent}%` : `${c.DiscountAmount} VND`})</option>
+                      <option key={c.PromotionID} value={c.PromotionID}>{c.PromoCode} ({formatCouponBenefit(c)})</option>
                     ))}
                   </select>
                 </div>

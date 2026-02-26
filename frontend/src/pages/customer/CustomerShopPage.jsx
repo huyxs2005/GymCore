@@ -19,6 +19,8 @@ function CustomerShopPage() {
     paymentMethod: 'PAYOS',
     promoCode: '',
   })
+  const [couponPreview, setCouponPreview] = useState(null)
+  const [couponPreviewError, setCouponPreviewError] = useState('')
   const [showSuccessMessage, setShowSuccessMessage] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('status')
     const normalizedStatus = status ? status.trim().toUpperCase() : ''
@@ -53,6 +55,8 @@ function CustomerShopPage() {
 
   const myClaims = claimsData?.data?.claims || []
   const availableCoupons = myClaims.filter(c => !c.UsedAt)
+  const productCoupons = availableCoupons.filter((claim) => Number(claim.BonusDurationDays || 0) <= 0)
+  const membershipOnlyCoupons = availableCoupons.filter((claim) => Number(claim.BonusDurationDays || 0) > 0)
 
   const addToCartMutation = useMutation({
     mutationFn: cartApi.addItem,
@@ -109,6 +113,18 @@ function CustomerShopPage() {
     },
   })
 
+  const previewCouponMutation = useMutation({
+    mutationFn: (payload) => promotionApi.applyCoupon(payload),
+    onSuccess: (response) => {
+      setCouponPreviewError('')
+      setCouponPreview(response?.data ?? null)
+    },
+    onError: (error) => {
+      setCouponPreview(null)
+      setCouponPreviewError(error.response?.data?.message || error.message || 'Unable to preview coupon.')
+    },
+  })
+
   const products = productsQuery.data?.data?.products ?? []
   const normalizedSearch = productSearch.trim().toLowerCase()
   const filteredProducts = normalizedSearch
@@ -144,6 +160,22 @@ function CustomerShopPage() {
   const confirmCheckout = () => {
     checkoutMutation.mutate(checkoutOptions)
     setShowCheckoutModal(false)
+  }
+
+  const formatClaimBenefit = (claim) => {
+    const discountPercent = Number(claim.DiscountPercent || 0)
+    const discountAmount = Number(claim.DiscountAmount || 0)
+    const bonusDays = Number(claim.BonusDurationDays || 0)
+    const parts = []
+    if (discountPercent > 0) {
+      parts.push(`${discountPercent}% off`)
+    } else if (discountAmount > 0) {
+      parts.push(`${discountAmount.toLocaleString()} VND off`)
+    }
+    if (bonusDays > 0) {
+      parts.push(`+${bonusDays} membership day${bonusDays > 1 ? 's' : ''}`)
+    }
+    return parts.length > 0 ? parts.join(' + ') : 'No benefit'
   }
 
   // Effect to handle post-payment redirect
@@ -225,17 +257,45 @@ function CustomerShopPage() {
                 <select
                   className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
                   value={checkoutOptions.promoCode}
-                  onChange={(e) => setCheckoutOptions({ ...checkoutOptions, promoCode: e.target.value })}
+                  onChange={(e) => {
+                    const promoCode = e.target.value
+                    setCheckoutOptions({ ...checkoutOptions, promoCode })
+                    setCouponPreview(null)
+                    setCouponPreviewError('')
+                    if (promoCode) {
+                      previewCouponMutation.mutate({
+                        promoCode,
+                        target: 'ORDER',
+                        subtotal: Number(cart.subtotal || 0),
+                      })
+                    }
+                  }}
                 >
                   <option value="">No coupon applied</option>
-                  {availableCoupons.map((claim) => (
+                  {productCoupons.map((claim) => (
                     <option key={claim.ClaimID} value={claim.PromoCode}>
-                      {claim.PromoCode} - {claim.DiscountPercent ? `${claim.DiscountPercent}% off` : `${claim.DiscountAmount.toLocaleString()} VND off`}
+                      {claim.PromoCode} - {formatClaimBenefit(claim)}
                     </option>
                   ))}
                 </select>
-                {availableCoupons.length === 0 && (
+                {productCoupons.length === 0 && (
                   <p className="mt-1 text-[10px] text-slate-400">No available coupons in your wallet. Claim some in the Promotions page!</p>
+                )}
+                {membershipOnlyCoupons.length > 0 && (
+                  <p className="mt-1 text-[10px] text-amber-600">
+                    {membershipOnlyCoupons.length} coupon(s) are membership-only and cannot be used for product checkout.
+                  </p>
+                )}
+                {couponPreview && checkoutOptions.promoCode && (
+                  <p className="mt-2 rounded-lg border border-gym-100 bg-gym-50 px-2 py-1 text-[11px] text-gym-800">
+                    Preview: discount {Number(couponPreview.estimatedDiscount || 0).toLocaleString()} VND,
+                    total {Number(couponPreview.estimatedFinalAmount || cart.subtotal || 0).toLocaleString()} VND.
+                  </p>
+                )}
+                {couponPreviewError && (
+                  <p className="mt-2 rounded-lg border border-red-100 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                    {couponPreviewError}
+                  </p>
                 )}
               </div>
             </div>

@@ -62,94 +62,6 @@ public class AdminService {
                 WHERE pay.Status = 'SUCCESS'
                 """);
 
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
         if (from != null) {
             sql.append(" AND CAST(pay.PaidAt AS DATE) >= ? ");
         }
@@ -160,13 +72,13 @@ public class AdminService {
 
         Object[] params;
         if (from != null && to != null) {
-            params = new Object[]{from, to};
+            params = new Object[] { from, to };
         } else if (from != null) {
-            params = new Object[]{from};
+            params = new Object[] { from };
         } else if (to != null) {
-            params = new Object[]{to};
+            params = new Object[] { to };
         } else {
-            params = new Object[]{};
+            params = new Object[] {};
         }
 
         List<Map<String, Object>> orders = jdbcTemplate.query(

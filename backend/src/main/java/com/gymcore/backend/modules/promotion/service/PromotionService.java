@@ -37,6 +37,7 @@ public class PromotionService {
             case "customer-get-promotion-posts" -> customerGetPosts(auth);
             case "customer-claim-coupon" -> customerClaimCoupon(auth, payload);
             case "customer-get-my-claims" -> customerGetMyClaims(auth);
+            case "customer-apply-coupon" -> customerApplyCoupon(auth, payload);
             case "customer-get-notifications" -> customerGetNotifications(auth);
             case "customer-mark-notification-read" -> customerMarkRead(auth, payload);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown action: " + action);
@@ -67,15 +68,21 @@ public class PromotionService {
 
     private Map<String, Object> adminCreateCoupon(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
+        java.math.BigDecimal discountPercent = requireDecimal(payload.get("discountPercent"));
+        java.math.BigDecimal discountAmount = requireDecimal(payload.get("discountAmount"));
+        int bonusDurationDays = requireNonNegativeInt(payload.get("bonusDurationDays"));
+        validateCouponBenefit(discountPercent, discountAmount, bonusDurationDays);
+
         jdbcTemplate.update(
                 """
-                        INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, ValidFrom, ValidTo, IsActive)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, BonusDurationDays, ValidFrom, ValidTo, IsActive)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 payload.get("promoCode"),
                 payload.get("description"),
-                requireDecimal(payload.get("discountPercent")),
-                requireDecimal(payload.get("discountAmount")),
+                discountPercent,
+                discountAmount,
+                bonusDurationDays,
                 payload.get("validFrom"),
                 payload.get("validTo"),
                 requireBit(payload.getOrDefault("isActive", 1)));
@@ -87,17 +94,22 @@ public class PromotionService {
         int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
+        java.math.BigDecimal discountPercent = requireDecimal(body.get("discountPercent"));
+        java.math.BigDecimal discountAmount = requireDecimal(body.get("discountAmount"));
+        int bonusDurationDays = requireNonNegativeInt(body.get("bonusDurationDays"));
+        validateCouponBenefit(discountPercent, discountAmount, bonusDurationDays);
 
         jdbcTemplate.update(
                 """
                         UPDATE dbo.Promotions
-                        SET PromoCode = ?, Description = ?, DiscountPercent = ?, DiscountAmount = ?, ValidFrom = ?, ValidTo = ?, IsActive = ?
+                        SET PromoCode = ?, Description = ?, DiscountPercent = ?, DiscountAmount = ?, BonusDurationDays = ?, ValidFrom = ?, ValidTo = ?, IsActive = ?
                         WHERE PromotionID = ?
                         """,
                 body.get("promoCode"),
                 body.get("description"),
-                requireDecimal(body.get("discountPercent")),
-                requireDecimal(body.get("discountAmount")),
+                discountPercent,
+                discountAmount,
+                bonusDurationDays,
                 body.get("validFrom"),
                 body.get("validTo"),
                 requireBit(body.getOrDefault("isActive", 1)),
@@ -177,7 +189,7 @@ public class PromotionService {
 
         if (user != null) {
             sql = """
-                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount,
+                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.BonusDurationDays,
                            CASE WHEN c.ClaimID IS NOT NULL THEN 1 ELSE 0 END as IsClaimed
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
@@ -190,7 +202,7 @@ public class PromotionService {
             posts = jdbcTemplate.queryForList(sql, user.userId());
         } else {
             sql = """
-                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount,
+                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.BonusDurationDays,
                            0 as IsClaimed
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
@@ -244,7 +256,7 @@ public class PromotionService {
     private Map<String, Object> customerGetMyClaims(String auth) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
         String sql = """
-                SELECT c.*, p.PromoCode, p.Description, p.DiscountPercent, p.DiscountAmount
+                SELECT c.*, p.PromoCode, p.Description, p.DiscountPercent, p.DiscountAmount, p.BonusDurationDays
                 FROM dbo.UserPromotionClaims c
                 JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                 WHERE c.UserID = ? AND c.UsedAt IS NULL
@@ -252,6 +264,65 @@ public class PromotionService {
                 AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
                 """;
         return Map.of("claims", jdbcTemplate.queryForList(sql, user.userId()));
+    }
+
+    private Map<String, Object> customerApplyCoupon(String auth, Map<String, Object> payload) {
+        CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
+        String promoCode = requireText(payload.get("promoCode"), "Promo code is required.");
+        String target = normalizeApplyTarget(payload.get("target"));
+        java.math.BigDecimal subtotal = optionalNonNegativeDecimal(payload.get("subtotal"), "Subtotal must be >= 0.");
+
+        List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
+                SELECT TOP (1)
+                    c.ClaimID,
+                    p.PromoCode,
+                    p.DiscountPercent,
+                    p.DiscountAmount,
+                    p.BonusDurationDays,
+                    p.ValidFrom,
+                    p.ValidTo
+                FROM dbo.UserPromotionClaims c
+                JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                WHERE c.UserID = ?
+                  AND p.PromoCode = ?
+                  AND c.UsedAt IS NULL
+                  AND p.IsActive = 1
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
+                ORDER BY c.ClaimID DESC
+                """, user.userId(), promoCode);
+        if (claims.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired promo code.");
+        }
+
+        Map<String, Object> claim = claims.get(0);
+        java.math.BigDecimal discountPercent = requireDecimal(claim.get("DiscountPercent"));
+        java.math.BigDecimal discountAmount = requireDecimal(claim.get("DiscountAmount"));
+        int bonusDurationDays = requireNonNegativeInt(claim.get("BonusDurationDays"));
+        if ("ORDER".equals(target) && bonusDurationDays > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This coupon applies to membership purchases only.");
+        }
+
+        java.math.BigDecimal estimatedDiscount = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal estimatedFinalAmount = null;
+        if (subtotal != null) {
+            estimatedDiscount = calculateDiscount(subtotal, discountPercent, discountAmount);
+            estimatedFinalAmount = subtotal.subtract(estimatedDiscount);
+        }
+
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("valid", true);
+        response.put("claimId", claim.get("ClaimID"));
+        response.put("promoCode", claim.get("PromoCode"));
+        response.put("target", target);
+        response.put("discountPercent", discountPercent);
+        response.put("discountAmount", discountAmount);
+        response.put("bonusDurationDays", bonusDurationDays);
+        response.put("estimatedDiscount", estimatedDiscount);
+        response.put("estimatedFinalAmount", estimatedFinalAmount);
+        response.put("currency", "VND");
+        response.put("membershipOnly", bonusDurationDays > 0);
+        return response;
     }
 
     private Map<String, Object> customerGetNotifications(String auth) {
@@ -297,8 +368,94 @@ public class PromotionService {
             }
             return new java.math.BigDecimal(String.valueOf(value));
         } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid decimal value.");
+        }
+    }
+
+    private java.math.BigDecimal optionalNonNegativeDecimal(Object value, String message) {
+        java.math.BigDecimal decimal = requireDecimal(value);
+        if (decimal == null) {
             return null;
         }
+        if (decimal.compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return decimal;
+    }
+
+    private int requireNonNegativeInt(Object value) {
+        if (value == null || String.valueOf(value).isBlank()) {
+            return 0;
+        }
+        try {
+            int parsed;
+            if (value instanceof Number number) {
+                parsed = number.intValue();
+            } else {
+                parsed = Integer.parseInt(String.valueOf(value).trim());
+            }
+            if (parsed < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bonus duration cannot be negative.");
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bonus duration must be an integer.");
+        }
+    }
+
+    private void validateCouponBenefit(java.math.BigDecimal discountPercent, java.math.BigDecimal discountAmount,
+            int bonusDurationDays) {
+        if (discountPercent != null && discountAmount != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only one discount type is allowed (percent or amount).");
+        }
+        if (discountPercent == null && discountAmount == null && bonusDurationDays == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Coupon must include discount or bonus duration.");
+        }
+    }
+
+    private String normalizeApplyTarget(Object value) {
+        if (value == null) {
+            return "ORDER";
+        }
+        String normalized = String.valueOf(value).trim().toUpperCase();
+        if (normalized.isBlank()) {
+            return "ORDER";
+        }
+        if (!"ORDER".equals(normalized) && !"MEMBERSHIP".equals(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target must be ORDER or MEMBERSHIP.");
+        }
+        return normalized;
+    }
+
+    private java.math.BigDecimal calculateDiscount(java.math.BigDecimal subtotal, java.math.BigDecimal discountPercent,
+            java.math.BigDecimal discountAmount) {
+        if (subtotal.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            return java.math.BigDecimal.ZERO;
+        }
+        java.math.BigDecimal discount = java.math.BigDecimal.ZERO;
+        if (discountPercent != null && discountPercent.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            discount = subtotal.multiply(discountPercent)
+                    .divide(java.math.BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+        } else if (discountAmount != null && discountAmount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            discount = discountAmount;
+        }
+        if (discount.compareTo(subtotal) > 0) {
+            return subtotal;
+        }
+        return discount;
+    }
+
+    private String requireText(Object value, String message) {
+        if (value == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return text;
     }
 
     private int requireBit(Object value) {

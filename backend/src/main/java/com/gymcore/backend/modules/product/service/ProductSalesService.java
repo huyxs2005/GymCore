@@ -335,7 +335,7 @@ public class ProductSalesService {
         String promoCode = asNullableString(payload.get("promoCode"));
         if (promoCode != null && !promoCode.isBlank()) {
             List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
-                    SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount
+                    SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount, p.BonusDurationDays
                     FROM dbo.UserPromotionClaims c
                     JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                     WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
@@ -349,8 +349,13 @@ public class ProductSalesService {
 
             Map<String, Object> claim = claims.get(0);
             claimId = (Integer) claim.get("ClaimID");
-            BigDecimal pct = requireDecimal(claim.get("DiscountPercent"), "Invalid percent");
-            BigDecimal amt = requireDecimal(claim.get("DiscountAmount"), "Invalid amount");
+            BigDecimal pct = optionalDecimal(claim.get("DiscountPercent"), "Invalid percent");
+            BigDecimal amt = optionalDecimal(claim.get("DiscountAmount"), "Invalid amount");
+            Integer bonusDurationDays = tryParsePositiveInt(claim.get("BonusDurationDays"));
+            if (bonusDurationDays != null && bonusDurationDays > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This coupon applies to membership purchases only.");
+            }
 
             if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
                 discount = subtotal.multiply(pct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
@@ -365,7 +370,7 @@ public class ProductSalesService {
 
         BigDecimal total = subtotal.subtract(discount);
 
-        int orderId = insertOrder(customerId, subtotal, discount, total, paymentMethod);
+        int orderId = insertOrder(customerId, claimId, subtotal, discount, total, paymentMethod);
 
         // Upsert order items to match current cart
         jdbcTemplate.update("DELETE FROM dbo.OrderItems WHERE OrderID = ?", orderId);
@@ -377,32 +382,32 @@ public class ProductSalesService {
         }
 
         // Create payment row and call PayOS
-        int paymentId = insertPaymentForOrder(orderId, subtotal, discount, total);
-
-        // Mark coupon as used if applied
-        if (claimId != null) {
-            jdbcTemplate.update("""
-                    UPDATE dbo.UserPromotionClaims
-                    SET UsedAt = SYSDATETIME(),
-                        UsedPaymentID = ?,
-                        UsedOnOrderID = ?
-                    WHERE ClaimID = ?
-                    """, paymentId, orderId, claimId);
-        }
+        int paymentId = insertPaymentForOrder(orderId, claimId, subtotal, discount, total);
 
         List<PayOsService.PayOsItem> payOsItems = lines.stream()
                 .map(l -> new PayOsService.PayOsItem(l.name(), l.quantity(), l.price().intValue(), "serving", 0))
                 .toList();
 
-        PayOsService.PayOsLink link = payOsService.createPaymentLink(
-                paymentId, total, "Order #" + orderId,
-                contact.buyerName(), contact.buyerPhone(), contact.buyerEmail(), "PICKUP_AT_STORE", payOsItems);
+        PayOsService.PayOsLink link;
+        try {
+            link = payOsService.createPaymentLink(
+                    paymentId, total, "Order #" + orderId,
+                    contact.buyerName(), contact.buyerPhone(), contact.buyerEmail(), "PICKUP_AT_STORE", payOsItems);
+        } catch (RuntimeException exception) {
+            markCheckoutCreationFailed(orderId, paymentId);
+            throw exception;
+        }
 
-        jdbcTemplate.update("""
+        int updatedRows = jdbcTemplate.update("""
                 UPDATE dbo.Payments
                 SET PayOS_PaymentLinkId = ?, PayOS_CheckoutUrl = ?, PayOS_Status = ?
-                WHERE PaymentID = ?
+                WHERE PaymentID = ? AND Status = 'PENDING'
                 """, link.paymentLinkId(), link.checkoutUrl(), link.status(), paymentId);
+        if (updatedRows == 0) {
+            markCheckoutCreationFailed(orderId, paymentId);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Payment state changed unexpectedly during checkout.");
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("orderId", orderId);
@@ -520,6 +525,21 @@ public class ProductSalesService {
         response.put("paymentId", paymentId);
         response.put("status", "SUCCESS");
         return response;
+    }
+
+    private void markCheckoutCreationFailed(int orderId, int paymentId) {
+        jdbcTemplate.update("""
+                UPDATE dbo.Payments
+                SET Status = 'FAILED',
+                    PayOS_Status = COALESCE(PayOS_Status, 'FAILED')
+                WHERE PaymentID = ? AND Status = 'PENDING'
+                """, paymentId);
+        jdbcTemplate.update("""
+                UPDATE dbo.Orders
+                SET Status = 'CANCELLED',
+                    UpdatedAt = SYSDATETIME()
+                WHERE OrderID = ? AND Status = 'PENDING'
+                """, orderId);
     }
 
     // ADMIN
@@ -801,19 +821,24 @@ public class ProductSalesService {
         return String.valueOf(value).trim().toUpperCase();
     }
 
-    private int insertOrder(int customerId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,
+    private int insertOrder(int customerId, Integer claimId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,
             String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
-                    INSERT INTO dbo.Orders (CustomerID, Subtotal, DiscountApplied, TotalAmount, Status, PaymentMethod)
-                    VALUES (?, ?, ?, ?, 'PENDING', ?)
+                    INSERT INTO dbo.Orders (CustomerID, ClaimID, Subtotal, DiscountApplied, TotalAmount, Status, PaymentMethod)
+                    VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
                     """, new String[] { "OrderID" });
             ps.setInt(1, customerId);
-            ps.setBigDecimal(2, subtotal);
-            ps.setBigDecimal(3, discount);
-            ps.setBigDecimal(4, total);
-            ps.setString(5, paymentMethod);
+            if (claimId == null) {
+                ps.setNull(2, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(2, claimId);
+            }
+            ps.setBigDecimal(3, subtotal);
+            ps.setBigDecimal(4, discount);
+            ps.setBigDecimal(5, total);
+            ps.setString(6, paymentMethod);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -823,17 +848,23 @@ public class ProductSalesService {
         return key.intValue();
     }
 
-    private int insertPaymentForOrder(int orderId, BigDecimal originalAmount, BigDecimal discount, BigDecimal amount) {
+    private int insertPaymentForOrder(int orderId, Integer claimId, BigDecimal originalAmount, BigDecimal discount,
+            BigDecimal amount) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
-                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID)
-                    VALUES (?, ?, ?, 'PENDING', ?)
+                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID, ClaimID)
+                    VALUES (?, ?, ?, 'PENDING', ?, ?)
                     """, new String[] { "PaymentID" });
             ps.setBigDecimal(1, originalAmount);
             ps.setBigDecimal(2, discount);
             ps.setBigDecimal(3, amount);
             ps.setInt(4, orderId);
+            if (claimId == null) {
+                ps.setNull(5, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(5, claimId);
+            }
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -871,6 +902,13 @@ public class ProductSalesService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         return decimal;
+    }
+
+    private BigDecimal optionalDecimal(Object value, String message) {
+        if (value == null) {
+            return null;
+        }
+        return requireDecimal(value, message);
     }
 
     private BigDecimal requireDecimal(Object value, String message) {

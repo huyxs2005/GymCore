@@ -15,8 +15,10 @@ import java.io.ByteArrayOutputStream;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ReportService {
@@ -109,9 +111,13 @@ public class ReportService {
             }
             document.add(membershipTable);
 
-            document.close();
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to export revenue report PDF.", exception);
+        } finally {
+            if (document.isOpen()) {
+                document.close();
+            }
         }
 
         return out.toByteArray();

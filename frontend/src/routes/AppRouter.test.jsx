@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import AppRouter from './AppRouter'
 import { clearSession, setAccessToken, setAuthUser } from '../features/auth/session'
@@ -24,10 +25,18 @@ vi.mock('../features/users/api/receptionCustomerApi', () => {
 })
 
 function renderAt(path) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <AppRouter />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <AppRouter />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

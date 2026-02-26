@@ -8,8 +8,8 @@ Purpose:
 
 Recommended run order:
 1) docs/GymCore.txt
-2) docs/InsertValues.txt
-3) docs/alter.sql
+2) docs/alter.sql
+3) docs/InsertValues.txt
 4) docs/InsertTestingValues.txt (optional)
 */
 
@@ -82,10 +82,12 @@ BEGIN
     DECLARE @CustomerMembershipID INT;
     DECLARE @MembershipCustomerID INT;
     DECLARE @MembershipCurrentStatus NVARCHAR(20);
+    DECLARE @ClaimID INT;
 
     SELECT
         @OrderID = p.OrderID,
-        @CustomerMembershipID = p.CustomerMembershipID
+        @CustomerMembershipID = p.CustomerMembershipID,
+        @ClaimID = p.ClaimID
     FROM dbo.Payments p
     WHERE p.PaymentID = @PaymentID;
 
@@ -101,7 +103,7 @@ BEGIN
     UPDATE dbo.Payments
     SET Status = 'SUCCESS',
         PaidAt = COALESCE(PaidAt, SYSDATETIME()),
-        PayOS_Status = COALESCE(PayOS_Status, 'SUCCESS'),
+        PayOS_Status = 'SUCCESS',
         WebhookVerifiedAt = COALESCE(WebhookVerifiedAt, SYSDATETIME())
     WHERE PaymentID = @PaymentID
       AND Status = 'PENDING';
@@ -115,7 +117,17 @@ BEGIN
         SET Status = 'PAID',
             UpdatedAt = SYSDATETIME()
         WHERE OrderID = @OrderID
-          AND Status = 'PENDING';
+              AND Status = 'PENDING';
+    END;
+
+    IF @ClaimID IS NOT NULL
+    BEGIN
+        UPDATE dbo.UserPromotionClaims
+        SET UsedAt = COALESCE(UsedAt, SYSDATETIME()),
+            UsedPaymentID = COALESCE(UsedPaymentID, @PaymentID),
+            UsedOnOrderID = COALESCE(UsedOnOrderID, @OrderID)
+        WHERE ClaimID = @ClaimID
+          AND UsedAt IS NULL;
     END;
 
     IF @CustomerMembershipID IS NOT NULL

@@ -32,6 +32,21 @@ function CustomerPromotionsPage() {
   })
 
   const posts = postsData?.data?.posts || []
+  const formatPostBenefit = (post) => {
+    const discountPercent = Number(post.DiscountPercent || 0)
+    const discountAmount = Number(post.DiscountAmount || 0)
+    const bonusDays = Number(post.BonusDurationDays || 0)
+    const parts = []
+    if (discountPercent > 0) {
+      parts.push(`${discountPercent}% OFF`)
+    } else if (discountAmount > 0) {
+      parts.push(`${discountAmount.toLocaleString()} VND OFF`)
+    }
+    if (bonusDays > 0) {
+      parts.push(`+${bonusDays} DAYS`)
+    }
+    return parts.length > 0 ? parts.join(' + ') : 'SPECIAL'
+  }
 
   return (
     <WorkspaceScaffold
@@ -59,7 +74,7 @@ function CustomerPromotionsPage() {
                 <div className="absolute top-3 left-3">
                   <span className="bg-gym-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg flex items-center gap-1">
                     <Sparkles size={12} />
-                    {post.DiscountPercent ? `${post.DiscountPercent}% OFF` : `$${post.DiscountAmount} OFF`}
+                    {formatPostBenefit(post)}
                   </span>
                 </div>
                 {post.IsClaimed === 1 && (

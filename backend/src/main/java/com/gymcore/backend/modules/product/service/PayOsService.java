@@ -20,9 +20,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class PayOsService {
+
+    private static final Logger log = LoggerFactory.getLogger(PayOsService.class);
 
     private final RestTemplate restTemplate;
 
@@ -65,8 +69,10 @@ public class PayOsService {
         }
 
         if (!isConfigured()) {
-            System.err.println("PayOS configuration missing! ClientID: "
-                    + (clientId == null ? "null" : (clientId.isBlank() ? "blank" : "present")));
+            log.warn("PayOS configuration missing (clientId present: {}, apiKey present: {}, checksumKey present: {}).",
+                    clientId != null && !clientId.isBlank(),
+                    apiKey != null && !apiKey.isBlank(),
+                    checksumKey != null && !checksumKey.isBlank());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "PayOS is not configured. Please check .env file and restart server.");
         }
@@ -107,9 +113,7 @@ public class PayOsService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
-            System.out.println("PayOS Request Headers: x-client-id=" + clientId);
-            System.out.println("PayOS Request Body: " + body);
-            System.out.println("PayOS Sign Data: " + signData);
+            log.info("Creating PayOS payment link for paymentId={}.", paymentId);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restTemplate.postForObject(
@@ -124,7 +128,7 @@ public class PayOsService {
             String code = valueAsString(response.get("code"));
             String desc = valueAsString(response.get("desc"));
             if (!"00".equals(code)) {
-                System.err.println("PayOS API Response Error: " + desc + " (Code: " + code + ")");
+                log.warn("PayOS API returned non-success code={} desc={}.", code, desc);
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                         "PayOS Error: " + desc + " (Code: " + code + ")");
             }
@@ -142,10 +146,10 @@ public class PayOsService {
             return new PayOsLink(paymentLinkId, checkoutUrl, status);
         } catch (org.springframework.web.client.HttpStatusCodeException exception) {
             String errorBody = exception.getResponseBodyAsString();
-            System.err.println("PayOS API HTTP " + exception.getStatusCode() + ": " + errorBody);
+            log.error("PayOS API HTTP {}: {}", exception.getStatusCode(), errorBody);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "PayOS API Error: " + errorBody);
         } catch (RestClientException exception) {
-            System.err.println("PayOS Connection Error: " + exception.getMessage());
+            log.error("PayOS connection error: {}", exception.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Failed to connect to PayOS: " + exception.getMessage());
         }
