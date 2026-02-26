@@ -23,45 +23,52 @@ public class CheckinHealthController {
     }
 
     @GetMapping("/checkin/qr")
-    public ApiResponse<Map<String, Object>> getQrToken() {
-        return ApiResponse.ok("Check-in QR endpoint ready for implementation", checkinHealthService.execute("customer-get-qr", null));
+    public ApiResponse<Map<String, Object>> getQrToken(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Lấy mã QR check-in thành công",
+                checkinHealthService.execute("customer-get-qr", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/checkin/history")
-    public ApiResponse<Map<String, Object>> getCheckinHistory() {
-        return ApiResponse.ok("Check-in history endpoint ready for implementation",
-                checkinHealthService.execute("customer-get-checkin-history", null));
+    public ApiResponse<Map<String, Object>> getCheckinHistory(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Lấy lịch sử check-in thành công",
+                checkinHealthService.execute("customer-get-checkin-history", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/health/current")
-    public ApiResponse<Map<String, Object>> getCurrentHealth() {
-        return ApiResponse.ok("Current health endpoint ready for implementation",
-                checkinHealthService.execute("customer-get-health-current", null));
+    public ApiResponse<Map<String, Object>> getCurrentHealth(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Lấy chỉ số sức khỏe hiện tại thành công",
+                checkinHealthService.execute("customer-get-health-current", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/health/history")
-    public ApiResponse<Map<String, Object>> getHealthHistory() {
-        return ApiResponse.ok("Health history endpoint ready for implementation",
-                checkinHealthService.execute("customer-get-health-history", null));
+    public ApiResponse<Map<String, Object>> getHealthHistory(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Lấy lịch sử sức khỏe thành công",
+                checkinHealthService.execute("customer-get-health-history", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/health/coach-notes")
-    public ApiResponse<Map<String, Object>> getCoachNotes() {
-        return ApiResponse.ok("Coach notes endpoint ready for implementation",
-                checkinHealthService.execute("customer-get-coach-notes", null));
+    public ApiResponse<Map<String, Object>> getCoachNotes(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Lấy ghi chú từ HLV thành công",
+                checkinHealthService.execute("customer-get-coach-notes", withAuth(authorizationHeader, null)));
     }
 
     @PostMapping("/health/records")
-    public ApiResponse<Map<String, Object>> createHealthRecord(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Create health record endpoint ready for implementation",
-                checkinHealthService.execute("customer-create-health-record", payload));
+    public ApiResponse<Map<String, Object>> createHealthRecord(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Cập nhật chỉ số sức khỏe thành công",
+                checkinHealthService.execute("customer-create-health-record", withAuth(authorizationHeader, payload)));
     }
 
     @PostMapping("/reception/checkin/scan")
     public ApiResponse<Map<String, Object>> scanCheckin(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
-            @RequestBody Map<String, Object> payload
-    ) {
+            @RequestBody Map<String, Object> payload) {
         Map<String, Object> request = new java.util.LinkedHashMap<>(payload);
         request.put("authorizationHeader", authorizationHeader);
         return ApiResponse.ok("Reception scan check-in endpoint ready for implementation",
@@ -71,8 +78,7 @@ public class CheckinHealthController {
     @GetMapping("/reception/checkin/{customerId}/validity")
     public ApiResponse<Map<String, Object>> validateMembership(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
-            @PathVariable Integer customerId
-    ) {
+            @PathVariable Integer customerId) {
         Map<String, Object> request = new java.util.LinkedHashMap<>();
         request.put("authorizationHeader", authorizationHeader);
         request.put("customerId", customerId);
@@ -82,11 +88,18 @@ public class CheckinHealthController {
 
     @GetMapping("/reception/checkin/history")
     public ApiResponse<Map<String, Object>> getReceptionHistory(
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader
-    ) {
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
         Map<String, Object> request = new java.util.LinkedHashMap<>();
         request.put("authorizationHeader", authorizationHeader);
         return ApiResponse.ok("Reception check-in history endpoint ready for implementation",
                 checkinHealthService.execute("reception-get-checkin-history", request));
+    }
+
+    private Map<String, Object> withAuth(String auth, Map<String, Object> payload) {
+        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        if (payload != null)
+            map.putAll(payload);
+        map.put("authorizationHeader", auth);
+        return map;
     }
 }

@@ -162,7 +162,7 @@ END CATCH;
 /*
 Run order:
 1) docs/GymCore.txt
-2) docs/alter.sql                   -- merged coupon/payos alterations
+2) docs/alter.txt                   -- merged coupon/payos alterations
 3) docs/InsertValues.txt            -- required baseline data
 4) docs/InsertTestingValues.txt     -- optional example/testing data
 */

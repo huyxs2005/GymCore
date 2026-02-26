@@ -8,7 +8,7 @@ Purpose:
 
 Recommended run order:
 1) docs/GymCore.txt
-2) docs/alter.sql
+2) docs/alter.txt
 3) docs/InsertValues.txt
 4) docs/InsertTestingValues.txt (optional)
 */
@@ -70,7 +70,24 @@ END;
 GO
 
 --- =========================================================
---- Section 3: Payment confirmation procedures for PayOS flow
+--- Section 3: Coach availability compatibility migration
+--- =========================================================
+IF OBJECT_ID('dbo.CoachWeeklyAvailability', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.CoachWeeklyAvailability was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.CoachWeeklyAvailability', 'IsAvailable') IS NULL
+BEGIN
+    ALTER TABLE dbo.CoachWeeklyAvailability
+    ADD IsAvailable BIT NOT NULL
+        CONSTRAINT DF_CoachWeeklyAvailability_IsAvailable DEFAULT 1;
+END;
+GO
+
+--- =========================================================
+--- Section 4: Payment confirmation procedures for PayOS flow
 --- =========================================================
 CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
     @PaymentID INT
@@ -180,7 +197,7 @@ END;
 GO
 
 --- =========================================================
---- Section 4: Seed data moved out of alter.sql
+--- Section 5: Seed data moved out of alter script
 --- =========================================================
 --- Coupon and product seed/test records are maintained in:
 --- - docs/InsertValues.txt

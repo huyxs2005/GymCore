@@ -7,7 +7,7 @@
   - `backend/src/main/java/com/gymcore/backend/modules/promotion/controller/PromotionController.java`
   - `backend/src/main/java/com/gymcore/backend/modules/promotion/service/PromotionService.java`
 - [x] Ensure payment success always sets PayOS status to success (not left as `PENDING`).
-  - `docs/alter.sql`
+  - `docs/alter.txt`
 
 ## Medium Priority
 - [x] Complete bonus-duration coupon flow across backend, admin UI, and checkout compatibility.
@@ -17,7 +17,7 @@
 - [x] Fix frontend tests after shared header changes (missing QueryClient context).
   - `frontend/src/routes/AppRouter.test.jsx`
   - `frontend/src/pages/reception/ReceptionCheckinPage.test.jsx`
-- [x] Keep DB setup/run-order docs and code dependencies aligned for `alter.sql`.
+- [x] Keep DB setup/run-order docs and code dependencies aligned for `alter.txt`.
   - `docs/InsertTestingValues.txt`
 
 ## Low Priority
