@@ -342,7 +342,8 @@ public class ProductSalesService {
                     FROM dbo.UserPromotionClaims c
                     JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                     WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
-                    AND p.IsActive = 1 AND SYSDATETIME() BETWEEN p.ValidFrom AND p.ValidTo
+                    AND p.IsActive = 1
+                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
                     """, customerId, promoCode);
 
             if (claims.isEmpty()) {

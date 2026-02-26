@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminPromotionApi } from '../../features/promotion/api/adminPromotionApi'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
-import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, Trash2, Calendar, FileText, Layout, Sparkles } from 'lucide-react'
+import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, CircleOff, Calendar, FileText, Layout, Sparkles } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 const AdminPromotionsPage = () => {
@@ -207,7 +207,7 @@ const AdminPromotionsPage = () => {
                           onClick={() => { if (window.confirm('Deactivate this coupon?')) deleteCouponMutation.mutate(coupon.PromotionID) }}
                           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                         >
-                          <Trash2 size={16} />
+                          <CircleOff size={16} />
                         </button>
                       </td>
                     </tr>
@@ -290,7 +290,7 @@ const AdminPromotionsPage = () => {
                           onClick={() => { if (window.confirm('Deactivate this post?')) deletePostMutation.mutate(post.PromotionPostID) }}
                           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                         >
-                          <Trash2 size={16} />
+                          <CircleOff size={16} />
                         </button>
                       </td>
                     </tr>

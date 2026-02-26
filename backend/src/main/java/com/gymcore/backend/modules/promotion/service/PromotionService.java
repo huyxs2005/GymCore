@@ -183,7 +183,8 @@ public class PromotionService {
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
                     LEFT JOIN dbo.UserPromotionClaims c ON c.PromotionID = r.PromotionID AND c.UserID = ?
                     WHERE p.IsActive = 1 AND r.IsActive = 1
-                    AND SYSDATETIME() BETWEEN p.StartAt AND p.EndAt
+                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
+                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
                     ORDER BY p.CreatedAt DESC
                     """;
             posts = jdbcTemplate.queryForList(sql, user.userId());
@@ -194,7 +195,8 @@ public class PromotionService {
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
                     WHERE p.IsActive = 1 AND r.IsActive = 1
-                    AND SYSDATETIME() BETWEEN p.StartAt AND p.EndAt
+                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
+                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
                     ORDER BY p.CreatedAt DESC
                     """;
             posts = jdbcTemplate.queryForList(sql);
@@ -204,8 +206,23 @@ public class PromotionService {
 
     private Map<String, Object> customerClaimCoupon(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
-        int promotionId = (int) payload.get("promotionId");
-        int sourcePostId = (int) payload.get("sourcePostId");
+        int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
+        int sourcePostId = requireInt(payload.get("sourcePostId"), "Source post ID is required.");
+
+        Integer claimable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Promotions r
+                JOIN dbo.PromotionPosts p ON p.PromotionID = r.PromotionID
+                WHERE r.PromotionID = ?
+                  AND p.PromotionPostID = ?
+                  AND r.IsActive = 1
+                  AND p.IsActive = 1
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
+                """, Integer.class, promotionId, sourcePostId);
+        if (claimable == null || claimable == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This coupon is not available to claim.");
+        }
 
         // Idempotency check
         Integer existing = jdbcTemplate.queryForObject(
@@ -231,7 +248,8 @@ public class PromotionService {
                 FROM dbo.UserPromotionClaims c
                 JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                 WHERE c.UserID = ? AND c.UsedAt IS NULL
-                AND p.IsActive = 1 AND SYSDATETIME() BETWEEN p.ValidFrom AND p.ValidTo
+                AND p.IsActive = 1
+                AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
                 """;
         return Map.of("claims", jdbcTemplate.queryForList(sql, user.userId()));
     }
