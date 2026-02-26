@@ -51,6 +51,8 @@ public class AuthService {
     private static final String GOOGLE_PROVIDER = "GOOGLE";
     private static final int OTP_LENGTH = 6;
     private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final String PASSWORD_POLICY_MESSAGE =
+            "Password must be at least 8 characters and include at least one uppercase letter, one number, and one special character.";
 
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
@@ -1239,13 +1241,29 @@ public class AuthService {
     }
 
     private void validatePasswordPair(String password, String confirmPassword) {
-        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Password must be at least " + MIN_PASSWORD_LENGTH + " characters.");
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH || !meetsPasswordComplexity(password)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, PASSWORD_POLICY_MESSAGE);
         }
         if (!Objects.equals(password, confirmPassword)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password confirmation does not match.");
         }
+    }
+
+    private boolean meetsPasswordComplexity(String password) {
+        boolean hasUppercase = false;
+        boolean hasNumber = false;
+        boolean hasSpecial = false;
+        for (int i = 0; i < password.length(); i++) {
+            char ch = password.charAt(i);
+            if (Character.isUpperCase(ch)) {
+                hasUppercase = true;
+            } else if (Character.isDigit(ch)) {
+                hasNumber = true;
+            } else if (!Character.isLetter(ch) && !Character.isWhitespace(ch)) {
+                hasSpecial = true;
+            }
+        }
+        return hasUppercase && hasNumber && hasSpecial;
     }
 
     private String requireOtp(String otp) {

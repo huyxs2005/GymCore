@@ -32,6 +32,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 class AuthServiceRegisterOtpTest {
 
+    private static final String PASSWORD_POLICY_MESSAGE =
+            "Password must be at least 8 characters and include at least one uppercase letter, one number, and one special character.";
+
     private JdbcTemplate jdbcTemplate;
     private PasswordEncoder passwordEncoder;
     private AuthMailService authMailService;
@@ -61,13 +64,22 @@ class AuthServiceRegisterOtpTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
                 authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", "123", "123"));
         assertEquals(400, ex.getStatusCode().value());
+        assertEquals(PASSWORD_POLICY_MESSAGE, ex.getReason());
     }
 
     @Test
     void startRegistration_shouldRejectPasswordMismatch() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", "secret123", "secret124"));
+                authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", "Secret123!", "Secret124!"));
         assertEquals(400, ex.getStatusCode().value());
+    }
+
+    @Test
+    void startRegistration_shouldRejectWeakPasswordCharacterClasses() {
+        assertPasswordPolicyRejected("lowercase1!");
+        assertPasswordPolicyRejected("NoNumber!");
+        assertPasswordPolicyRejected("NoSpecial1");
+        assertPasswordPolicyRejected("NoSpecial1 ");
     }
 
     @Test
@@ -76,7 +88,7 @@ class AuthServiceRegisterOtpTest {
                 .thenReturn(customerUserVerified());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "customer@gymcore.local", "0900123456", "secret123", "secret123"));
+                authService.startRegistration("Nguyễn Văn A", "customer@gymcore.local", "0900123456", "Secret123!", "Secret123!"));
         assertEquals(HttpStatus.CONFLICT.value(), ex.getStatusCode().value());
     }
 
@@ -92,7 +104,7 @@ class AuthServiceRegisterOtpTest {
                 .thenReturn(coach);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "coach@gymcore.local", "0900123456", "secret123", "secret123"));
+                authService.startRegistration("Nguyễn Văn A", "coach@gymcore.local", "0900123456", "Secret123!", "Secret123!"));
         assertEquals(HttpStatus.CONFLICT.value(), ex.getStatusCode().value());
     }
 
@@ -122,8 +134,8 @@ class AuthServiceRegisterOtpTest {
                 "Nguyễn Văn A",
                 "  NEW@GymCore.Local ",
                 "0900123456",
-                "secret123",
-                "secret123"
+                "Secret123!",
+                "Secret123!"
         );
 
         assertEquals("new@gymcore.local", result.get("email"));
@@ -252,5 +264,12 @@ class AuthServiceRegisterOtpTest {
                 false, true, true,
                 null, null
         );
+    }
+
+    private void assertPasswordPolicyRejected(String password) {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", password, password));
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals(PASSWORD_POLICY_MESSAGE, ex.getReason());
     }
 }
