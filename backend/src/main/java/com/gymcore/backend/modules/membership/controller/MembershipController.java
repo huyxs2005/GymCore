@@ -2,12 +2,15 @@ package com.gymcore.backend.modules.membership.controller;
 
 import com.gymcore.backend.common.api.ApiResponse;
 import com.gymcore.backend.modules.membership.service.MembershipService;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -58,9 +61,14 @@ public class MembershipController {
     }
 
     @PostMapping("/payments/webhook")
-    public ApiResponse<Map<String, Object>> paymentWebhook(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Payment webhook endpoint ready for implementation",
-                membershipService.execute("payment-webhook", payload));
+    public ApiResponse<Map<String, Object>> paymentWebhook(
+            @RequestHeader HttpHeaders headers,
+            @RequestBody Map<String, Object> payload) {
+        Map<String, Object> wrapper = new LinkedHashMap<>();
+        wrapper.put("headers", headers);
+        wrapper.put("body", payload == null ? Map.of() : payload);
+        return ApiResponse.ok("Payment webhook handled",
+                membershipService.execute("payment-webhook", wrapper));
     }
 
     @GetMapping("/admin/membership-plans")
