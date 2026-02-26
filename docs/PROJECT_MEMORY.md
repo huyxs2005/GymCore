@@ -47,6 +47,14 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 ## 6) Database status (docs)
 - `docs/GymCore.txt` updated with:
   - Existing full gym schema.
+  - VN phone normalization uniqueness on `Users.Phone` via computed `PhoneNormalized` + unique filtered index.
+  - Added phone integrity checks: non-blank and must contain digits when `Phone` is provided.
+  - Added required SQL `SET` options at schema start so computed/filtered indexes create cleanly in fresh DB runs.
+  - Membership queue model:
+    - `CustomerMemberships.Status` includes `SCHEDULED`.
+    - Unique filtered indexes enforce max one `ACTIVE` and one `SCHEDULED` per customer.
+    - Daily job `sp_RunDailyMembershipJobs` activates due `SCHEDULED` memberships.
+  - Promotions support `BonusDurationDays` (for coupon discount + extra days at the same time).
   - Added AI-related structured tables:
     - `FitnessGoals`, `CustomerGoals`
     - `MealCategories`, `Meals`, `MealCategoryMap`
@@ -56,10 +64,11 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Allergy handling direction: strict block in recommendation logic (do not parse recipe free text).
 
 ## 7) Seed data status
-- `docs/InsertValues.txt` updated and idempotent:
-  - Roles/users/profiles/time slots/membership/plans/products/cart/promotions/PT sample data.
-  - Bcrypt hashes for seeded accounts.
-  - Added goal/meal/allergen sample seed data and mappings.
+- `docs/InsertValues.txt` = required baseline seed (roles/users/profiles/time slots/plans/goals/allergens), idempotent.
+- `docs/InsertTestingValues.txt` = optional example/testing seed (cart/orders/promotions/PT/check-in and more), idempotent.
+  - Seeds multiple membership durations (day pass / 1m / 6m / 12m / 24m for gym-only and gym+coach).
+  - Seeds one queued `SCHEDULED` membership sample for membership-switch testing.
+  - Seeds promotion `SUMMERPLUS30` (5% + 30 bonus days) example.
 - Seeded login passwords:
   - Admin: `Admin123456!`
   - Receptionist: `Reception123456!`
@@ -90,3 +99,35 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Keep SQL seed scripts idempotent.
 - Prefer structured mapping tables over free-text parsing for filtering.
 
+## 12) Check-in UX decisions (finalized Feb 17, 2026)
+- Reception check-in supports two flows:
+  - QR camera scan.
+  - Manual search+select by partial `phone` or `fullName`.
+- QR scan flow is one-shot:
+  - First successful detect/check-in stops camera.
+  - Success/failure popup is shown.
+  - Receptionist uses explicit action to scan next customer.
+- Membership validation errors are shown directly in check-in result (no silent fail).
+- Reception check-in timestamps are shown in VN-friendly format `dd/mm/yy HH:mm`.
+
+## 13) Authz routing decisions (finalized Feb 17, 2026)
+- Frontend route guards enforce both:
+  - Authenticated session.
+  - Correct role for route namespace.
+- Unauthorized route access behavior:
+  - Redirect to `/` (default page).
+  - No 403 page shown to end users.
+
+## 14) Shared layout decisions (finalized Feb 17, 2026)
+- App uses shared global shell (header + footer) across pages.
+- Removed duplicate page-level header/footer where applicable.
+- Removed `Workspace` button/link from global header/footer.
+- Footer layout fixed with flex-column shell so it stays visually consistent at page bottom.
+
+## 15) Customer QR exposure decisions
+- QR entry in account menu is CUSTOMER-only.
+- Customer QR dialog:
+  - Centered via portal/modal rendering.
+  - No token copy button.
+- Reception screen:
+  - No manual token paste fallback input.

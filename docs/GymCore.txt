@@ -17,6 +17,16 @@ GO
 USE GymCore;
 GO
 
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+GO
+
 /* =========================
    ROLES
 ========================= */
@@ -36,6 +46,22 @@ CREATE TABLE dbo.Users (
     FullName NVARCHAR(100) NOT NULL,
     Email NVARCHAR(100) NOT NULL UNIQUE,
     Phone NVARCHAR(20) NULL,
+    -- Normalize VN phone for uniqueness checks:
+    -- +84905675437 and 0905675437 are treated as the same number.
+    PhoneNormalized AS (CONVERT(NVARCHAR(20),
+        CASE
+            WHEN Phone IS NULL THEN NULL
+            ELSE
+                CASE
+                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N'') = N'' THEN NULL
+                    WHEN LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 3) = N'840'
+                        THEN N'0' + SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 4, 50)
+                    WHEN LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 2) = N'84'
+                        THEN N'0' + SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 3, 50)
+                    ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N'')
+                END
+        END
+    )) PERSISTED,
 
     -- Local login: store HASHED password (bcrypt/argon2 from backend)
     PasswordHash NVARCHAR(255) NULL,
@@ -62,8 +88,15 @@ CREATE TABLE dbo.Users (
 
     CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleID) REFERENCES dbo.Roles(RoleID),
     CONSTRAINT UQ_Users_QrCodeToken UNIQUE (QrCodeToken),
-    CONSTRAINT CK_Users_AvatarSource CHECK (AvatarSource IS NULL OR AvatarSource IN ('GOOGLE','CUSTOM'))
+    CONSTRAINT CK_Users_AvatarSource CHECK (AvatarSource IS NULL OR AvatarSource IN ('GOOGLE','CUSTOM')),
+    CONSTRAINT CK_Users_Phone_NotBlank CHECK (Phone IS NULL OR LTRIM(RTRIM(Phone)) <> N''),
+    CONSTRAINT CK_Users_Phone_HasDigit CHECK (Phone IS NULL OR Phone LIKE N'%[0-9]%')
 );
+GO
+
+CREATE UNIQUE INDEX UX_Users_PhoneNormalized
+ON dbo.Users(PhoneNormalized)
+WHERE Phone IS NOT NULL;
 GO
 
 CREATE TABLE dbo.UserAuthProviders (
@@ -421,7 +454,7 @@ CREATE TABLE dbo.CustomerMemberships (
     CONSTRAINT FK_CustomerMemberships_Plans FOREIGN KEY (MembershipPlanID) REFERENCES dbo.MembershipPlans(MembershipPlanID),
     CONSTRAINT FK_CustomerMemberships_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
 
-    CONSTRAINT CK_CustomerMemberships_Status CHECK (Status IN ('PENDING','ACTIVE','EXPIRED','CANCELLED')),
+    CONSTRAINT CK_CustomerMemberships_Status CHECK (Status IN ('PENDING','SCHEDULED','ACTIVE','EXPIRED','CANCELLED')),
     CONSTRAINT CK_CustomerMemberships_Dates CHECK (EndDate >= StartDate)
 );
 GO
@@ -430,6 +463,12 @@ GO
 CREATE UNIQUE INDEX UX_CustomerMemberships_OneActive
 ON dbo.CustomerMemberships(CustomerID)
 WHERE Status = 'ACTIVE';
+GO
+
+-- Only ONE queued (SCHEDULED) membership per customer
+CREATE UNIQUE INDEX UX_CustomerMemberships_OneScheduled
+ON dbo.CustomerMemberships(CustomerID)
+WHERE Status = 'SCHEDULED';
 GO
 
 /* =========================
@@ -441,6 +480,7 @@ CREATE TABLE dbo.Promotions (
     Description NVARCHAR(200) NULL,
     DiscountPercent DECIMAL(5,2) NULL,
     DiscountAmount DECIMAL(12,2) NULL,
+    BonusDurationDays INT NOT NULL CONSTRAINT DF_Promotions_BonusDurationDays DEFAULT 0,
     ValidFrom DATETIME2 NOT NULL,
     ValidTo DATETIME2 NOT NULL,
     IsActive BIT NOT NULL CONSTRAINT DF_Promotions_IsActive DEFAULT 1,
@@ -450,7 +490,8 @@ CREATE TABLE dbo.Promotions (
         NOT (DiscountPercent IS NOT NULL AND DiscountAmount IS NOT NULL)
     ),
     CONSTRAINT CK_Promotions_Percent CHECK (DiscountPercent IS NULL OR (DiscountPercent >= 0 AND DiscountPercent <= 100)),
-    CONSTRAINT CK_Promotions_Amount CHECK (DiscountAmount IS NULL OR DiscountAmount >= 0)
+    CONSTRAINT CK_Promotions_Amount CHECK (DiscountAmount IS NULL OR DiscountAmount >= 0),
+    CONSTRAINT CK_Promotions_BonusDurationDays CHECK (BonusDurationDays >= 0)
 );
 GO
 
@@ -1154,6 +1195,7 @@ GO
 /* =========================
    DAILY JOB STORED PROCEDURE
    - create membership expiry countdown notifications (7..1 days left)
+   - activate due SCHEDULED memberships (StartDate <= today)
    - expire memberships (EndDate < today)
    - cancel PT sessions if customer has NO ACTIVE membership after expiry
 ========================= */
@@ -1195,7 +1237,26 @@ BEGIN
     SET Status = 'EXPIRED', UpdatedAt = SYSDATETIME()
     WHERE Status = 'ACTIVE' AND EndDate < @today;
 
-    /* 3) Cancel PT sessions ONLY for customers who now have NO ACTIVE membership */
+    /* 3) Activate due SCHEDULED memberships when customer has no ACTIVE membership */
+    ;WITH DueScheduled AS (
+        SELECT m.CustomerMembershipID
+        FROM dbo.CustomerMemberships m
+        WHERE m.Status = 'SCHEDULED'
+          AND m.StartDate <= @today
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.CustomerMemberships a
+              WHERE a.CustomerID = m.CustomerID
+                AND a.Status = 'ACTIVE'
+          )
+    )
+    UPDATE m
+    SET m.Status = 'ACTIVE',
+        m.UpdatedAt = SYSDATETIME()
+    FROM dbo.CustomerMemberships m
+    JOIN DueScheduled d ON d.CustomerMembershipID = m.CustomerMembershipID;
+
+    /* 4) Cancel PT sessions ONLY for customers who now have NO ACTIVE membership */
     ;WITH NoActive AS (
         SELECT DISTINCT c.CustomerID
         FROM dbo.Customers c
@@ -1213,7 +1274,7 @@ BEGIN
     WHERE s.Status = 'SCHEDULED'
       AND s.SessionDate >= @today;
 
-    /* 4) Notify customers whose PT got cancelled */
+    /* 5) Notify customers whose PT got cancelled */
     INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
     SELECT DISTINCT
         s.CustomerID,

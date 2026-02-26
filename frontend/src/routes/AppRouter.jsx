@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useSession } from '../features/auth/useSession'
 import LandingPage from '../pages/public/LandingPage'
 import LoginPage from '../pages/public/LoginPage'
 import RegisterPage from '../pages/public/RegisterPage'
@@ -25,7 +26,30 @@ import AdminPromotionsPage from '../pages/admin/AdminPromotionsPage'
 import AdminReportsPage from '../pages/admin/AdminReportsPage'
 import NotFoundPage from '../pages/NotFoundPage'
 
+function RequireAuth({ children }) {
+  const { isAuthenticated } = useSession()
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />
+  }
+  return children
+}
+
+function RequireRole({ roles, children }) {
+  const { isAuthenticated, user } = useSession()
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />
+  }
+  const role = String(user?.role || '').toUpperCase()
+  if (!roles.includes(role)) {
+    return <Navigate to="/" replace />
+  }
+  return children
+}
+
 function AppRouter() {
+  const withAuth = (element) => <RequireAuth>{element}</RequireAuth>
+  const withRole = (roles, element) => <RequireRole roles={roles}>{element}</RequireRole>
+
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -34,29 +58,29 @@ function AppRouter() {
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/auth/forgot-password/reset" element={<ForgotPasswordResetPage />} />
-      <Route path="/auth/change-password" element={<ChangePasswordPage />} />
-      <Route path="/profile" element={<ProfilePage />} />
+      <Route path="/auth/change-password" element={withAuth(<ChangePasswordPage />)} />
+      <Route path="/profile" element={withAuth(<ProfilePage />)} />
 
-      <Route path="/customer/membership" element={<CustomerMembershipPage />} />
-      <Route path="/customer/checkin-health" element={<CustomerCheckinHealthPage />} />
-      <Route path="/customer/coach-booking" element={<CustomerCoachBookingPage />} />
-      <Route path="/customer/shop" element={<CustomerShopPage />} />
-      <Route path="/customer/promotions" element={<CustomerPromotionsPage />} />
-      <Route path="/customer/knowledge" element={<CustomerKnowledgePage />} />
+      <Route path="/customer/membership" element={withRole(['CUSTOMER'], <CustomerMembershipPage />)} />
+      <Route path="/customer/checkin-health" element={withRole(['CUSTOMER'], <CustomerCheckinHealthPage />)} />
+      <Route path="/customer/coach-booking" element={withRole(['CUSTOMER'], <CustomerCoachBookingPage />)} />
+      <Route path="/customer/shop" element={withRole(['CUSTOMER'], <CustomerShopPage />)} />
+      <Route path="/customer/promotions" element={withRole(['CUSTOMER'], <CustomerPromotionsPage />)} />
+      <Route path="/customer/knowledge" element={withRole(['CUSTOMER'], <CustomerKnowledgePage />)} />
 
-      <Route path="/coach/schedule" element={<CoachSchedulePage />} />
-      <Route path="/coach/customers" element={<CoachCustomersPage />} />
+      <Route path="/coach/schedule" element={withRole(['COACH'], <CoachSchedulePage />)} />
+      <Route path="/coach/customers" element={withRole(['COACH'], <CoachCustomersPage />)} />
 
-      <Route path="/reception/checkin" element={<ReceptionCheckinPage />} />
-      <Route path="/reception/customers" element={<ReceptionCustomersPage />} />
+      <Route path="/reception/checkin" element={withRole(['RECEPTIONIST'], <ReceptionCheckinPage />)} />
+      <Route path="/reception/customers" element={withRole(['RECEPTIONIST'], <ReceptionCustomersPage />)} />
 
-      <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-      <Route path="/admin/users" element={<AdminUsersPage />} />
-      <Route path="/admin/memberships" element={<AdminMembershipsPage />} />
-      <Route path="/admin/coach-insights" element={<AdminCoachInsightsPage />} />
-      <Route path="/admin/products" element={<AdminProductsPage />} />
-      <Route path="/admin/promotions" element={<AdminPromotionsPage />} />
-      <Route path="/admin/reports" element={<AdminReportsPage />} />
+      <Route path="/admin/dashboard" element={withRole(['ADMIN'], <AdminDashboardPage />)} />
+      <Route path="/admin/users" element={withRole(['ADMIN'], <AdminUsersPage />)} />
+      <Route path="/admin/memberships" element={withRole(['ADMIN'], <AdminMembershipsPage />)} />
+      <Route path="/admin/coach-insights" element={withRole(['ADMIN'], <AdminCoachInsightsPage />)} />
+      <Route path="/admin/products" element={withRole(['ADMIN'], <AdminProductsPage />)} />
+      <Route path="/admin/promotions" element={withRole(['ADMIN'], <AdminPromotionsPage />)} />
+      <Route path="/admin/reports" element={withRole(['ADMIN'], <AdminReportsPage />)} />
 
       <Route path="/workspace/customer/membership" element={<Navigate to="/customer/membership" replace />} />
       <Route path="/workspace/admin" element={<Navigate to="/admin/dashboard" replace />} />

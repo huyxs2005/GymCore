@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Dumbbell, HeartPulse, ShieldCheck, Users } from 'lucide-react'
-import AuthHeaderActions from '../../components/common/AuthHeaderActions'
 
 const programs = [
   {
@@ -45,19 +44,7 @@ const plans = [
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="inline-flex items-center gap-2">
-            <span className="rounded-md bg-gym-500 p-1.5 text-white">
-              <Dumbbell size={16} />
-            </span>
-            <span className="text-lg font-bold">GymCore</span>
-          </div>
-          <AuthHeaderActions />
-        </div>
-      </header>
-
+    <div className="bg-white text-slate-900">
       <section className="relative overflow-hidden bg-slate-900 px-4 py-20 text-white sm:px-6">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(14,167,115,0.35),transparent_40%),radial-gradient(circle_at_80%_0%,rgba(14,167,115,0.2),transparent_30%)]" />
         <div className="relative mx-auto max-w-7xl">
@@ -117,20 +104,6 @@ function LandingPage() {
           ))}
         </div>
       </section>
-
-      <footer className="border-t border-slate-200 px-4 py-8 sm:px-6">
-        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 text-sm text-slate-600 sm:flex-row sm:items-center">
-          <p>GymCore collaborative frame - Spring Boot + React</p>
-          <div className="flex items-center gap-4">
-            <Link to="/customer/membership" className="hover:text-slate-900">
-              Workspace
-            </Link>
-            <Link to="/auth/login" className="hover:text-slate-900">
-              Login
-            </Link>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }

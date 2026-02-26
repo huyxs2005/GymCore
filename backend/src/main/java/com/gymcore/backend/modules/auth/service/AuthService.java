@@ -265,6 +265,12 @@ public class AuthService {
         return Map.of("qrCodeToken", token);
     }
 
+    public AuthContext requireAuthContext(String authorizationHeader) {
+        UserRecord user = requireUserFromAccessToken(authorizationHeader);
+        ensureLoginAllowed(user, false);
+        return new AuthContext(user.userId, user.roleApiName, user.fullName, user.email);
+    }
+
     @Transactional
     public Map<String, Object> updateProfile(
             String authorizationHeader,
@@ -1355,5 +1361,13 @@ public class AuthService {
         String displayName() {
             return (name == null || name.isBlank()) ? email : name;
         }
+    }
+
+    public record AuthContext(
+            int userId,
+            String role,
+            String fullName,
+            String email
+    ) {
     }
 }
