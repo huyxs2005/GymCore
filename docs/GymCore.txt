@@ -672,6 +672,7 @@ CREATE TABLE dbo.PTRecurringRequests (
     EndDate DATE NOT NULL,
 
     Status NVARCHAR(20) NOT NULL CONSTRAINT DF_PTRecurringRequests_Status DEFAULT 'PENDING',
+    DenyReason NVARCHAR(500) NULL,
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PTRecurringRequests_CreatedAt DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 NULL,
 

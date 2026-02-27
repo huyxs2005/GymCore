@@ -31,9 +31,18 @@ export const coachBookingApi = {
   getPendingRequests() {
     return apiClient.get('/v1/coach/pt-requests').then((response) => response.data)
   },
-  actionRequest(requestId, action) {
+  getRescheduleRequests() {
+    return apiClient.get('/v1/coach/reschedule-requests').then((response) => response.data)
+  },
+  actionRequest(requestId, action, body) {
     const suffix = action === 'ACCEPT' ? 'approve' : 'deny'
-    return apiClient.post(`/v1/coach/pt-requests/${requestId}/${suffix}`).then((response) => response.data)
+    return apiClient.post(`/v1/coach/pt-requests/${requestId}/${suffix}`, body || {}).then((response) => response.data)
+  },
+  approveRescheduleRequest(sessionId) {
+    return apiClient.post(`/v1/coach/pt-sessions/${sessionId}/reschedule-approve`).then((response) => response.data)
+  },
+  denyRescheduleRequest(sessionId, body) {
+    return apiClient.post(`/v1/coach/pt-sessions/${sessionId}/reschedule-deny`, body || {}).then((response) => response.data)
   },
   // Coach – customers management
   getCoachCustomers() {

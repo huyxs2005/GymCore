@@ -239,6 +239,34 @@ public class CoachBookingController {
                                                 withAuth(authorizationHeader, null)));
         }
 
+        @GetMapping("/coach/reschedule-requests")
+        public ApiResponse<Map<String, Object>> getCoachRescheduleRequests(
+                        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+                return ApiResponse.ok("Coach reschedule requests",
+                                coachBookingService.execute("coach-get-reschedule-requests",
+                                                withAuth(authorizationHeader, null)));
+        }
+
+        @PostMapping("/coach/pt-sessions/{sessionId}/reschedule-approve")
+        public ApiResponse<Map<String, Object>> approveRescheduleRequest(
+                        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+                        @PathVariable Integer sessionId) {
+                return ApiResponse.ok("Approve reschedule request",
+                                coachBookingService.execute("coach-approve-reschedule-request",
+                                                withAuth(authorizationHeader, Map.of("sessionId", sessionId))));
+        }
+
+        @PostMapping("/coach/pt-sessions/{sessionId}/reschedule-deny")
+        public ApiResponse<Map<String, Object>> denyRescheduleRequest(
+                        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+                        @PathVariable Integer sessionId,
+                        @RequestBody(required = false) Map<String, Object> payload) {
+                return ApiResponse.ok("Deny reschedule request",
+                                coachBookingService.execute("coach-deny-reschedule-request",
+                                                withAuth(authorizationHeader, Map.of("sessionId", sessionId, "body",
+                                                                payload != null ? payload : Map.of()))));
+        }
+
         @PostMapping("/coach/pt-requests/{requestId}/approve")
         public ApiResponse<Map<String, Object>> approvePtRequest(
                         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
@@ -251,10 +279,13 @@ public class CoachBookingController {
         @PostMapping("/coach/pt-requests/{requestId}/deny")
         public ApiResponse<Map<String, Object>> denyPtRequest(
                         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
-                        @PathVariable Integer requestId) {
-                return ApiResponse.ok("Từ chối yêu cầu đặt lịch",
+                        @PathVariable Integer requestId,
+                        @RequestBody(required = false) Map<String, Object> payload) {
+                return ApiResponse.ok("Deny booking request",
                                 coachBookingService.execute("coach-deny-pt-request",
-                                                withAuth(authorizationHeader, Map.of("requestId", requestId))));
+                                                withAuth(authorizationHeader, Map.of(
+                                                                "requestId", requestId,
+                                                                "body", payload != null ? payload : Map.of()))));
         }
 
         @GetMapping("/coach/customers/{customerId}")
@@ -347,3 +378,5 @@ public class CoachBookingController {
                                                 withAuth(authorizationHeader, Map.of("coachId", coachId))));
         }
 }
+
+

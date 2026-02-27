@@ -87,6 +87,22 @@ END;
 GO
 
 --- =========================================================
+--- Section 3b: PT request deny reason compatibility migration
+--- =========================================================
+IF OBJECT_ID('dbo.PTRecurringRequests', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.PTRecurringRequests was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.PTRecurringRequests', 'DenyReason') IS NULL
+BEGIN
+    ALTER TABLE dbo.PTRecurringRequests
+    ADD DenyReason NVARCHAR(500) NULL;
+END;
+GO
+
+--- =========================================================
 --- Section 4: Payment confirmation procedures for PayOS flow
 --- =========================================================
 CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
