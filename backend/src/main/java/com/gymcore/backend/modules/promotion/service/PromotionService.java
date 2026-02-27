@@ -67,7 +67,7 @@ public class PromotionService {
     }
 
     private Map<String, Object> adminCreateCoupon(String auth, Map<String, Object> payload) {
-        currentUserService.requireAdmin(auth);
+        CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
         java.math.BigDecimal discountPercent = requireDecimal(payload.get("discountPercent"));
         java.math.BigDecimal discountAmount = requireDecimal(payload.get("discountAmount"));
         int bonusDurationDays = requireNonNegativeInt(payload.get("bonusDurationDays"));
@@ -86,6 +86,32 @@ public class PromotionService {
                 payload.get("validFrom"),
                 payload.get("validTo"),
                 requireBit(payload.getOrDefault("isActive", 1)));
+
+        Integer promotionId = jdbcTemplate.queryForObject(
+                "SELECT TOP (1) PromotionID FROM dbo.Promotions WHERE PromoCode = ?",
+                Integer.class,
+                payload.get("promoCode"));
+        if (promotionId != null) {
+            String title = "Coupon " + String.valueOf(payload.get("promoCode"));
+            String description = payload.get("description") == null ? null : String.valueOf(payload.get("description")).trim();
+            String content = (description == null || description.isBlank())
+                    ? "Claim this coupon in Promotions and apply it at checkout."
+                    : description;
+
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                    title,
+                    content,
+                    null,
+                    promotionId,
+                    payload.get("validFrom"),
+                    payload.get("validTo"),
+                    requireBit(payload.getOrDefault("isActive", 1)),
+                    admin.userId());
+        }
         return Map.of("success", true);
     }
 
