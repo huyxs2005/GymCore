@@ -32,6 +32,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 class AuthServiceForgotPasswordOtpTest {
 
+    private static final String PASSWORD_POLICY_MESSAGE =
+            "Password must be at least 8 characters and include at least one uppercase letter, one number, and one special character.";
+
     private JdbcTemplate jdbcTemplate;
     private PasswordEncoder passwordEncoder;
     private AuthMailService authMailService;
@@ -133,8 +136,16 @@ class AuthServiceForgotPasswordOtpTest {
     @Test
     void resetPasswordWithOtp_shouldRejectMismatchPassword() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "secret123", "secret124"));
+                authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "Secret123!", "Secret124!"));
         assertEquals(400, ex.getStatusCode().value());
+    }
+
+    @Test
+    void resetPasswordWithOtp_shouldRejectWeakPasswordBeforeOtpLookup() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "lowercase1!", "lowercase1!"));
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals(PASSWORD_POLICY_MESSAGE, ex.getReason());
     }
 
     @Test
@@ -145,7 +156,7 @@ class AuthServiceForgotPasswordOtpTest {
                 .thenReturn(new PasswordResetTokenRecord(1, "$hash", Instant.now().minusSeconds(1), Instant.now().minusSeconds(60)));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "secret123", "secret123"));
+                authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "Secret123!", "Secret123!"));
         assertEquals(400, ex.getStatusCode().value());
     }
 
@@ -158,7 +169,7 @@ class AuthServiceForgotPasswordOtpTest {
         when(passwordEncoder.matches(eq("123456"), anyString())).thenReturn(true);
         when(passwordEncoder.encode(anyString())).thenReturn("$newHash");
 
-        Map<String, Object> result = authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "mậtkhẩuđẹp123", "mậtkhẩuđẹp123");
+        Map<String, Object> result = authService.resetPasswordWithOtp("customer@gymcore.local", "123456", "Strong123!", "Strong123!");
         assertEquals(true, result.get("reset"));
 
         verify(jdbcTemplate).update(contains("UPDATE dbo.Users SET PasswordHash"), eq("$newHash"), eq(1));
@@ -173,7 +184,7 @@ class AuthServiceForgotPasswordOtpTest {
         when(passwordEncoder.matches(eq("oldpass"), anyString())).thenReturn(false);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.changePassword("Bearer " + token, "oldpass", "newpass123", "newpass123"));
+                authService.changePassword("Bearer " + token, "oldpass", "Newpass123!", "Newpass123!"));
         assertEquals(401, ex.getStatusCode().value());
     }
 
@@ -185,11 +196,19 @@ class AuthServiceForgotPasswordOtpTest {
         when(passwordEncoder.matches(eq("oldpass"), anyString())).thenReturn(true);
         when(passwordEncoder.encode(anyString())).thenReturn("$newHash");
 
-        Map<String, Object> result = authService.changePassword("Bearer " + token, "oldpass", "newpass123", "newpass123");
+        Map<String, Object> result = authService.changePassword("Bearer " + token, "oldpass", "Newpass123!", "Newpass123!");
         assertEquals(true, result.get("changed"));
 
         verify(jdbcTemplate).update(contains("UPDATE dbo.Users SET PasswordHash"), eq("$newHash"), eq(1));
         verify(jdbcTemplate).update(contains("UPDATE dbo.UserRefreshTokens"), eq(1));
+    }
+
+    @Test
+    void changePassword_shouldRejectWeakPasswordBeforeTokenValidation() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                authService.changePassword(null, "oldpass", "lowercase1!", "lowercase1!"));
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals(PASSWORD_POLICY_MESSAGE, ex.getReason());
     }
 
     @Test

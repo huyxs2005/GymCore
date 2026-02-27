@@ -26,6 +26,8 @@ public class AdminService {
         Map<String, Object> safePayload = payload == null ? Map.of() : castToMap(payload);
         return switch (action) {
             case "get-product-revenue" -> getProductRevenue(safePayload);
+            case "get-coach-feedback" -> getCoachFeedback();
+            case "get-coach-students" -> getCoachStudents();
             default -> {
                 Map<String, Object> response = new LinkedHashMap<>();
                 response.put("module", "admin");
@@ -62,94 +64,6 @@ public class AdminService {
                 WHERE pay.Status = 'SUCCESS'
                 """);
 
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
-        new StringBuilder();
-
         if (from != null) {
             sql.append(" AND CAST(pay.PaidAt AS DATE) >= ? ");
         }
@@ -160,13 +74,13 @@ public class AdminService {
 
         Object[] params;
         if (from != null && to != null) {
-            params = new Object[]{from, to};
+            params = new Object[] { from, to };
         } else if (from != null) {
-            params = new Object[]{from};
+            params = new Object[] { from };
         } else if (to != null) {
-            params = new Object[]{to};
+            params = new Object[] { to };
         } else {
-            params = new Object[]{};
+            params = new Object[] {};
         }
 
         List<Map<String, Object>> orders = jdbcTemplate.query(
@@ -199,6 +113,52 @@ public class AdminService {
         response.put("summary", summary);
         response.put("orders", orders);
         return response;
+    }
+
+    private Map<String, Object> getCoachFeedback() {
+        List<Map<String, Object>> items = jdbcTemplate.query(
+                """
+                        SELECT c.CoachID, u.FullName,
+                               COALESCE(AVG(CAST(cf.Rating AS FLOAT)), 0) AS AverageRating,
+                               COUNT(cf.CoachFeedbackID) AS ReviewCount
+                        FROM dbo.Coaches c
+                        JOIN dbo.Users u ON u.UserID = c.CoachID
+                        LEFT JOIN dbo.CoachFeedback cf ON cf.CoachID = c.CoachID
+                        GROUP BY c.CoachID, u.FullName
+                        ORDER BY AverageRating DESC, ReviewCount DESC, u.FullName
+                        """,
+                (rs, i) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("coachId", rs.getInt("CoachID"));
+                    m.put("coachName", rs.getString("FullName"));
+                    m.put("averageRating", Math.round(rs.getDouble("AverageRating") * 100.0) / 100.0);
+                    m.put("reviewCount", rs.getInt("ReviewCount"));
+                    return m;
+                });
+        return Map.of("items", items);
+    }
+
+    private Map<String, Object> getCoachStudents() {
+        List<Map<String, Object>> items = jdbcTemplate.query(
+                """
+                        SELECT c.CoachID, u.FullName,
+                               COUNT(DISTINCT s.CustomerID) AS StudentCount
+                        FROM dbo.Coaches c
+                        JOIN dbo.Users u ON u.UserID = c.CoachID
+                        LEFT JOIN dbo.PTSessions s
+                               ON s.CoachID = c.CoachID
+                              AND s.Status IN ('SCHEDULED','COMPLETED')
+                        GROUP BY c.CoachID, u.FullName
+                        ORDER BY StudentCount DESC, u.FullName
+                        """,
+                (rs, i) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("coachId", rs.getInt("CoachID"));
+                    m.put("coachName", rs.getString("FullName"));
+                    m.put("studentCount", rs.getInt("StudentCount"));
+                    return m;
+                });
+        return Map.of("items", items);
     }
 
     private Map<String, Object> mapPaidOrder(ResultSet rs) throws SQLException {

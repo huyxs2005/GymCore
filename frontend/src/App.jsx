@@ -1,7 +1,12 @@
 import AppRouter from './routes/AppRouter'
+import AppShell from './components/frame/AppShell'
 
 function App() {
-  return <AppRouter />
+  return (
+    <AppShell>
+      <AppRouter />
+    </AppShell>
+  )
 }
 
 export default App

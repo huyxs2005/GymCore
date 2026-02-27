@@ -93,6 +93,14 @@ public class ProductSalesController {
                                 productSalesService.execute("customer-checkout", authorization, payload));
         }
 
+        @PostMapping("/orders/payment-return")
+        public ApiResponse<Map<String, Object>> confirmPaymentReturn(
+                        @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+                        @RequestBody(required = false) Map<String, Object> payload) {
+                return ApiResponse.ok("Payment return processed",
+                                productSalesService.execute("customer-confirm-payment-return", authorization, payload));
+        }
+
         @GetMapping("/orders/my-orders")
         public ApiResponse<Map<String, Object>> getMyOrders(
                         @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {

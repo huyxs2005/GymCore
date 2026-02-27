@@ -1,132 +1,151 @@
+1) GymCore scope
 
-1) (GymCore scope)
-A. Account & Authentication
+A. Account and Authentication
 Guest
-•	Register
-•	Login (Email/Password)
-•	Login via Google
+- Register
+- Login (Email/Password)
+- Login via Google
+
 Authenticated User (Admin/Coach/Receptionist/Customer)
-•	Logout
-•	Forgot Password
-•	Change Password 
-•	View Profile
-•	Edit Profile
+- Logout
+- Forgot Password
+- Change Password
+- View Profile
+- Edit Profile
+
 ________________________________________
-B. Customer & User Management
+B. Customer and User Management
 Receptionist
-•	Search Customer
-•	View Customer’s Membership Plan
+- Search Customer
+- View Customer membership plan
+
 Admin
-•	Create Staff Account (Admin/Coach/Receptionist)
-•	Lock Account
-•	Unlock Account
+- Create Staff Account (Admin/Coach/Receptionist)
+- Lock Account
+- Unlock Account
+
 ________________________________________
-C. Membership & Payment (PayOS redirect)
+C. Membership and Payment (PayOS redirect)
 Customer
-•	View Membership Plan List
-•	View Membership Plan Detail
-•	Purchase Membership Plan (PayOS)
-•	View Current Membership Status
+- View Membership Plan List
+- View Membership Plan Detail
+- Purchase Membership Plan (PayOS redirect)
+- View Current Membership Status
+
 Admin
-•	Create Membership Plan
-•	Update Membership Plan
+- Create Membership Plan
+- Update Membership Plan
+
 Business rules
-•	3 types: Gym Only, Day Pass (unlimited check-ins that day), Gym + Coach
-•	Only ONE ACTIVE membership at a time
-•	Renew: extend current membership from its EndDate (no downtime, PT keeps going)
-•	Upgrade: apply immediately (old ends today, new starts today), full price
-•	Day pass is active until midnight (StartDate = EndDate)
+- 3 types: Gym Only, Day Pass (unlimited check-ins that day), Gym + Coach
+- Only ONE ACTIVE membership at a time
+- Renew: extend current membership from its EndDate (no downtime, PT keeps going)
+- Upgrade: apply immediately (old ends today, new starts today), full price
+- Day pass is active until midnight (StartDate = EndDate)
+- Payment method is tracked on order/payment records for audit; current checkout channel is PayOS redirect.
+- Payment success must not force queued memberships to ACTIVE if another ACTIVE membership already exists.
+
 ________________________________________
-D. Check-in & Personal Health
+D. Check-in and Personal Health
 Customer
-•	Show Check-in QR Code
-•	View Check-in History
-•	Enter Height/Weight (system calculates BMI) 
-•	View Personal Health (current height/weight/BMI stays until updated + history)
-•	View Coach Notes
+- Show Check-in QR Code
+- View Check-in History
+- Enter Height/Weight (system calculates BMI)
+- View Personal Health (current height/weight/BMI stays until updated + history)
+- View Coach Notes
+
 Receptionist
-•	Scan Check-in QR Code
-•	Check Membership Validity
+- Scan Check-in QR Code
+- Check Membership Validity
+
 ________________________________________
-E. Coach Booking & Training Support
+E. Coach Booking and Training Support
 Customer
-•	Set Desired PT Schedule (weekly recurring day+slot)
-•	Match Coach (full match list + partial match list)
-•	View Coach List
-•	View Coach Details
-•	View Coach Schedule
-•	Request Booking Coach (recurring)
-•	View PT Schedule
-•	Cancel / Reschedule Coach Session
-•	Feedback Coach (rating + comment)
+- Set Desired PT Schedule (weekly recurring day+slot)
+- Match Coach (full match list + partial match list)
+- View Coach List
+- View Coach Details
+- View Coach Schedule
+- Request Booking Coach (recurring)
+- View PT Schedule
+- Cancel / Reschedule Coach Session
+- Feedback Coach (rating + comment)
+
 Coach
-•	Update Available Slots (weekly availability)
-•	View Coach Schedule
-•	View Customer List
-•	View Customer Profile
-•	View Training History
-•	Update Training Progress
-•	Update Notes
-•	View Customer Feedback
-•	View Average Rating
+- Update Available Slots (weekly availability)
+- View Coach Schedule
+- View Customer List
+- View Customer Profile
+- View Training History
+- Update Training Progress
+- Update Notes
+- View Customer Feedback
+- View Average Rating
+
 Admin
-•	View Coach’s Students
-•	View Customer Feedback
+- View Coach Students
+- View Customer Feedback
+
 ________________________________________
-F. Products Sales & Payment
+F. Product Sales and Payment
 Customer
-•	View Product List
-•	View Product Detail
-•	Add to Cart
-•	Update Cart (qty/remove)
-•	Checkout Order (PayOS)
-•	View Purchase History
-•	Write Product Review (only if purchased)
+- View Product List
+- View Product Detail
+- Add to Cart
+- Update Cart (qty/remove)
+- Checkout Order on website (PayOS redirect)
+- Pick up purchased products in person at the gym/front desk (no shipping delivery)
+- View Purchase History
+- Write Product Review (only if purchased)
+
 Admin
-•	Add Product
-•	Update Product
-•	View Product Reviews
+- Add Product
+- Update Product
+- View Product Reviews
+
+Product order rules
+- Product purchase is online checkout + in-store pickup only.
+- Shipping/delivery flow is out of scope.
+
 ________________________________________
 G. Promotions, Coupons, Notifications, Revenue
 Customer
-•	View Promotion
-•	Save Coupon Code (Claim to wallet)
-•	Apply Saved Coupon at checkout (Order OR Membership)
-•	View Notifications (badge count)
-Admin
-•	Create Coupon Code
-•	Update Coupon Code
-•	Create Promotion Post
-•	Update Promotion Post
-•	View Revenue Report
-•	Export reports to PDF (backend feature)
-Coupon rule
-•	Must claim first, then apply at payment
-•	One-time per customer per coupon (one claim, one use)
-Notifications rule
-•	Membership expiry countdown notifications: 7 → 1 days left (daily job)
-•	If membership expires and not renewed: cancel PT schedules (daily job) + notify
-________________________________________
-H. Workout, Food, Meal Info Pages + AI Assistant
-Customer
-•	View Workout Categories
-•	View Workout Detail
-•	View Food Categories
-•	View Food Detail
-•	View Meal Categories
-•	View Meal Detail
-•	Set Fitness Goals (multi-select)
-•	Set Allergies (multi-select)
-Admin
-•	CRUD Fitness Goals
-•	CRUD Meal Categories
-•	CRUD Meals
-•	CRUD Allergens
-•	Map Goals ↔ Workouts/Foods/Meals
-•	Map Allergens ↔ Foods/Meals
-AI Assistant
-•	Recommend workouts + foods + meals based on saved goals
-•	Exclude foods/meals that match customer allergies (strict block)
-•	Show which goal(s) each recommendation fits
-•	Assist PT booking using the same matching rules
+- View Promotion
+- Save Coupon Code (claim to wallet)
+- Apply Saved Coupon at checkout (Order OR Membership)
+- View Notifications (badge count)
 
+Admin
+- Create Coupon Code (discount and/or bonus duration days)
+- Update Coupon Code (discount and/or bonus duration days)
+- Create Promotion Post
+- Update Promotion Post
+- View Revenue Report
+- Export reports to PDF (backend feature)
+
+Coupon rules
+- Must claim first, then apply at payment
+- One-time per customer per coupon (one claim, one use)
+- Coupon can provide discount amount/percent and can also add bonus duration days for memberships.
+
+Notification rules
+- Membership expiry countdown notifications: 7 -> 1 days left (daily job)
+- If membership expires and not renewed: cancel PT schedules (daily job) + notify
+
+________________________________________
+H. Workout and Food Info Pages plus AI Assistant
+Customer
+- View Workout Categories
+- View Workout Detail
+- View Food Categories
+- View Food Detail
+- Set Fitness Goals (multi-select)
+
+Admin
+- CRUD Fitness Goals
+- Map Goals <-> Workouts/Foods
+
+AI Assistant
+- Recommend workouts + foods based on saved goals
+- Show which goal(s) each recommendation fits
+- Assist PT booking using the same matching rules

@@ -51,6 +51,8 @@ public class ProductSalesService {
                 customerDeleteCartItem(authorizationHeader, safePayload);
             case "customer-checkout" ->
                 customerCheckout(authorizationHeader, safePayload);
+            case "customer-confirm-payment-return" ->
+                customerConfirmPaymentReturn(authorizationHeader, safePayload);
             case "customer-get-my-orders" ->
                 customerGetMyOrders(authorizationHeader);
 
@@ -155,6 +157,11 @@ public class ProductSalesService {
         Map<String, Object> body = (Map<String, Object>) payload.getOrDefault("body", Map.of());
         int rating = requireRating(body.get("rating"));
         String comment = asNullableString(body.get("comment"));
+
+        if (!customerHasPaidOrderForProduct(user.userId(), productId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Review blocked: customer must have a PAID order for this product.");
+        }
 
         String sql = """
                 INSERT INTO dbo.ProductReviews (ProductID, CustomerID, Rating, Comment)
@@ -291,11 +298,8 @@ public class ProductSalesService {
         int customerId = user.userId();
         int cartId = ensureCartForCustomer(customerId);
 
-        String fullName = asNullableString(payload.get("fullName"));
-        String phone = asNullableString(payload.get("phone"));
-        String email = asNullableString(payload.get("email"));
-        String address = asNullableString(payload.get("address"));
-        String paymentMethod = asNullableString(payload.get("paymentMethod"));
+        CheckoutContact contact = loadCheckoutContact(customerId);
+        String paymentMethod = normalizePaymentMethod(payload.get("paymentMethod"));
 
         String itemsSql = """
                 SELECT ci.ProductID,
@@ -326,10 +330,47 @@ public class ProductSalesService {
         }
 
         BigDecimal discount = BigDecimal.ZERO;
+        Integer claimId = null;
+
+        String promoCode = asNullableString(payload.get("promoCode"));
+        if (promoCode != null && !promoCode.isBlank()) {
+            List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
+                    SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount, p.BonusDurationDays
+                    FROM dbo.UserPromotionClaims c
+                    JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                    WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
+                    AND p.IsActive = 1
+                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
+                    """, customerId, promoCode);
+
+            if (claims.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired promo code.");
+            }
+
+            Map<String, Object> claim = claims.get(0);
+            claimId = (Integer) claim.get("ClaimID");
+            BigDecimal pct = optionalDecimal(claim.get("DiscountPercent"), "Invalid percent");
+            BigDecimal amt = optionalDecimal(claim.get("DiscountAmount"), "Invalid amount");
+            Integer bonusDurationDays = tryParsePositiveInt(claim.get("BonusDurationDays"));
+            if (bonusDurationDays != null && bonusDurationDays > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This coupon applies to membership purchases only.");
+            }
+
+            if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
+                discount = subtotal.multiply(pct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+            } else if (amt != null) {
+                discount = amt;
+            }
+
+            if (discount.compareTo(subtotal) > 0) {
+                discount = subtotal;
+            }
+        }
+
         BigDecimal total = subtotal.subtract(discount);
 
-        // Create order with shipping info
-        int orderId = insertOrder(customerId, subtotal, discount, total, fullName, phone, address, paymentMethod);
+        int orderId = insertOrder(customerId, claimId, subtotal, discount, total, paymentMethod);
 
         // Upsert order items to match current cart
         jdbcTemplate.update("DELETE FROM dbo.OrderItems WHERE OrderID = ?", orderId);
@@ -341,21 +382,32 @@ public class ProductSalesService {
         }
 
         // Create payment row and call PayOS
-        int paymentId = insertPaymentForOrder(orderId, subtotal, discount, total);
+        int paymentId = insertPaymentForOrder(orderId, claimId, subtotal, discount, total);
 
         List<PayOsService.PayOsItem> payOsItems = lines.stream()
                 .map(l -> new PayOsService.PayOsItem(l.name(), l.quantity(), l.price().intValue(), "serving", 0))
                 .toList();
 
-        PayOsService.PayOsLink link = payOsService.createPaymentLink(
-                paymentId, total, "Order #" + orderId,
-                fullName, phone, email, address, payOsItems);
+        PayOsService.PayOsLink link;
+        try {
+            link = payOsService.createPaymentLink(
+                    paymentId, total, "Order #" + orderId,
+                    contact.buyerName(), contact.buyerPhone(), contact.buyerEmail(), "PICKUP_AT_STORE", payOsItems);
+        } catch (RuntimeException exception) {
+            markCheckoutCreationFailed(orderId, paymentId);
+            throw exception;
+        }
 
-        jdbcTemplate.update("""
+        int updatedRows = jdbcTemplate.update("""
                 UPDATE dbo.Payments
                 SET PayOS_PaymentLinkId = ?, PayOS_CheckoutUrl = ?, PayOS_Status = ?
-                WHERE PaymentID = ?
+                WHERE PaymentID = ? AND Status = 'PENDING'
                 """, link.paymentLinkId(), link.checkoutUrl(), link.status(), paymentId);
+        if (updatedRows == 0) {
+            markCheckoutCreationFailed(orderId, paymentId);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Payment state changed unexpectedly during checkout.");
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("orderId", orderId);
@@ -365,6 +417,7 @@ public class ProductSalesService {
         response.put("discount", discount);
         response.put("totalAmount", total);
         response.put("currency", "VND");
+        response.put("fulfillmentMethod", "PICKUP_AT_STORE");
         return response;
     }
 
@@ -395,6 +448,7 @@ public class ProductSalesService {
             order.put("totalAmount", rs.getBigDecimal("TotalAmount"));
             order.put("status", rs.getString("Status"));
             order.put("currency", "VND");
+            order.put("fulfillmentMethod", "PICKUP_AT_STORE");
 
             String itemsSql = """
                     SELECT oi.ProductID,
@@ -421,6 +475,71 @@ public class ProductSalesService {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("orders", orders);
         return response;
+    }
+
+    private Map<String, Object> customerConfirmPaymentReturn(String authorizationHeader, Map<String, Object> payload) {
+        UserInfo user = currentUserService.requireCustomer(authorizationHeader);
+        Map<String, Object> safePayload = payload == null ? Map.of() : payload;
+
+        String status = upperText(firstNonNull(
+                safePayload.get("status"),
+                safePayload.get("payosStatus"),
+                safePayload.get("paymentStatus")));
+        String code = upperText(safePayload.get("code"));
+        String cancel = upperText(safePayload.get("cancel"));
+        Object successRaw = safePayload.get("success");
+
+        if (!isSuccessReturnStatus(status, code, cancel, successRaw)) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("handled", false);
+            response.put("reason", "Ignored non-success return status.");
+            return response;
+        }
+
+        Integer paymentId = resolvePaymentIdFromReturnPayload(safePayload);
+        if (paymentId == null || paymentId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to resolve payment ID from PayOS return.");
+        }
+
+        Integer ownershipCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Payments p
+                JOIN dbo.Orders o ON o.OrderID = p.OrderID
+                WHERE p.PaymentID = ?
+                  AND o.CustomerID = ?
+                """, Integer.class, paymentId, user.userId());
+
+        if (ownershipCount == null || ownershipCount == 0) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Payment does not belong to current customer.");
+        }
+
+        try {
+            jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to confirm payment from return URL.", exception);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("handled", true);
+        response.put("paymentId", paymentId);
+        response.put("status", "SUCCESS");
+        return response;
+    }
+
+    private void markCheckoutCreationFailed(int orderId, int paymentId) {
+        jdbcTemplate.update("""
+                UPDATE dbo.Payments
+                SET Status = 'FAILED',
+                    PayOS_Status = COALESCE(PayOS_Status, 'FAILED')
+                WHERE PaymentID = ? AND Status = 'PENDING'
+                """, paymentId);
+        jdbcTemplate.update("""
+                UPDATE dbo.Orders
+                SET Status = 'CANCELLED',
+                    UpdatedAt = SYSDATETIME()
+                WHERE OrderID = ? AND Status = 'PENDING'
+                """, orderId);
     }
 
     // ADMIN
@@ -560,6 +679,9 @@ public class ProductSalesService {
     private record CartLine(int productId, String name, BigDecimal price, int quantity) {
     }
 
+    private record CheckoutContact(String buyerName, String buyerPhone, String buyerEmail) {
+    }
+
     private CartLine toCartLine(ResultSet rs) throws SQLException {
         return new CartLine(
                 rs.getInt("ProductID"),
@@ -609,23 +731,114 @@ public class ProductSalesService {
         }
     }
 
-    private int insertOrder(int customerId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,
-            String fullName, String phone, String address, String paymentMethod) {
+    private boolean customerHasPaidOrderForProduct(int customerId, int productId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Orders o
+                JOIN dbo.OrderItems oi ON oi.OrderID = o.OrderID
+                WHERE o.CustomerID = ?
+                  AND oi.ProductID = ?
+                  AND o.Status = 'PAID'
+                """, Integer.class, customerId, productId);
+        return count != null && count > 0;
+    }
+
+    private Integer resolvePaymentIdFromReturnPayload(Map<String, Object> payload) {
+        Object rawPaymentId = firstNonNull(payload.get("paymentId"), payload.get("orderCode"));
+        Integer parsed = tryParsePositiveInt(rawPaymentId);
+        if (parsed != null) {
+            return parsed;
+        }
+
+        String paymentLinkId = asNullableString(firstNonNull(
+                payload.get("paymentLinkId"),
+                payload.get("id"),
+                payload.get("checkoutId")));
+        if (paymentLinkId == null) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT TOP 1 PaymentID
+                    FROM dbo.Payments
+                    WHERE PayOS_PaymentLinkId = ?
+                    ORDER BY PaymentID DESC
+                    """, Integer.class, paymentLinkId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
+            return null;
+        }
+    }
+
+    private Integer tryParsePositiveInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int parsed;
+            if (value instanceof Number number) {
+                parsed = number.intValue();
+            } else {
+                parsed = Integer.parseInt(String.valueOf(value).trim());
+            }
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private Object firstNonNull(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private boolean isSuccessReturnStatus(String status, String code, String cancel, Object successRaw) {
+        if ("TRUE".equals(cancel) || "1".equals(cancel)) {
+            return false;
+        }
+        if ("PAID".equals(status) || "SUCCESS".equals(status) || "COMPLETED".equals(status)) {
+            return true;
+        }
+        if ("00".equals(code)) {
+            return true;
+        }
+        if (successRaw instanceof Boolean bool) {
+            return bool;
+        }
+        return "TRUE".equals(upperText(successRaw));
+    }
+
+    private String upperText(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return String.valueOf(value).trim().toUpperCase();
+    }
+
+    private int insertOrder(int customerId, Integer claimId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,
+            String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
-                    INSERT INTO dbo.Orders (CustomerID, Subtotal, DiscountApplied, TotalAmount, Status,
-                                         ShippingFullName, ShippingPhone, ShippingAddress, PaymentMethod)
-                    VALUES (?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
+                    INSERT INTO dbo.Orders (CustomerID, ClaimID, Subtotal, DiscountApplied, TotalAmount, Status, PaymentMethod)
+                    VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
                     """, new String[] { "OrderID" });
             ps.setInt(1, customerId);
-            ps.setBigDecimal(2, subtotal);
-            ps.setBigDecimal(3, discount);
-            ps.setBigDecimal(4, total);
-            ps.setString(5, fullName);
-            ps.setString(6, phone);
-            ps.setString(7, address);
-            ps.setString(8, paymentMethod);
+            if (claimId == null) {
+                ps.setNull(2, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(2, claimId);
+            }
+            ps.setBigDecimal(3, subtotal);
+            ps.setBigDecimal(4, discount);
+            ps.setBigDecimal(5, total);
+            ps.setString(6, paymentMethod);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -635,17 +848,23 @@ public class ProductSalesService {
         return key.intValue();
     }
 
-    private int insertPaymentForOrder(int orderId, BigDecimal originalAmount, BigDecimal discount, BigDecimal amount) {
+    private int insertPaymentForOrder(int orderId, Integer claimId, BigDecimal originalAmount, BigDecimal discount,
+            BigDecimal amount) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
-                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID)
-                    VALUES (?, ?, ?, 'PENDING', ?)
+                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID, ClaimID)
+                    VALUES (?, ?, ?, 'PENDING', ?, ?)
                     """, new String[] { "PaymentID" });
             ps.setBigDecimal(1, originalAmount);
             ps.setBigDecimal(2, discount);
             ps.setBigDecimal(3, amount);
             ps.setInt(4, orderId);
+            if (claimId == null) {
+                ps.setNull(5, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(5, claimId);
+            }
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -685,6 +904,13 @@ public class ProductSalesService {
         return decimal;
     }
 
+    private BigDecimal optionalDecimal(Object value, String message) {
+        if (value == null) {
+            return null;
+        }
+        return requireDecimal(value, message);
+    }
+
     private BigDecimal requireDecimal(Object value, String message) {
         if (value == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
@@ -708,6 +934,37 @@ public class ProductSalesService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         return text;
+    }
+
+    private CheckoutContact loadCheckoutContact(int customerId) {
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT FullName, Phone, Email
+                    FROM dbo.Users
+                    WHERE UserID = ?
+                    """, (rs, rowNum) -> {
+                String buyerName = asNullableString(rs.getString("FullName"));
+                String buyerPhone = asNullableString(rs.getString("Phone"));
+                String buyerEmail = asNullableString(rs.getString("Email"));
+                return new CheckoutContact(
+                        buyerName != null ? buyerName : "GymCore Customer",
+                        buyerPhone != null ? buyerPhone : "0000000000",
+                        buyerEmail != null ? buyerEmail : "customer@gymcore.local");
+            }, customerId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Customer account not found.");
+        }
+    }
+
+    private String normalizePaymentMethod(Object value) {
+        String paymentMethod = asNullableString(value);
+        if (paymentMethod == null) {
+            return "PAYOS";
+        }
+        if ("PAYOS".equalsIgnoreCase(paymentMethod)) {
+            return "PAYOS";
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PayOS payment method is supported.");
     }
 
     private String asNullableString(Object value) {

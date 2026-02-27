@@ -51,17 +51,24 @@ public class MembershipService {
 
         Object bodyRaw = payload.get("body");
         Map<String, Object> body = castToMap(bodyRaw);
+        Map<String, Object> data = castToMap(body.get("data"));
 
         // Verify HMAC signature using PayOS checksum key.
         payOsService.verifyWebhookSignature(headers, body);
 
-        Object paymentIdRaw = body.get("paymentId");
-        Object statusRaw = body.getOrDefault("status", body.getOrDefault("payosStatus", ""));
+        Object paymentIdRaw = firstNonNull(
+                body.get("paymentId"),
+                body.get("orderCode"),
+                data.get("paymentId"),
+                data.get("orderCode"),
+                body.get("paymentLinkId"),
+                body.get("id"),
+                data.get("paymentLinkId"),
+                data.get("id"));
+        String status = resolveStatus(body, data);
 
-        int paymentId = requirePositiveInt(paymentIdRaw, "paymentId is required.");
-        String status = statusRaw == null ? "" : String.valueOf(statusRaw).trim().toUpperCase();
-
-        if (!"PAID".equals(status) && !"SUCCESS".equals(status)) {
+        int paymentId = resolvePaymentId(paymentIdRaw);
+        if (!isSuccessfulStatus(status, body, data)) {
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("handled", false);
             response.put("reason", "Ignored non-success payment status: " + status);
@@ -69,6 +76,11 @@ public class MembershipService {
         }
 
         try {
+            jdbcTemplate.update("""
+                    UPDATE dbo.Payments
+                    SET PayOS_Status = ?
+                    WHERE PaymentID = ? AND Status = 'PENDING'
+                    """, normalizedSuccessStatus(status), paymentId);
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.", exception);
@@ -77,7 +89,7 @@ public class MembershipService {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("handled", true);
         response.put("paymentId", paymentId);
-        response.put("status", "SUCCESS");
+        response.put("status", normalizedSuccessStatus(status));
         return response;
     }
 
@@ -87,6 +99,68 @@ public class MembershipService {
             return (Map<String, Object>) map;
         }
         return Map.of();
+    }
+
+    private Object firstNonNull(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String resolveStatus(Map<String, Object> body, Map<String, Object> data) {
+        String status = upperText(body.get("status"));
+        if (!status.isBlank()) {
+            return status;
+        }
+        status = upperText(body.get("payosStatus"));
+        if (!status.isBlank()) {
+            return status;
+        }
+        status = upperText(data.get("status"));
+        if (!status.isBlank()) {
+            return status;
+        }
+        status = upperText(data.get("payosStatus"));
+        if (!status.isBlank()) {
+            return status;
+        }
+        status = upperText(data.get("paymentStatus"));
+        if (!status.isBlank()) {
+            return status;
+        }
+        status = upperText(body.get("code"));
+        if (!status.isBlank()) {
+            return status;
+        }
+        return upperText(data.get("code"));
+    }
+
+    private boolean isSuccessfulStatus(String status, Map<String, Object> body, Map<String, Object> data) {
+        if ("PAID".equals(status) || "SUCCESS".equals(status) || "COMPLETED".equals(status) || "00".equals(status)) {
+            return true;
+        }
+        Object successRaw = firstNonNull(body.get("success"), data.get("success"));
+        if (successRaw instanceof Boolean value) {
+            return value;
+        }
+        return "TRUE".equals(upperText(successRaw));
+    }
+
+    private String normalizedSuccessStatus(String status) {
+        return "00".equals(status) || status.isBlank() ? "SUCCESS" : status;
+    }
+
+    private String upperText(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return String.valueOf(value).trim().toUpperCase();
     }
 
     private int requirePositiveInt(Object value, String message) {
@@ -106,6 +180,51 @@ public class MembershipService {
             return result;
         } catch (NumberFormatException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+    }
+
+    private int resolvePaymentId(Object rawValue) {
+        Integer parsed = tryParsePositiveInt(rawValue);
+        if (parsed != null) {
+            return parsed;
+        }
+
+        String paymentLinkId = rawValue == null ? null : String.valueOf(rawValue).trim();
+        if (paymentLinkId == null || paymentLinkId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "paymentId/orderCode/paymentLinkId is required.");
+        }
+
+        try {
+            Integer paymentId = jdbcTemplate.queryForObject("""
+                    SELECT TOP 1 PaymentID
+                    FROM dbo.Payments
+                    WHERE PayOS_PaymentLinkId = ?
+                    ORDER BY PaymentID DESC
+                    """, Integer.class, paymentLinkId);
+            if (paymentId == null || paymentId <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to resolve payment ID.");
+            }
+            return paymentId;
+        } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unable to resolve payment ID from paymentLinkId.");
+        }
+    }
+
+    private Integer tryParsePositiveInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int result;
+            if (value instanceof Number number) {
+                result = number.intValue();
+            } else {
+                result = Integer.parseInt(String.valueOf(value).trim());
+            }
+            return result > 0 ? result : null;
+        } catch (NumberFormatException exception) {
+            return null;
         }
     }
 }

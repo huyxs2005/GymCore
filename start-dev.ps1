@@ -19,7 +19,7 @@ if (-not (Test-Path (Join-Path $frontendDir 'package.json'))) {
 $backendArgs = @(
     '-NoExit',
     '-ExecutionPolicy', 'Bypass',
-    '-Command', '.\mvnw.cmd spring-boot:run'
+    '-Command', '$env:JAVA_HOME=''C:\Program Files\Java\latest\jdk-25''; $env:Path=($env:JAVA_HOME + ''\bin;'' + $env:Path); .\mvnw.cmd --% -Dmaven.test.skip=true clean spring-boot:run'
 )
 
 $frontendArgs = @(

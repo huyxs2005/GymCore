@@ -10,11 +10,26 @@
        + membership expiry countdown notifications
        + expire memberships
        + cancel PT sessions if no ACTIVE membership
+Recommended run order:
+1) docs/GymCore.txt
+2) docs/alter.txt
+3) docs/InsertValues.txt
+4) docs/InsertTestingValues.txt (optional)
 ========================================================= */
 
 CREATE DATABASE GymCore;
 GO
 USE GymCore;
+GO
+
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
 GO
 
 /* =========================
@@ -36,6 +51,22 @@ CREATE TABLE dbo.Users (
     FullName NVARCHAR(100) NOT NULL,
     Email NVARCHAR(100) NOT NULL UNIQUE,
     Phone NVARCHAR(20) NULL,
+    -- Normalize VN phone for uniqueness checks:
+    -- +84905675437 and 0905675437 are treated as the same number.
+    PhoneNormalized AS (CONVERT(NVARCHAR(20),
+        CASE
+            WHEN Phone IS NULL THEN NULL
+            ELSE
+                CASE
+                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N'') = N'' THEN NULL
+                    WHEN LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 3) = N'840'
+                        THEN N'0' + SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 4, 50)
+                    WHEN LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 2) = N'84'
+                        THEN N'0' + SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N''), 3, 50)
+                    ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Phone)), N' ', N''), N'-', N''), N'.', N''), N'(', N''), N')', N''), N'+', N'')
+                END
+        END
+    )) PERSISTED,
 
     -- Local login: store HASHED password (bcrypt/argon2 from backend)
     PasswordHash NVARCHAR(255) NULL,
@@ -62,8 +93,15 @@ CREATE TABLE dbo.Users (
 
     CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleID) REFERENCES dbo.Roles(RoleID),
     CONSTRAINT UQ_Users_QrCodeToken UNIQUE (QrCodeToken),
-    CONSTRAINT CK_Users_AvatarSource CHECK (AvatarSource IS NULL OR AvatarSource IN ('GOOGLE','CUSTOM'))
+    CONSTRAINT CK_Users_AvatarSource CHECK (AvatarSource IS NULL OR AvatarSource IN ('GOOGLE','CUSTOM')),
+    CONSTRAINT CK_Users_Phone_NotBlank CHECK (Phone IS NULL OR LTRIM(RTRIM(Phone)) <> N''),
+    CONSTRAINT CK_Users_Phone_HasDigit CHECK (Phone IS NULL OR Phone LIKE N'%[0-9]%')
 );
+GO
+
+CREATE UNIQUE INDEX UX_Users_PhoneNormalized
+ON dbo.Users(PhoneNormalized)
+WHERE Phone IS NOT NULL;
 GO
 
 CREATE TABLE dbo.UserAuthProviders (
@@ -231,10 +269,9 @@ CREATE TABLE dbo.FoodCategoryMap (
 GO
 
 /* =========================
-   AI GOALS + MEALS + ALLERGIES (structured filtering)
+   AI GOALS (structured filtering)
    - Customer can select multiple active goals
-   - AI can recommend workouts + foods + meals by goal
-   - Allergies are blocked via structured tags (do NOT parse recipe text)
+   - AI can recommend workouts + foods by goal
 ========================= */
 
 CREATE TABLE dbo.FitnessGoals (
@@ -262,47 +299,6 @@ GO
 CREATE INDEX IX_CustomerGoals_Customer_Active ON dbo.CustomerGoals(CustomerID, IsActive);
 GO
 
-CREATE TABLE dbo.MealCategories (
-    MealCategoryID INT IDENTITY(1,1) PRIMARY KEY,
-    CategoryName NVARCHAR(100) NOT NULL UNIQUE,
-    Description NVARCHAR(300) NULL,
-    IsActive BIT NOT NULL CONSTRAINT DF_MealCategories_IsActive DEFAULT 1
-);
-GO
-
-CREATE TABLE dbo.Meals (
-    MealID INT IDENTITY(1,1) PRIMARY KEY,
-    MealName NVARCHAR(150) NOT NULL,
-    ImageUrl NVARCHAR(500) NULL,
-
-    Description NVARCHAR(500) NULL,
-    Recipe NVARCHAR(MAX) NOT NULL,
-
-    Calories INT NOT NULL,
-    Protein DECIMAL(6,2) NOT NULL CONSTRAINT DF_Meals_Protein DEFAULT 0,
-    Carbs DECIMAL(6,2) NOT NULL CONSTRAINT DF_Meals_Carbs DEFAULT 0,
-    Fat DECIMAL(6,2) NOT NULL CONSTRAINT DF_Meals_Fat DEFAULT 0,
-
-    IsActive BIT NOT NULL CONSTRAINT DF_Meals_IsActive DEFAULT 1,
-    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Meals_CreatedAt DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    UpdatedBy INT NULL,
-
-    CONSTRAINT FK_Meals_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
-    CONSTRAINT CK_Meals_Calories CHECK (Calories > 0),
-    CONSTRAINT CK_Meals_Macros CHECK (Protein >= 0 AND Carbs >= 0 AND Fat >= 0)
-);
-GO
-
-CREATE TABLE dbo.MealCategoryMap (
-    MealID INT NOT NULL,
-    MealCategoryID INT NOT NULL,
-    PRIMARY KEY (MealID, MealCategoryID),
-    CONSTRAINT FK_MealCategoryMap_Meals FOREIGN KEY (MealID) REFERENCES dbo.Meals(MealID),
-    CONSTRAINT FK_MealCategoryMap_Categories FOREIGN KEY (MealCategoryID) REFERENCES dbo.MealCategories(MealCategoryID)
-);
-GO
-
 CREATE TABLE dbo.FoodGoalMap (
     FoodID INT NOT NULL,
     GoalID INT NOT NULL,
@@ -312,67 +308,12 @@ CREATE TABLE dbo.FoodGoalMap (
 );
 GO
 
-CREATE TABLE dbo.MealGoalMap (
-    MealID INT NOT NULL,
-    GoalID INT NOT NULL,
-    PRIMARY KEY (MealID, GoalID),
-    CONSTRAINT FK_MealGoalMap_Meals FOREIGN KEY (MealID) REFERENCES dbo.Meals(MealID),
-    CONSTRAINT FK_MealGoalMap_Goals FOREIGN KEY (GoalID) REFERENCES dbo.FitnessGoals(GoalID)
-);
-GO
-
 CREATE TABLE dbo.WorkoutGoalMap (
     WorkoutID INT NOT NULL,
     GoalID INT NOT NULL,
     PRIMARY KEY (WorkoutID, GoalID),
     CONSTRAINT FK_WorkoutGoalMap_Workouts FOREIGN KEY (WorkoutID) REFERENCES dbo.Workouts(WorkoutID),
     CONSTRAINT FK_WorkoutGoalMap_Goals FOREIGN KEY (GoalID) REFERENCES dbo.FitnessGoals(GoalID)
-);
-GO
-
-CREATE TABLE dbo.Allergens (
-    AllergenID INT IDENTITY(1,1) PRIMARY KEY,
-    AllergenCode NVARCHAR(50) NOT NULL UNIQUE, -- e.g. MILK, EGG, PEANUT
-    AllergenName NVARCHAR(100) NOT NULL,
-    Description NVARCHAR(300) NULL,
-    IsActive BIT NOT NULL CONSTRAINT DF_Allergens_IsActive DEFAULT 1,
-    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Allergens_CreatedAt DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    UpdatedBy INT NULL,
-    CONSTRAINT FK_Allergens_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID)
-);
-GO
-
-CREATE TABLE dbo.CustomerAllergies (
-    CustomerID INT NOT NULL,
-    AllergenID INT NOT NULL,
-    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_CustomerAllergies_CreatedAt DEFAULT SYSDATETIME(),
-    IsActive BIT NOT NULL CONSTRAINT DF_CustomerAllergies_IsActive DEFAULT 1,
-
-    PRIMARY KEY (CustomerID, AllergenID),
-    CONSTRAINT FK_CustomerAllergies_Customers FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
-    CONSTRAINT FK_CustomerAllergies_Allergens FOREIGN KEY (AllergenID) REFERENCES dbo.Allergens(AllergenID)
-);
-GO
-
-CREATE INDEX IX_CustomerAllergies_Customer_Active ON dbo.CustomerAllergies(CustomerID, IsActive);
-GO
-
-CREATE TABLE dbo.FoodAllergenMap (
-    FoodID INT NOT NULL,
-    AllergenID INT NOT NULL,
-    PRIMARY KEY (FoodID, AllergenID),
-    CONSTRAINT FK_FoodAllergenMap_Foods FOREIGN KEY (FoodID) REFERENCES dbo.Foods(FoodID),
-    CONSTRAINT FK_FoodAllergenMap_Allergens FOREIGN KEY (AllergenID) REFERENCES dbo.Allergens(AllergenID)
-);
-GO
-
-CREATE TABLE dbo.MealAllergenMap (
-    MealID INT NOT NULL,
-    AllergenID INT NOT NULL,
-    PRIMARY KEY (MealID, AllergenID),
-    CONSTRAINT FK_MealAllergenMap_Meals FOREIGN KEY (MealID) REFERENCES dbo.Meals(MealID),
-    CONSTRAINT FK_MealAllergenMap_Allergens FOREIGN KEY (AllergenID) REFERENCES dbo.Allergens(AllergenID)
 );
 GO
 
@@ -421,7 +362,7 @@ CREATE TABLE dbo.CustomerMemberships (
     CONSTRAINT FK_CustomerMemberships_Plans FOREIGN KEY (MembershipPlanID) REFERENCES dbo.MembershipPlans(MembershipPlanID),
     CONSTRAINT FK_CustomerMemberships_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
 
-    CONSTRAINT CK_CustomerMemberships_Status CHECK (Status IN ('PENDING','ACTIVE','EXPIRED','CANCELLED')),
+    CONSTRAINT CK_CustomerMemberships_Status CHECK (Status IN ('PENDING','SCHEDULED','ACTIVE','EXPIRED','CANCELLED')),
     CONSTRAINT CK_CustomerMemberships_Dates CHECK (EndDate >= StartDate)
 );
 GO
@@ -430,6 +371,12 @@ GO
 CREATE UNIQUE INDEX UX_CustomerMemberships_OneActive
 ON dbo.CustomerMemberships(CustomerID)
 WHERE Status = 'ACTIVE';
+GO
+
+-- Only ONE queued (SCHEDULED) membership per customer
+CREATE UNIQUE INDEX UX_CustomerMemberships_OneScheduled
+ON dbo.CustomerMemberships(CustomerID)
+WHERE Status = 'SCHEDULED';
 GO
 
 /* =========================
@@ -441,6 +388,7 @@ CREATE TABLE dbo.Promotions (
     Description NVARCHAR(200) NULL,
     DiscountPercent DECIMAL(5,2) NULL,
     DiscountAmount DECIMAL(12,2) NULL,
+    BonusDurationDays INT NOT NULL CONSTRAINT DF_Promotions_BonusDurationDays DEFAULT 0,
     ValidFrom DATETIME2 NOT NULL,
     ValidTo DATETIME2 NOT NULL,
     IsActive BIT NOT NULL CONSTRAINT DF_Promotions_IsActive DEFAULT 1,
@@ -450,7 +398,8 @@ CREATE TABLE dbo.Promotions (
         NOT (DiscountPercent IS NOT NULL AND DiscountAmount IS NOT NULL)
     ),
     CONSTRAINT CK_Promotions_Percent CHECK (DiscountPercent IS NULL OR (DiscountPercent >= 0 AND DiscountPercent <= 100)),
-    CONSTRAINT CK_Promotions_Amount CHECK (DiscountAmount IS NULL OR DiscountAmount >= 0)
+    CONSTRAINT CK_Promotions_Amount CHECK (DiscountAmount IS NULL OR DiscountAmount >= 0),
+    CONSTRAINT CK_Promotions_BonusDurationDays CHECK (BonusDurationDays >= 0)
 );
 GO
 
@@ -723,6 +672,7 @@ CREATE TABLE dbo.PTRecurringRequests (
     EndDate DATE NOT NULL,
 
     Status NVARCHAR(20) NOT NULL CONSTRAINT DF_PTRecurringRequests_Status DEFAULT 'PENDING',
+    DenyReason NVARCHAR(500) NULL,
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PTRecurringRequests_CreatedAt DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 NULL,
 
@@ -1088,44 +1038,6 @@ BEGIN
 END;
 GO
 
-/* Webhook helper: when payment is confirmed by PayOS, mark payment as SUCCESS and update target entity.
-   - For product orders: set Orders.Status = 'PAID'
-   - For memberships: set CustomerMemberships.Status = 'ACTIVE'
-   The backend application is responsible for invoking this logic safely after verifying PayOS webhook signature. */
-CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
-    @PaymentID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    UPDATE dbo.Payments
-    SET Status = 'SUCCESS',
-        PaidAt = COALESCE(PaidAt, SYSDATETIME()),
-        PayOS_Status = COALESCE(PayOS_Status, 'SUCCESS')
-    WHERE PaymentID = @PaymentID
-      AND Status = 'PENDING';
-
-    IF @@ROWCOUNT = 0
-        RETURN;
-
-    UPDATE dbo.Orders
-    SET Status = 'PAID',
-        UpdatedAt = SYSDATETIME()
-    WHERE OrderID = (
-        SELECT OrderID FROM dbo.Payments WHERE PaymentID = @PaymentID
-    )
-      AND Status = 'PENDING';
-
-    UPDATE dbo.CustomerMemberships
-    SET Status = 'ACTIVE',
-        UpdatedAt = SYSDATETIME()
-    WHERE CustomerMembershipID = (
-        SELECT CustomerMembershipID FROM dbo.Payments WHERE PaymentID = @PaymentID
-    )
-      AND Status = 'PENDING';
-END;
-GO
-
 /* =========================
    REVENUE VIEWS
 ========================= */
@@ -1154,6 +1066,7 @@ GO
 /* =========================
    DAILY JOB STORED PROCEDURE
    - create membership expiry countdown notifications (7..1 days left)
+   - activate due SCHEDULED memberships (StartDate <= today)
    - expire memberships (EndDate < today)
    - cancel PT sessions if customer has NO ACTIVE membership after expiry
 ========================= */
@@ -1195,7 +1108,26 @@ BEGIN
     SET Status = 'EXPIRED', UpdatedAt = SYSDATETIME()
     WHERE Status = 'ACTIVE' AND EndDate < @today;
 
-    /* 3) Cancel PT sessions ONLY for customers who now have NO ACTIVE membership */
+    /* 3) Activate due SCHEDULED memberships when customer has no ACTIVE membership */
+    ;WITH DueScheduled AS (
+        SELECT m.CustomerMembershipID
+        FROM dbo.CustomerMemberships m
+        WHERE m.Status = 'SCHEDULED'
+          AND m.StartDate <= @today
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.CustomerMemberships a
+              WHERE a.CustomerID = m.CustomerID
+                AND a.Status = 'ACTIVE'
+          )
+    )
+    UPDATE m
+    SET m.Status = 'ACTIVE',
+        m.UpdatedAt = SYSDATETIME()
+    FROM dbo.CustomerMemberships m
+    JOIN DueScheduled d ON d.CustomerMembershipID = m.CustomerMembershipID;
+
+    /* 4) Cancel PT sessions ONLY for customers who now have NO ACTIVE membership */
     ;WITH NoActive AS (
         SELECT DISTINCT c.CustomerID
         FROM dbo.Customers c
@@ -1213,7 +1145,7 @@ BEGIN
     WHERE s.Status = 'SCHEDULED'
       AND s.SessionDate >= @today;
 
-    /* 4) Notify customers whose PT got cancelled */
+    /* 5) Notify customers whose PT got cancelled */
     INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
     SELECT DISTINCT
         s.CustomerID,
@@ -1243,6 +1175,5 @@ CREATE INDEX IX_Orders_Customer_Date ON dbo.Orders(CustomerID, OrderDate);
 CREATE INDEX IX_Payments_Status_Time ON dbo.Payments(Status, CreatedAt);
 CREATE INDEX IX_CheckIns_Customer_Time ON dbo.CheckIns(CustomerID, CheckInTime);
 CREATE INDEX IX_FoodGoalMap_Goal ON dbo.FoodGoalMap(GoalID);
-CREATE INDEX IX_MealGoalMap_Goal ON dbo.MealGoalMap(GoalID);
 CREATE INDEX IX_WorkoutGoalMap_Goal ON dbo.WorkoutGoalMap(GoalID);
 GO

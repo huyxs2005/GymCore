@@ -58,6 +58,18 @@ public class CurrentUserService {
         return loadUserInfo(userId);
     }
 
+    public java.util.Optional<UserInfo> findUser(String authorizationHeader) {
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        try {
+            int userId = parseUserIdFromAccessToken(authorizationHeader);
+            return java.util.Optional.of(loadUserInfo(userId));
+        } catch (Exception e) {
+            return java.util.Optional.empty();
+        }
+    }
+
     private int parseUserIdFromAccessToken(String authorizationHeader) {
         String token = extractBearerToken(authorizationHeader);
         try {
@@ -125,4 +137,3 @@ public class CurrentUserService {
     public record UserInfo(int userId, String roleDbName, String roleApiName) {
     }
 }
-
