@@ -1,0 +1,64 @@
+--- =========================================================
+--- alter2.sql (review draft)
+--- Run AFTER docs/alter.txt
+--- Purpose: unify payment audit fields across Product + Membership flows
+--- =========================================================
+
+USE GymCore;
+GO
+
+/* =========================================================
+   Section 1: Add PaymentMethod to Payments (shared audit field)
+   - Product flow already stores payment method on Orders.
+   - Membership flow has no Orders row, so PaymentMethod must be on Payments.
+========================================================= */
+IF COL_LENGTH('dbo.Payments', 'PaymentMethod') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments
+    ADD PaymentMethod NVARCHAR(50) NULL;
+END;
+GO
+
+/* Backfill existing payment rows */
+UPDATE p
+SET p.PaymentMethod = COALESCE(NULLIF(LTRIM(RTRIM(o.PaymentMethod)), N''), N'PAYOS')
+FROM dbo.Payments p
+LEFT JOIN dbo.Orders o ON o.OrderID = p.OrderID
+WHERE p.PaymentMethod IS NULL;
+GO
+
+/* Ensure no NULL values remain before changing to NOT NULL */
+UPDATE dbo.Payments
+SET PaymentMethod = N'PAYOS'
+WHERE PaymentMethod IS NULL;
+GO
+
+/* Make column required once data is backfilled */
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.Payments')
+      AND name = 'PaymentMethod'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ALTER COLUMN PaymentMethod NVARCHAR(50) NOT NULL;
+END;
+GO
+
+/* Default for future inserts */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.default_constraints dc
+    JOIN sys.columns c
+      ON c.object_id = dc.parent_object_id
+     AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.Payments')
+      AND c.name = 'PaymentMethod'
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ADD CONSTRAINT DF_Payments_PaymentMethod DEFAULT N'PAYOS' FOR PaymentMethod;
+END;
+GO

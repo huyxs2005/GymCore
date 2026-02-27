@@ -139,7 +139,7 @@ BEGIN TRY
           AND mp.DurationDays = v.DurationDays
     );
 
-    /* Baseline goals/allergens for AI module setup */
+    /* Baseline goals for AI module setup */
     INSERT INTO dbo.FitnessGoals (GoalCode, GoalName, Description)
     SELECT v.GoalCode, v.GoalName, v.Description
     FROM (VALUES
@@ -149,17 +149,6 @@ BEGIN TRY
     ) AS v(GoalCode, GoalName, Description)
     WHERE NOT EXISTS (
         SELECT 1 FROM dbo.FitnessGoals g WHERE g.GoalCode = v.GoalCode
-    );
-
-    INSERT INTO dbo.Allergens (AllergenCode, AllergenName, Description, UpdatedBy)
-    SELECT v.AllergenCode, v.AllergenName, v.Description, @AdminID
-    FROM (VALUES
-        (N'MILK', N'Milk', N'Dairy products'),
-        (N'EGG', N'Egg', N'Egg and egg products'),
-        (N'PEANUT', N'Peanut', N'Peanuts and peanut products')
-    ) AS v(AllergenCode, AllergenName, Description)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.Allergens a WHERE a.AllergenCode = v.AllergenCode
     );
 
     COMMIT TRAN;
@@ -173,6 +162,7 @@ END CATCH;
 /*
 Run order:
 1) docs/GymCore.txt
-2) docs/InsertValues.txt            -- required baseline data
-3) docs/InsertTestingValues.txt     -- optional example/testing data
+2) docs/alter.sql                   -- merged coupon/payos alterations
+3) docs/InsertValues.txt            -- required baseline data
+4) docs/InsertTestingValues.txt     -- optional example/testing data
 */

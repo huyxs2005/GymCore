@@ -1,0 +1,187 @@
+/*
+GymCore - Clean Alter Script (from feature/coupon review)
+
+Purpose:
+- Keep main schema/seed files as source of truth.
+- Apply only safe, idempotent additions from coupon-related SQL changes.
+- Avoid destructive changes that removed existing constraints/logic in main.
+
+Recommended run order:
+1) docs/GymCore.txt
+2) docs/alter.sql
+3) docs/InsertValues.txt
+4) docs/InsertTestingValues.txt (optional)
+*/
+
+USE GymCore;
+GO
+
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+GO
+
+--- =========================================================
+--- Section 1: Orders - add payment method field (idempotent)
+--- =========================================================
+IF OBJECT_ID('dbo.Orders', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Orders was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Orders', 'PaymentMethod') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD PaymentMethod NVARCHAR(50) NULL;
+END;
+GO
+
+--- =========================================================
+--- Section 2: Promotions - ensure BonusDurationDays exists
+--- =========================================================
+IF OBJECT_ID('dbo.Promotions', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Promotions was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Promotions', 'BonusDurationDays') IS NULL
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD BonusDurationDays INT NOT NULL
+        CONSTRAINT DF_Promotions_BonusDurationDays DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_BonusDurationDays'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_BonusDurationDays CHECK (BonusDurationDays >= 0);
+END;
+GO
+
+--- =========================================================
+--- Section 3: Payment confirmation procedures for PayOS flow
+--- =========================================================
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
+    @PaymentID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @OrderID INT;
+    DECLARE @CustomerMembershipID INT;
+    DECLARE @MembershipCustomerID INT;
+    DECLARE @MembershipCurrentStatus NVARCHAR(20);
+    DECLARE @ClaimID INT;
+
+    SELECT
+        @OrderID = p.OrderID,
+        @CustomerMembershipID = p.CustomerMembershipID,
+        @ClaimID = p.ClaimID
+    FROM dbo.Payments p
+    WHERE p.PaymentID = @PaymentID;
+
+    IF @CustomerMembershipID IS NOT NULL
+    BEGIN
+        SELECT
+            @MembershipCustomerID = m.CustomerID,
+            @MembershipCurrentStatus = m.Status
+        FROM dbo.CustomerMemberships m
+        WHERE m.CustomerMembershipID = @CustomerMembershipID;
+    END;
+
+    UPDATE dbo.Payments
+    SET Status = 'SUCCESS',
+        PaidAt = COALESCE(PaidAt, SYSDATETIME()),
+        PayOS_Status = 'SUCCESS',
+        WebhookVerifiedAt = COALESCE(WebhookVerifiedAt, SYSDATETIME())
+    WHERE PaymentID = @PaymentID
+      AND Status = 'PENDING';
+
+    IF @@ROWCOUNT = 0
+        RETURN;
+
+    IF @OrderID IS NOT NULL
+    BEGIN
+        UPDATE dbo.Orders
+        SET Status = 'PAID',
+            UpdatedAt = SYSDATETIME()
+        WHERE OrderID = @OrderID
+              AND Status = 'PENDING';
+    END;
+
+    IF @ClaimID IS NOT NULL
+    BEGIN
+        UPDATE dbo.UserPromotionClaims
+        SET UsedAt = COALESCE(UsedAt, SYSDATETIME()),
+            UsedPaymentID = COALESCE(UsedPaymentID, @PaymentID),
+            UsedOnOrderID = COALESCE(UsedOnOrderID, @OrderID)
+        WHERE ClaimID = @ClaimID
+          AND UsedAt IS NULL;
+    END;
+
+    IF @CustomerMembershipID IS NOT NULL
+       AND @MembershipCurrentStatus = 'PENDING'
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM dbo.CustomerMemberships m
+            WHERE m.CustomerID = @MembershipCustomerID
+              AND m.Status = 'ACTIVE'
+              AND m.CustomerMembershipID <> @CustomerMembershipID
+        )
+        BEGIN
+            UPDATE dbo.CustomerMemberships
+            SET Status = 'SCHEDULED',
+                UpdatedAt = SYSDATETIME()
+            WHERE CustomerMembershipID = @CustomerMembershipID
+              AND Status = 'PENDING';
+        END
+        ELSE
+        BEGIN
+            UPDATE dbo.CustomerMemberships
+            SET Status = 'ACTIVE',
+                UpdatedAt = SYSDATETIME()
+            WHERE CustomerMembershipID = @CustomerMembershipID
+              AND Status = 'PENDING';
+        END;
+    END;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccessByPayOSLinkId
+    @PayOSPaymentLinkId NVARCHAR(80)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @PaymentID INT;
+
+    SELECT TOP (1) @PaymentID = p.PaymentID
+    FROM dbo.Payments p
+    WHERE p.PayOS_PaymentLinkId = @PayOSPaymentLinkId
+    ORDER BY p.PaymentID DESC;
+
+    IF @PaymentID IS NULL
+        RETURN;
+
+    EXEC dbo.sp_ConfirmPaymentSuccess @PaymentID;
+END;
+GO
+
+--- =========================================================
+--- Section 4: Seed data moved out of alter.sql
+--- =========================================================
+--- Coupon and product seed/test records are maintained in:
+--- - docs/InsertValues.txt
+--- - docs/InsertTestingValues.txt

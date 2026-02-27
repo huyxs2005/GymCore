@@ -264,10 +264,9 @@ CREATE TABLE dbo.FoodCategoryMap (
 GO
 
 /* =========================
-   AI GOALS + MEALS + ALLERGIES (structured filtering)
+   AI GOALS (structured filtering)
    - Customer can select multiple active goals
-   - AI can recommend workouts + foods + meals by goal
-   - Allergies are blocked via structured tags (do NOT parse recipe text)
+   - AI can recommend workouts + foods by goal
 ========================= */
 
 CREATE TABLE dbo.FitnessGoals (
@@ -295,47 +294,6 @@ GO
 CREATE INDEX IX_CustomerGoals_Customer_Active ON dbo.CustomerGoals(CustomerID, IsActive);
 GO
 
-CREATE TABLE dbo.MealCategories (
-    MealCategoryID INT IDENTITY(1,1) PRIMARY KEY,
-    CategoryName NVARCHAR(100) NOT NULL UNIQUE,
-    Description NVARCHAR(300) NULL,
-    IsActive BIT NOT NULL CONSTRAINT DF_MealCategories_IsActive DEFAULT 1
-);
-GO
-
-CREATE TABLE dbo.Meals (
-    MealID INT IDENTITY(1,1) PRIMARY KEY,
-    MealName NVARCHAR(150) NOT NULL,
-    ImageUrl NVARCHAR(500) NULL,
-
-    Description NVARCHAR(500) NULL,
-    Recipe NVARCHAR(MAX) NOT NULL,
-
-    Calories INT NOT NULL,
-    Protein DECIMAL(6,2) NOT NULL CONSTRAINT DF_Meals_Protein DEFAULT 0,
-    Carbs DECIMAL(6,2) NOT NULL CONSTRAINT DF_Meals_Carbs DEFAULT 0,
-    Fat DECIMAL(6,2) NOT NULL CONSTRAINT DF_Meals_Fat DEFAULT 0,
-
-    IsActive BIT NOT NULL CONSTRAINT DF_Meals_IsActive DEFAULT 1,
-    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Meals_CreatedAt DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    UpdatedBy INT NULL,
-
-    CONSTRAINT FK_Meals_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID),
-    CONSTRAINT CK_Meals_Calories CHECK (Calories > 0),
-    CONSTRAINT CK_Meals_Macros CHECK (Protein >= 0 AND Carbs >= 0 AND Fat >= 0)
-);
-GO
-
-CREATE TABLE dbo.MealCategoryMap (
-    MealID INT NOT NULL,
-    MealCategoryID INT NOT NULL,
-    PRIMARY KEY (MealID, MealCategoryID),
-    CONSTRAINT FK_MealCategoryMap_Meals FOREIGN KEY (MealID) REFERENCES dbo.Meals(MealID),
-    CONSTRAINT FK_MealCategoryMap_Categories FOREIGN KEY (MealCategoryID) REFERENCES dbo.MealCategories(MealCategoryID)
-);
-GO
-
 CREATE TABLE dbo.FoodGoalMap (
     FoodID INT NOT NULL,
     GoalID INT NOT NULL,
@@ -345,67 +303,12 @@ CREATE TABLE dbo.FoodGoalMap (
 );
 GO
 
-CREATE TABLE dbo.MealGoalMap (
-    MealID INT NOT NULL,
-    GoalID INT NOT NULL,
-    PRIMARY KEY (MealID, GoalID),
-    CONSTRAINT FK_MealGoalMap_Meals FOREIGN KEY (MealID) REFERENCES dbo.Meals(MealID),
-    CONSTRAINT FK_MealGoalMap_Goals FOREIGN KEY (GoalID) REFERENCES dbo.FitnessGoals(GoalID)
-);
-GO
-
 CREATE TABLE dbo.WorkoutGoalMap (
     WorkoutID INT NOT NULL,
     GoalID INT NOT NULL,
     PRIMARY KEY (WorkoutID, GoalID),
     CONSTRAINT FK_WorkoutGoalMap_Workouts FOREIGN KEY (WorkoutID) REFERENCES dbo.Workouts(WorkoutID),
     CONSTRAINT FK_WorkoutGoalMap_Goals FOREIGN KEY (GoalID) REFERENCES dbo.FitnessGoals(GoalID)
-);
-GO
-
-CREATE TABLE dbo.Allergens (
-    AllergenID INT IDENTITY(1,1) PRIMARY KEY,
-    AllergenCode NVARCHAR(50) NOT NULL UNIQUE, -- e.g. MILK, EGG, PEANUT
-    AllergenName NVARCHAR(100) NOT NULL,
-    Description NVARCHAR(300) NULL,
-    IsActive BIT NOT NULL CONSTRAINT DF_Allergens_IsActive DEFAULT 1,
-    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Allergens_CreatedAt DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    UpdatedBy INT NULL,
-    CONSTRAINT FK_Allergens_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID)
-);
-GO
-
-CREATE TABLE dbo.CustomerAllergies (
-    CustomerID INT NOT NULL,
-    AllergenID INT NOT NULL,
-    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_CustomerAllergies_CreatedAt DEFAULT SYSDATETIME(),
-    IsActive BIT NOT NULL CONSTRAINT DF_CustomerAllergies_IsActive DEFAULT 1,
-
-    PRIMARY KEY (CustomerID, AllergenID),
-    CONSTRAINT FK_CustomerAllergies_Customers FOREIGN KEY (CustomerID) REFERENCES dbo.Customers(CustomerID),
-    CONSTRAINT FK_CustomerAllergies_Allergens FOREIGN KEY (AllergenID) REFERENCES dbo.Allergens(AllergenID)
-);
-GO
-
-CREATE INDEX IX_CustomerAllergies_Customer_Active ON dbo.CustomerAllergies(CustomerID, IsActive);
-GO
-
-CREATE TABLE dbo.FoodAllergenMap (
-    FoodID INT NOT NULL,
-    AllergenID INT NOT NULL,
-    PRIMARY KEY (FoodID, AllergenID),
-    CONSTRAINT FK_FoodAllergenMap_Foods FOREIGN KEY (FoodID) REFERENCES dbo.Foods(FoodID),
-    CONSTRAINT FK_FoodAllergenMap_Allergens FOREIGN KEY (AllergenID) REFERENCES dbo.Allergens(AllergenID)
-);
-GO
-
-CREATE TABLE dbo.MealAllergenMap (
-    MealID INT NOT NULL,
-    AllergenID INT NOT NULL,
-    PRIMARY KEY (MealID, AllergenID),
-    CONSTRAINT FK_MealAllergenMap_Meals FOREIGN KEY (MealID) REFERENCES dbo.Meals(MealID),
-    CONSTRAINT FK_MealAllergenMap_Allergens FOREIGN KEY (AllergenID) REFERENCES dbo.Allergens(AllergenID)
 );
 GO
 
@@ -1266,6 +1169,5 @@ CREATE INDEX IX_Orders_Customer_Date ON dbo.Orders(CustomerID, OrderDate);
 CREATE INDEX IX_Payments_Status_Time ON dbo.Payments(Status, CreatedAt);
 CREATE INDEX IX_CheckIns_Customer_Time ON dbo.CheckIns(CustomerID, CheckInTime);
 CREATE INDEX IX_FoodGoalMap_Goal ON dbo.FoodGoalMap(GoalID);
-CREATE INDEX IX_MealGoalMap_Goal ON dbo.MealGoalMap(GoalID);
 CREATE INDEX IX_WorkoutGoalMap_Goal ON dbo.WorkoutGoalMap(GoalID);
 GO

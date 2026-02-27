@@ -1,36 +1,288 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowUpCircle, CalendarClock, CreditCard, RefreshCcw } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
-import StarterPage from '../../components/common/StarterPage'
 import { customerNav } from '../../config/navigation'
+import { membershipApi } from '../../features/membership/api/membershipApi'
+
+const modeMeta = {
+  PURCHASE: {
+    label: 'Purchase',
+    icon: CreditCard,
+    description: 'Buy a new plan. Allowed when you do not have an ACTIVE membership.',
+  },
+  RENEW: {
+    label: 'Renew',
+    icon: RefreshCcw,
+    description: 'Extend from current EndDate (no downtime).',
+  },
+  UPGRADE: {
+    label: 'Upgrade',
+    icon: ArrowUpCircle,
+    description: 'Apply immediately. Old ACTIVE membership ends today.',
+  },
+}
 
 function CustomerMembershipPage() {
+  const queryClient = useQueryClient()
+  const [selectedPlanId, setSelectedPlanId] = useState(null)
+  const [checkoutMode, setCheckoutMode] = useState('PURCHASE')
+  const [showSuccessMessage, setShowSuccessMessage] = useState(() => {
+    const status = new URLSearchParams(window.location.search).get('status')
+    const normalizedStatus = status ? status.trim().toUpperCase() : ''
+    return normalizedStatus === 'PAID' || normalizedStatus === 'SUCCESS'
+  })
+
+  const plansQuery = useQuery({
+    queryKey: ['membershipPlans'],
+    queryFn: membershipApi.getPlans,
+  })
+
+  const currentMembershipQuery = useQuery({
+    queryKey: ['membershipCurrent'],
+    queryFn: membershipApi.getCurrentMembership,
+  })
+
+  const plans = plansQuery.data?.data?.plans ?? []
+  const currentMembership = currentMembershipQuery.data?.data?.membership ?? {}
+  const validForCheckin = Boolean(currentMembershipQuery.data?.data?.validForCheckin)
+  const invalidReason = currentMembershipQuery.data?.data?.reason || ''
+
+  useEffect(() => {
+    if (!selectedPlanId && plans.length > 0) {
+      setSelectedPlanId(plans[0].planId)
+    }
+  }, [plans, selectedPlanId])
+
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.planId === selectedPlanId) ?? null,
+    [plans, selectedPlanId],
+  )
+
+  const checkoutMutation = useMutation({
+    mutationFn: ({ mode, planId }) => {
+      const payload = {
+        planId,
+        paymentMethod: 'PAYOS',
+        returnUrl: `${window.location.origin}/customer/membership`,
+        cancelUrl: `${window.location.origin}/customer/membership?status=CANCELLED`,
+      }
+      if (mode === 'RENEW') {
+        return membershipApi.renew(payload)
+      }
+      if (mode === 'UPGRADE') {
+        return membershipApi.upgrade(payload)
+      }
+      return membershipApi.purchase(payload)
+    },
+    onSuccess: (response) => {
+      const checkoutUrl = response?.data?.checkoutUrl
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl
+      } else {
+        alert('Checkout URL not found in API response. Please check backend logs.')
+      }
+    },
+    onError: (error) => {
+      const message = error.response?.data?.message || error.message || 'Membership checkout failed.'
+      alert(message)
+    },
+  })
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const status = (urlParams.get('status') || '').trim().toUpperCase()
+    if (status === 'PAID' || status === 'SUCCESS') {
+      const paymentReturnPayload = Object.fromEntries(urlParams.entries())
+      membershipApi
+        .confirmPaymentReturn(paymentReturnPayload)
+        .catch(() => null)
+        .finally(() => {
+          queryClient.invalidateQueries({ queryKey: ['membershipCurrent'] })
+          queryClient.invalidateQueries({ queryKey: ['membershipPlans'] })
+        })
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false)
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+    if (status === 'CANCELLED') {
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [queryClient])
+
+  const handleCheckout = () => {
+    if (!selectedPlan) {
+      return
+    }
+    checkoutMutation.mutate({ mode: checkoutMode, planId: selectedPlan.planId })
+  }
+
   return (
     <WorkspaceScaffold
       title="Customer Membership"
-      subtitle="Implement membership browsing, purchase, renewal, and current status."
+      subtitle="Browse plans, pay with PayOS, and track your current membership/check-in status."
       links={customerNav}
     >
-      <StarterPage
-        title="Membership + PayOS flow"
-        subtitle="This module handles plan listing, plan detail, create payment link, webhook callback, and status."
-        endpoints={[
-          'GET /api/v1/memberships/plans',
-          'GET /api/v1/memberships/plans/{id}',
-          'GET /api/v1/memberships/current',
-          'POST /api/v1/memberships/purchase',
-          'POST /api/v1/memberships/renew',
-          'POST /api/v1/memberships/upgrade',
-          'POST /api/v1/payments/webhook',
-        ]}
-        frontendFiles={[
-          'src/pages/customer/CustomerMembershipPage.jsx',
-          'src/features/membership/api/membershipApi.js',
-          'src/features/membership/hooks/useMembershipPlans.js',
-        ]}
-        backendFiles={[
-          'src/main/java/com/gymcore/backend/modules/membership/controller/MembershipController.java',
-          'src/main/java/com/gymcore/backend/modules/membership/service/MembershipService.java',
-        ]}
-      />
+      {showSuccessMessage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="animate-in fade-in zoom-in rounded-3xl bg-white p-8 text-center shadow-2xl duration-300">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <CreditCard size={32} />
+            </div>
+            <h2 className="mb-2 text-2xl font-bold text-slate-900">Membership Payment Successful</h2>
+            <p className="text-slate-600">Your membership status has been refreshed.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,2fr)]">
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <header className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Membership Plans</h2>
+            <span className="text-xs text-slate-500">{plans.length} plans</span>
+          </header>
+
+          {plansQuery.isLoading && <p className="text-sm text-slate-500">Loading membership plans...</p>}
+          {plansQuery.isError && (
+            <p className="text-sm text-red-600">Failed to load membership plans. Please try again.</p>
+          )}
+          {!plansQuery.isLoading && plans.length === 0 && (
+            <p className="text-sm text-slate-500">No active plans available.</p>
+          )}
+
+          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+            {plans.map((plan) => {
+              const selected = selectedPlanId === plan.planId
+              return (
+                <button
+                  key={plan.planId}
+                  type="button"
+                  onClick={() => setSelectedPlanId(plan.planId)}
+                  className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                    selected
+                      ? 'border-gym-300 bg-gym-50'
+                      : 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50/60'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-900">{plan.name}</p>
+                      <p className="text-xs font-medium text-slate-500">{plan.planType}</p>
+                    </div>
+                    <p className="text-sm font-bold text-gym-600">
+                      {Number(plan.price || 0).toLocaleString('en-US')} <span className="text-xs text-slate-500">VND</span>
+                    </p>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">
+                    Duration: {plan.durationDays} day(s) • Coach booking: {plan.allowsCoachBooking ? 'Yes' : 'No'}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <header className="border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Current Membership</h2>
+            <p className="mt-1 text-xs text-slate-500">Status below is also used by receptionist check-in validation.</p>
+          </header>
+
+          {currentMembershipQuery.isLoading && <p className="text-sm text-slate-500">Loading current membership...</p>}
+          {currentMembershipQuery.isError && (
+            <p className="text-sm text-red-600">Failed to load current membership status.</p>
+          )}
+
+          {!currentMembershipQuery.isLoading && (!currentMembership || Object.keys(currentMembership).length === 0) && (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              You do not have any membership yet.
+            </div>
+          )}
+
+          {!currentMembershipQuery.isLoading && currentMembership && Object.keys(currentMembership).length > 0 && (
+            <article className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-900">
+                  {currentMembership.plan?.name || 'Membership'}
+                </p>
+                <span
+                  className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                    currentMembership.status === 'ACTIVE'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : currentMembership.status === 'PENDING' || currentMembership.status === 'SCHEDULED'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {currentMembership.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">Plan type: {currentMembership.plan?.planType || '-'}</p>
+              <p className="text-xs text-slate-600">
+                Start: {currentMembership.startDate || '-'} • End: {currentMembership.endDate || '-'}
+              </p>
+              <p className={`text-xs font-medium ${validForCheckin ? 'text-emerald-600' : 'text-amber-700'}`}>
+                {validForCheckin ? 'Valid for QR check-in.' : invalidReason || 'Not valid for check-in yet.'}
+              </p>
+            </article>
+          )}
+
+          <article className="space-y-3 rounded-xl border border-slate-100 bg-white p-4">
+            <h3 className="text-sm font-semibold text-slate-900">Checkout with PayOS</h3>
+            <p className="text-xs text-slate-600">
+              Select action + plan. Backend will enforce business rules (one ACTIVE membership, renew, upgrade, day pass).
+            </p>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              {Object.entries(modeMeta).map(([mode, meta]) => {
+                const Icon = meta.icon
+                const selected = checkoutMode === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setCheckoutMode(mode)}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      selected
+                        ? 'border-gym-300 bg-gym-50'
+                        : 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50/60'
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center gap-2">
+                      <Icon size={14} className="text-gym-600" />
+                      <span className="text-xs font-semibold text-slate-800">{meta.label}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">{meta.description}</p>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs text-slate-700">
+              <p className="font-semibold text-slate-800">Selected plan</p>
+              {selectedPlan ? (
+                <p className="mt-1">
+                  {selectedPlan.name} • {selectedPlan.planType} • {Number(selectedPlan.price || 0).toLocaleString('en-US')} VND
+                </p>
+              ) : (
+                <p className="mt-1 text-slate-500">Select a plan on the left.</p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={checkoutMutation.isPending || !selectedPlan}
+              onClick={handleCheckout}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400 disabled:text-slate-100"
+            >
+              <CalendarClock size={16} />
+              {checkoutMutation.isPending ? 'Redirecting to PayOS...' : `Checkout (${modeMeta[checkoutMode].label})`}
+            </button>
+          </article>
+        </section>
+      </div>
     </WorkspaceScaffold>
   )
 }
