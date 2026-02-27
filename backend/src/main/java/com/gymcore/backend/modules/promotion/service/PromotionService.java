@@ -66,7 +66,7 @@ public class PromotionService {
     }
 
     private Map<String, Object> adminCreateCoupon(String auth, Map<String, Object> payload) {
-        currentUserService.requireAdmin(auth);
+        CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
         jdbcTemplate.update(
                 """
                         INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, ValidFrom, ValidTo, IsActive)
@@ -79,11 +79,17 @@ public class PromotionService {
                 payload.get("validFrom"),
                 payload.get("validTo"),
                 requireBit(payload.getOrDefault("isActive", 1)));
+
+        Integer promotionId = jdbcTemplate.queryForObject(
+                "SELECT TOP (1) PromotionID FROM dbo.Promotions WHERE PromoCode = ?",
+                Integer.class,
+                payload.get("promoCode"));
+        ensurePromotionHasAtLeastOnePost(promotionId, payload, admin.userId());
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminUpdateCoupon(String auth, Map<String, Object> payload) {
-        currentUserService.requireAdmin(auth);
+        CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
         int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
@@ -102,6 +108,8 @@ public class PromotionService {
                 body.get("validTo"),
                 requireBit(body.getOrDefault("isActive", 1)),
                 promotionId);
+
+        ensurePromotionHasAtLeastOnePost(promotionId, body, admin.userId());
         return Map.of("success", true);
     }
 
@@ -171,6 +179,8 @@ public class PromotionService {
     }
 
     private Map<String, Object> customerGetPosts(String auth) {
+        ensureActiveCouponsHaveVisiblePosts();
+
         CurrentUserService.UserInfo user = currentUserService.findUser(auth).orElse(null);
         String sql;
         List<Map<String, Object>> posts;
@@ -183,8 +193,6 @@ public class PromotionService {
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
                     LEFT JOIN dbo.UserPromotionClaims c ON c.PromotionID = r.PromotionID AND c.UserID = ?
                     WHERE p.IsActive = 1 AND r.IsActive = 1
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
                     ORDER BY p.CreatedAt DESC
                     """;
             posts = jdbcTemplate.queryForList(sql, user.userId());
@@ -195,13 +203,35 @@ public class PromotionService {
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
                     WHERE p.IsActive = 1 AND r.IsActive = 1
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
                     ORDER BY p.CreatedAt DESC
                     """;
             posts = jdbcTemplate.queryForList(sql);
         }
         return Map.of("posts", posts);
+    }
+
+    private void ensureActiveCouponsHaveVisiblePosts() {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
+                        SELECT
+                            CONCAT('Coupon ', r.PromoCode),
+                            COALESCE(NULLIF(LTRIM(RTRIM(r.Description)), ''), 'Claim this coupon in Promotions and use it during checkout.'),
+                            NULL,
+                            r.PromotionID,
+                            r.ValidFrom,
+                            r.ValidTo,
+                            1,
+                            NULL
+                        FROM dbo.Promotions r
+                        WHERE r.IsActive = 1
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM dbo.PromotionPosts p
+                              WHERE p.PromotionID = r.PromotionID
+                                AND p.IsActive = 1
+                          )
+                        """);
     }
 
     private Map<String, Object> customerClaimCoupon(String auth, Map<String, Object> payload) {
@@ -313,5 +343,39 @@ public class PromotionService {
         }
         String s = String.valueOf(value).trim().toLowerCase();
         return s.equals("true") || s.equals("1") || s.equals("on") ? 1 : 0;
+    }
+
+    private void ensurePromotionHasAtLeastOnePost(Integer promotionId, Map<String, Object> source, Integer adminUserId) {
+        if (promotionId == null) {
+            return;
+        }
+
+        Integer postCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM dbo.PromotionPosts WHERE PromotionID = ?",
+                Integer.class,
+                promotionId);
+        if (postCount != null && postCount > 0) {
+            return;
+        }
+
+        String promoCode = String.valueOf(source.getOrDefault("promoCode", "NEW"));
+        String description = String.valueOf(source.getOrDefault("description", "")).trim();
+        String content = description.isBlank()
+                ? "Claim this coupon in Promotions and use it during checkout."
+                : description;
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                "Coupon " + promoCode,
+                content,
+                null,
+                promotionId,
+                source.get("validFrom"),
+                source.get("validTo"),
+                requireBit(source.getOrDefault("isActive", 1)),
+                adminUserId);
     }
 }

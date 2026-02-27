@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminPromotionApi } from '../../features/promotion/api/adminPromotionApi'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
-import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, CircleOff, Calendar, FileText, Layout, Sparkles } from 'lucide-react'
+import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, Calendar, FileText, Layout, Sparkles } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 const AdminPromotionsPage = () => {
@@ -12,6 +12,13 @@ const AdminPromotionsPage = () => {
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
+
+  const refreshPromotionData = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminCoupons'] })
+    queryClient.invalidateQueries({ queryKey: ['adminPosts'] })
+    queryClient.invalidateQueries({ queryKey: ['promotionPosts'] })
+    queryClient.invalidateQueries({ queryKey: ['myClaims'] })
+  }
 
   // Queries
   const { data: couponsData, isLoading: loadingCoupons } = useQuery({
@@ -29,7 +36,7 @@ const AdminPromotionsPage = () => {
     mutationFn: (payload) => adminPromotionApi.createCoupon(payload),
     onSuccess: () => {
       toast.success('Coupon created')
-      queryClient.invalidateQueries({ queryKey: ['adminCoupons'] })
+      refreshPromotionData()
       setIsCouponModalOpen(false)
     },
   })
@@ -38,7 +45,7 @@ const AdminPromotionsPage = () => {
     mutationFn: ({ id, payload }) => adminPromotionApi.updateCoupon(id, payload),
     onSuccess: () => {
       toast.success('Coupon updated')
-      queryClient.invalidateQueries({ queryKey: ['adminCoupons'] })
+      refreshPromotionData()
       setIsCouponModalOpen(false)
     },
   })
@@ -47,7 +54,7 @@ const AdminPromotionsPage = () => {
     mutationFn: (id) => adminPromotionApi.deleteCoupon(id),
     onSuccess: () => {
       toast.success('Coupon deactivated')
-      queryClient.invalidateQueries({ queryKey: ['adminCoupons'] })
+      refreshPromotionData()
     },
   })
 
@@ -55,7 +62,7 @@ const AdminPromotionsPage = () => {
     mutationFn: (payload) => adminPromotionApi.createPost(payload),
     onSuccess: () => {
       toast.success('Promotion post created')
-      queryClient.invalidateQueries({ queryKey: ['adminPosts'] })
+      refreshPromotionData()
       setIsPostModalOpen(false)
     },
   })
@@ -64,7 +71,7 @@ const AdminPromotionsPage = () => {
     mutationFn: ({ id, payload }) => adminPromotionApi.updatePost(id, payload),
     onSuccess: () => {
       toast.success('Promotion post updated')
-      queryClient.invalidateQueries({ queryKey: ['adminPosts'] })
+      refreshPromotionData()
       setIsPostModalOpen(false)
     },
   })
@@ -73,7 +80,7 @@ const AdminPromotionsPage = () => {
     mutationFn: (id) => adminPromotionApi.deletePost(id),
     onSuccess: () => {
       toast.success('Marketing post deactivated')
-      queryClient.invalidateQueries({ queryKey: ['adminPosts'] })
+      refreshPromotionData()
     },
   })
 
@@ -203,12 +210,6 @@ const AdminPromotionsPage = () => {
                         >
                           <Edit size={16} />
                         </button>
-                        <button
-                          onClick={() => { if (window.confirm('Deactivate this coupon?')) deleteCouponMutation.mutate(coupon.PromotionID) }}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <CircleOff size={16} />
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -285,12 +286,6 @@ const AdminPromotionsPage = () => {
                           className="p-2 text-slate-400 hover:text-gym-600 hover:bg-gym-50 rounded-lg transition-all"
                         >
                           <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => { if (window.confirm('Deactivate this post?')) deletePostMutation.mutate(post.PromotionPostID) }}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <CircleOff size={16} />
                         </button>
                       </td>
                     </tr>

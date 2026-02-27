@@ -14,6 +14,8 @@ function CustomerPromotionsPage() {
   const { data: postsData, isLoading } = useQuery({
     queryKey: ['promotionPosts'],
     queryFn: () => promotionApi.getPromotionPosts(),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 
   const claimMutation = useMutation({
