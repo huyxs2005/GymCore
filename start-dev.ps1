@@ -16,10 +16,26 @@ if (-not (Test-Path (Join-Path $frontendDir 'package.json'))) {
     throw "Frontend package.json not found at: $frontendDir\package.json"
 }
 
+$backendRunCommand = '.\mvnw.cmd spring-boot:run'
+try {
+    $jdkRootReg = 'HKLM:\SOFTWARE\JavaSoft\JDK'
+    if (Test-Path $jdkRootReg) {
+        $currentVersion = (Get-ItemProperty $jdkRootReg).CurrentVersion
+        if ($currentVersion) {
+            $javaHome = (Get-ItemProperty (Join-Path $jdkRootReg $currentVersion)).JavaHome
+            if ($javaHome -match '^[A-Za-z]:$' -and (Test-Path "$javaHome\bin\java.exe")) {
+                $backendRunCommand = ".\mvnw.cmd --% -Djava.home=$javaHome/ spring-boot:run"
+            }
+        }
+    }
+}
+catch {
+}
+
 $backendArgs = @(
     '-NoExit',
     '-ExecutionPolicy', 'Bypass',
-    '-Command', '.\mvnw.cmd spring-boot:run'
+    '-Command', $backendRunCommand
 )
 
 $frontendArgs = @(
