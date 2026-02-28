@@ -55,25 +55,33 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - Unique filtered indexes enforce max one `ACTIVE` and one `SCHEDULED` per customer.
     - Daily job `sp_RunDailyMembershipJobs` activates due `SCHEDULED` memberships.
   - Promotions support `BonusDurationDays` (for coupon discount + extra days at the same time).
-  - Added AI-related structured tables:
-    - `FitnessGoals`, `CustomerGoals`
-    - `MealCategories`, `Meals`, `MealCategoryMap`
-    - `FoodGoalMap`, `MealGoalMap`, `WorkoutGoalMap`
-    - `Allergens`, `CustomerAllergies`, `FoodAllergenMap`, `MealAllergenMap`
-- Foods are kept; Meals were added (both exist).
-- Allergy handling direction: strict block in recommendation logic (do not parse recipe free text).
+  - Coach/PT booking tables include:
+    - `TimeSlots` (8 fixed slots/day)
+    - `CoachWeeklyAvailability` with `IsAvailable`
+    - `PTRecurringRequests` with `DenyReason`
+    - `PTRequestSlots`, `PTSessions`, `PTSessionNotes`
+  - PT booking rule is strict:
+    - `PTRecurringRequests.CustomerMembershipID` is `NOT NULL`
+    - customer must have active Gym+Coach membership for booking flow.
 
 ## 7) Seed data status
-- `docs/InsertValues.txt` = required baseline seed (roles/users/profiles/time slots/plans/goals/allergens), idempotent.
+- `docs/InsertValues.txt` = required baseline seed (roles/users/profiles/time slots/plans/goals), idempotent.
 - `docs/InsertTestingValues.txt` = optional example/testing seed (cart/orders/promotions/PT/check-in and more), idempotent.
   - Seeds multiple membership durations (day pass / 1m / 6m / 12m / 24m for gym-only and gym+coach).
   - Seeds one queued `SCHEDULED` membership sample for membership-switch testing.
   - Seeds promotion `SUMMERPLUS30` (5% + 30 bonus days) example.
+  - Seeds coach weekly availability rows for testing flow.
 - Seeded login passwords:
   - Admin: `Admin123456!`
   - Receptionist: `Reception123456!`
   - Coach: `Coach123456!`
   - Customer: `Customer123456!`
+
+## 7.1) Official DB run order (current)
+1. `docs/GymCore.txt`
+2. `docs/alter.txt`
+3. `docs/InsertValues.txt`
+4. `docs/InsertTestingValues.txt` (optional)
 
 ## 8) Env file convention for teammates
 - Real local env files are gitignored.
@@ -84,7 +92,9 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 
 ## 9) Content/AI API scaffolding
 - `ContentController` includes placeholder endpoints for:
-  - meals/categories/goals/allergens
+  - workouts/categories
+  - foods/categories
+  - goals
   - AI recommendations
 - Current implementation is barebones placeholder responses; business logic still to implement.
 
@@ -92,6 +102,10 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Backend tests run with Maven wrapper.
 - Frontend tests run with Vitest (`npm run test:run`).
 - Recent state after major changes was green on both sides.
+
+## 10.1) Latest verified test run (Feb 27, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`110` tests).
+- Frontend: `npm run test -- --run` -> passed (`14` files, `38` tests).
 
 ## 11) Working principle reminders
 - Keep secrets out of git.
@@ -131,3 +145,27 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - No token copy button.
 - Reception screen:
   - No manual token paste fallback input.
+
+## 16) Coach booking/training support (current implementation)
+- Customer flow:
+  - Must set desired recurring weekly day+slot first.
+  - Then preview coach matching by date range and desired slots.
+  - Results separated into:
+    - `Fully Match` (all desired slots available).
+    - `Partial Match` (some overlap, e.g. already booked in selected range).
+  - Customer sends booking request; coach approves/denies later.
+  - Customer can cancel session.
+  - Customer reschedule is request-based (coach approves/denies).
+  - Customer can submit coach feedback (rating + comment) for completed sessions.
+- Coach flow:
+  - Update weekly availability.
+  - Review booking requests (`PENDING`) and approve/deny.
+  - Deny requires reason.
+  - Review reschedule requests and approve/deny.
+  - View own schedule, customer list/profile/history, update progress, notes, and feedback.
+- Admin flow:
+  - View coaches, coach students, and coach/customer feedback views through coach-management endpoints.
+
+## 17) Layout/UI architecture memory
+- App now uses one shared global shell header/footer; duplicate page headers were removed.
+- `WorkspaceScaffold` is content wrapper only (no duplicate top nav/user bar).
