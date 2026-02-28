@@ -64,6 +64,13 @@ public class PayOsService {
     public PayOsLink createPaymentLink(int paymentId, BigDecimal amount, String description,
             String buyerName, String buyerPhone, String buyerEmail, String buyerAddress,
             List<PayOsItem> items) {
+        return createPaymentLink(paymentId, amount, description, buyerName, buyerPhone, buyerEmail, buyerAddress,
+                items, null, null);
+    }
+
+    public PayOsLink createPaymentLink(int paymentId, BigDecimal amount, String description,
+            String buyerName, String buyerPhone, String buyerEmail, String buyerAddress,
+            List<PayOsItem> items, String overrideReturnUrl, String overrideCancelUrl) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment amount must be positive.");
         }
@@ -83,6 +90,14 @@ public class PayOsService {
         if (descStr.length() > 25) {
             descStr = descStr.substring(0, 25);
         }
+        String effectiveReturnUrl = valueAsString(overrideReturnUrl);
+        if (effectiveReturnUrl == null || effectiveReturnUrl.isBlank()) {
+            effectiveReturnUrl = returnUrl;
+        }
+        String effectiveCancelUrl = valueAsString(overrideCancelUrl);
+        if (effectiveCancelUrl == null || effectiveCancelUrl.isBlank()) {
+            effectiveCancelUrl = cancelUrl;
+        }
 
         Map<String, Object> body = new HashMap<>();
         body.put("orderCode", orderCode);
@@ -93,15 +108,15 @@ public class PayOsService {
         body.put("buyerEmail", buyerEmail);
         body.put("buyerAddress", buyerAddress);
         body.put("items", items);
-        body.put("returnUrl", returnUrl);
-        body.put("cancelUrl", cancelUrl);
+        body.put("returnUrl", effectiveReturnUrl);
+        body.put("cancelUrl", effectiveCancelUrl);
 
         // Sign the data (PayOS v2 requires signing a specific subset of fields)
         // Signature =
         // hmac_sha256(amount=VAL&cancelUrl=VAL&description=VAL&orderCode=VAL&returnUrl=VAL,
         // checksumKey)
         String signData = String.format("amount=%d&cancelUrl=%s&description=%s&orderCode=%d&returnUrl=%s",
-                amountVal, cancelUrl, descStr, orderCode, returnUrl);
+                amountVal, effectiveCancelUrl, descStr, orderCode, effectiveReturnUrl);
         String signature = hmacSha256Hex(signData, checksumKey);
         body.put("signature", signature);
 

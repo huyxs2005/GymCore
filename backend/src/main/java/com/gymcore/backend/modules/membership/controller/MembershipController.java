@@ -25,39 +25,57 @@ public class MembershipController {
     }
 
     @GetMapping("/memberships/plans")
-    public ApiResponse<Map<String, Object>> getPlans() {
-        return ApiResponse.ok("Membership plans endpoint ready for implementation",
-                membershipService.execute("customer-get-plans", null));
+    public ApiResponse<Map<String, Object>> getPlans(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Membership plans retrieved",
+                membershipService.execute("customer-get-plans", authorizationHeader, null));
     }
 
     @GetMapping("/memberships/plans/{planId}")
-    public ApiResponse<Map<String, Object>> getPlanDetail(@PathVariable Integer planId) {
-        return ApiResponse.ok("Membership plan detail endpoint ready for implementation",
-                membershipService.execute("customer-get-plan-detail", Map.of("planId", planId)));
+    public ApiResponse<Map<String, Object>> getPlanDetail(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @PathVariable Integer planId) {
+        return ApiResponse.ok("Membership plan detail retrieved",
+                membershipService.execute("customer-get-plan-detail", authorizationHeader, Map.of("planId", planId)));
     }
 
     @GetMapping("/memberships/current")
-    public ApiResponse<Map<String, Object>> getCurrentMembership() {
-        return ApiResponse.ok("Current membership endpoint ready for implementation",
-                membershipService.execute("customer-get-current-membership", null));
+    public ApiResponse<Map<String, Object>> getCurrentMembership(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader) {
+        return ApiResponse.ok("Current membership retrieved",
+                membershipService.execute("customer-get-current-membership", authorizationHeader, null));
     }
 
     @PostMapping("/memberships/purchase")
-    public ApiResponse<Map<String, Object>> purchaseMembership(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Purchase membership endpoint ready for implementation",
-                membershipService.execute("customer-purchase-membership", payload));
+    public ApiResponse<Map<String, Object>> purchaseMembership(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Membership checkout created",
+                membershipService.execute("customer-purchase-membership", authorizationHeader, payload));
     }
 
     @PostMapping("/memberships/renew")
-    public ApiResponse<Map<String, Object>> renewMembership(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Renew membership endpoint ready for implementation",
-                membershipService.execute("customer-renew-membership", payload));
+    public ApiResponse<Map<String, Object>> renewMembership(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Membership renewal checkout created",
+                membershipService.execute("customer-renew-membership", authorizationHeader, payload));
     }
 
     @PostMapping("/memberships/upgrade")
-    public ApiResponse<Map<String, Object>> upgradeMembership(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Upgrade membership endpoint ready for implementation",
-                membershipService.execute("customer-upgrade-membership", payload));
+    public ApiResponse<Map<String, Object>> upgradeMembership(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Membership upgrade checkout created",
+                membershipService.execute("customer-upgrade-membership", authorizationHeader, payload));
+    }
+
+    @PostMapping("/memberships/payment-return")
+    public ApiResponse<Map<String, Object>> confirmMembershipPaymentReturn(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Membership payment return processed",
+                membershipService.execute("customer-confirm-payment-return", authorizationHeader, payload));
     }
 
     @PostMapping("/payments/webhook")
@@ -68,24 +86,30 @@ public class MembershipController {
         wrapper.put("headers", headers);
         wrapper.put("body", payload == null ? Map.of() : payload);
         return ApiResponse.ok("Payment webhook handled",
-                membershipService.execute("payment-webhook", wrapper));
+                membershipService.execute("payment-webhook", null, wrapper));
     }
 
     @GetMapping("/admin/membership-plans")
-    public ApiResponse<Map<String, Object>> getAdminPlans() {
-        return ApiResponse.ok("Admin membership plans endpoint ready for implementation",
-                membershipService.execute("admin-get-plans", null));
+    public ApiResponse<Map<String, Object>> getAdminPlans(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader) {
+        return ApiResponse.ok("Admin membership plans retrieved",
+                membershipService.execute("admin-get-plans", authorizationHeader, null));
     }
 
     @PostMapping("/admin/membership-plans")
-    public ApiResponse<Map<String, Object>> createPlan(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Create membership plan endpoint ready for implementation",
-                membershipService.execute("admin-create-plan", payload));
+    public ApiResponse<Map<String, Object>> createPlan(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Membership plan created",
+                membershipService.execute("admin-create-plan", authorizationHeader, payload));
     }
 
     @PutMapping("/admin/membership-plans/{planId}")
-    public ApiResponse<Map<String, Object>> updatePlan(@PathVariable Integer planId, @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Update membership plan endpoint ready for implementation",
-                membershipService.execute("admin-update-plan", Map.of("planId", planId, "body", payload)));
+    public ApiResponse<Map<String, Object>> updatePlan(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @PathVariable Integer planId,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Membership plan updated",
+                membershipService.execute("admin-update-plan", authorizationHeader, Map.of("planId", planId, "body", payload)));
     }
 }
