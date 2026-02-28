@@ -382,7 +382,7 @@ public class ProductSalesService {
         }
 
         // Create payment row and call PayOS
-        int paymentId = insertPaymentForOrder(orderId, claimId, subtotal, discount, total);
+        int paymentId = insertPaymentForOrder(orderId, claimId, subtotal, discount, total, paymentMethod);
 
         List<PayOsService.PayOsItem> payOsItems = lines.stream()
                 .map(l -> new PayOsService.PayOsItem(l.name(), l.quantity(), l.price().intValue(), "serving", 0))
@@ -849,12 +849,12 @@ public class ProductSalesService {
     }
 
     private int insertPaymentForOrder(int orderId, Integer claimId, BigDecimal originalAmount, BigDecimal discount,
-            BigDecimal amount) {
+            BigDecimal amount, String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
-                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID, ClaimID)
-                    VALUES (?, ?, ?, 'PENDING', ?, ?)
+                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, OrderID, ClaimID, PaymentMethod)
+                    VALUES (?, ?, ?, 'PENDING', ?, ?, ?)
                     """, new String[] { "PaymentID" });
             ps.setBigDecimal(1, originalAmount);
             ps.setBigDecimal(2, discount);
@@ -865,6 +865,7 @@ public class ProductSalesService {
             } else {
                 ps.setInt(5, claimId);
             }
+            ps.setString(6, paymentMethod);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
