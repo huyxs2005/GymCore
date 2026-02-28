@@ -57,7 +57,7 @@
   - day pass start=end
   - payment method audit on payment/order records
   - queued membership safety on payment success
-- [ ] Implement missing Admin membership plan actions (create/update) so C is fully complete.
+- [x] Implement missing Admin membership plan actions (create/update) so C is fully complete.
 - [ ] Run full regression checks after merge:
   - backend `.\mvnw.cmd test`
   - frontend `npm run test -- --run`

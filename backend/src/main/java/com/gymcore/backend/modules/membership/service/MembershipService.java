@@ -48,8 +48,9 @@ public class MembershipService {
             case "customer-upgrade-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE);
             case "customer-confirm-payment-return" -> customerConfirmPaymentReturn(authorizationHeader, safePayload);
             case "payment-webhook" -> handlePaymentWebhook(safePayload);
-            case "admin-get-plans", "admin-create-plan", "admin-update-plan" ->
-                adminTodo(action, authorizationHeader, safePayload);
+            case "admin-get-plans" -> adminGetPlans(authorizationHeader);
+            case "admin-create-plan" -> adminCreatePlan(authorizationHeader, safePayload);
+            case "admin-update-plan" -> adminUpdatePlan(authorizationHeader, safePayload);
             default ->
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported membership action: " + action);
         };
@@ -429,14 +430,231 @@ public class MembershipService {
                 """, candidate.customerMembershipId());
     }
 
-    private Map<String, Object> adminTodo(String action, String authorizationHeader, Map<String, Object> payload) {
+    private Map<String, Object> adminGetPlans(String authorizationHeader) {
         currentUserService.requireAdmin(authorizationHeader);
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("module", "membership");
-        response.put("action", action);
-        response.put("status", "TODO");
-        response.put("payload", payload == null ? Map.of() : payload);
-        return response;
+        String sql = """
+                SELECT
+                    mp.MembershipPlanID,
+                    mp.PlanName,
+                    mp.PlanType,
+                    mp.Price,
+                    mp.DurationDays,
+                    mp.AllowsCoachBooking,
+                    mp.IsActive,
+                    mp.CreatedAt,
+                    mp.UpdatedAt
+                FROM dbo.MembershipPlans mp
+                ORDER BY
+                    mp.IsActive DESC,
+                    CASE mp.PlanType
+                        WHEN 'DAY_PASS' THEN 1
+                        WHEN 'GYM_ONLY' THEN 2
+                        WHEN 'GYM_PLUS_COACH' THEN 3
+                        ELSE 4
+                    END,
+                    mp.DurationDays ASC,
+                    mp.MembershipPlanID DESC
+                """;
+        return Map.of("plans", jdbcTemplate.query(sql, (rs, rowNum) -> mapPlan(rs)));
+    }
+
+    private Map<String, Object> adminCreatePlan(String authorizationHeader, Map<String, Object> payload) {
+        UserInfo admin = currentUserService.requireAdmin(authorizationHeader);
+        PlanDraft draft = resolvePlanDraft(payload, null);
+
+        Integer planId = jdbcTemplate.queryForObject("""
+                INSERT INTO dbo.MembershipPlans
+                    (PlanName, PlanType, Price, DurationDays, AllowsCoachBooking, IsActive, UpdatedAt, UpdatedBy)
+                OUTPUT INSERTED.MembershipPlanID
+                VALUES (?, ?, ?, ?, ?, ?, SYSDATETIME(), ?)
+                """, Integer.class,
+                draft.planName(),
+                draft.planType(),
+                draft.price(),
+                draft.durationDays(),
+                draft.allowsCoachBooking(),
+                draft.active(),
+                admin.userId());
+
+        if (planId == null || planId <= 0) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create membership plan.");
+        }
+        return Map.of("plan", requireAdminPlanMap(planId));
+    }
+
+    private Map<String, Object> adminUpdatePlan(String authorizationHeader, Map<String, Object> payload) {
+        UserInfo admin = currentUserService.requireAdmin(authorizationHeader);
+        int planId = requirePositiveInt(payload.get("planId"), "Membership plan ID is required.");
+        AdminMembershipPlan currentPlan = requireAdminPlan(planId);
+        PlanDraft draft = resolvePlanDraft(castToMap(payload.get("body")), currentPlan);
+
+        int updatedRows = jdbcTemplate.update("""
+                UPDATE dbo.MembershipPlans
+                SET PlanName = ?,
+                    PlanType = ?,
+                    Price = ?,
+                    DurationDays = ?,
+                    AllowsCoachBooking = ?,
+                    IsActive = ?,
+                    UpdatedAt = SYSDATETIME(),
+                    UpdatedBy = ?
+                WHERE MembershipPlanID = ?
+                """,
+                draft.planName(),
+                draft.planType(),
+                draft.price(),
+                draft.durationDays(),
+                draft.allowsCoachBooking(),
+                draft.active(),
+                admin.userId(),
+                planId);
+
+        if (updatedRows == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Membership plan not found.");
+        }
+        return Map.of("plan", requireAdminPlanMap(planId));
+    }
+
+    private AdminMembershipPlan requireAdminPlan(int planId) {
+        String sql = """
+                SELECT
+                    mp.MembershipPlanID,
+                    mp.PlanName,
+                    mp.PlanType,
+                    mp.Price,
+                    mp.DurationDays,
+                    mp.AllowsCoachBooking,
+                    mp.IsActive
+                FROM dbo.MembershipPlans mp
+                WHERE mp.MembershipPlanID = ?
+                """;
+        List<AdminMembershipPlan> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new AdminMembershipPlan(
+                rs.getInt("MembershipPlanID"),
+                rs.getString("PlanName"),
+                rs.getString("PlanType"),
+                rs.getBigDecimal("Price"),
+                rs.getInt("DurationDays"),
+                rs.getBoolean("AllowsCoachBooking"),
+                rs.getBoolean("IsActive")), planId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Membership plan not found.");
+        }
+        return rows.get(0);
+    }
+
+    private Map<String, Object> requireAdminPlanMap(int planId) {
+        String sql = """
+                SELECT
+                    mp.MembershipPlanID,
+                    mp.PlanName,
+                    mp.PlanType,
+                    mp.Price,
+                    mp.DurationDays,
+                    mp.AllowsCoachBooking,
+                    mp.IsActive,
+                    mp.CreatedAt,
+                    mp.UpdatedAt
+                FROM dbo.MembershipPlans mp
+                WHERE mp.MembershipPlanID = ?
+                """;
+        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapPlan(rs), planId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Membership plan not found.");
+        }
+        return rows.get(0);
+    }
+
+    private PlanDraft resolvePlanDraft(Map<String, Object> payload, AdminMembershipPlan currentPlan) {
+        boolean isCreate = currentPlan == null;
+        String rawName = asNullableString(firstNonNull(payload.get("planName"), payload.get("name"),
+                isCreate ? null : currentPlan.planName()));
+        if (rawName == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Plan name is required.");
+        }
+        String planName = rawName.trim();
+        if (planName.length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Plan name must not exceed 100 characters.");
+        }
+
+        String rawType = asNullableString(firstNonNull(payload.get("planType"), isCreate ? null : currentPlan.planType()));
+        String planType = normalizePlanType(rawType);
+
+        BigDecimal price = resolvePrice(firstNonNull(payload.get("price"), isCreate ? null : currentPlan.price()));
+        int durationDays = resolveDurationDays(firstNonNull(payload.get("durationDays"), isCreate ? null : currentPlan.durationDays()));
+        boolean active = resolveActive(firstNonNull(payload.get("isActive"), payload.get("active"),
+                isCreate ? Boolean.TRUE : currentPlan.active()));
+
+        if ("DAY_PASS".equals(planType)) {
+            durationDays = 1;
+        }
+        boolean allowsCoachBooking = "GYM_PLUS_COACH".equals(planType);
+
+        return new PlanDraft(planName, planType, price, durationDays, allowsCoachBooking, active);
+    }
+
+    private String normalizePlanType(String planTypeRaw) {
+        if (planTypeRaw == null || planTypeRaw.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Plan type is required.");
+        }
+        String normalized = planTypeRaw.trim().toUpperCase()
+                .replace(' ', '_')
+                .replace('-', '_')
+                .replace('+', '_');
+        return switch (normalized) {
+            case "DAY_PASS" -> "DAY_PASS";
+            case "GYM_ONLY" -> "GYM_ONLY";
+            case "GYM_PLUS_COACH", "GYM_COACH" -> "GYM_PLUS_COACH";
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Plan type must be one of: DAY_PASS, GYM_ONLY, GYM_PLUS_COACH.");
+        };
+    }
+
+    private BigDecimal resolvePrice(Object value) {
+        if (value == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price is required.");
+        }
+        BigDecimal price;
+        try {
+            if (value instanceof BigDecimal decimal) {
+                price = decimal;
+            } else {
+                price = new BigDecimal(String.valueOf(value).trim());
+            }
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price is invalid.");
+        }
+        if (price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price must be greater than 0.");
+        }
+        return price.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private int resolveDurationDays(Object value) {
+        Integer parsed = tryParsePositiveInt(value);
+        if (parsed == null || parsed <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration days must be a positive integer.");
+        }
+        return parsed;
+    }
+
+    private boolean resolveActive(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value == null) {
+            return true;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return true;
+        }
+        if ("1".equals(text) || "TRUE".equalsIgnoreCase(text)) {
+            return true;
+        }
+        if ("0".equals(text) || "FALSE".equalsIgnoreCase(text)) {
+            return false;
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Active flag must be true/false.");
     }
 
     private Map<String, Object> buildCheckoutResponse(
@@ -1048,6 +1266,27 @@ public class MembershipService {
     }
 
     private record UpgradeCandidate(int customerMembershipId, int customerId) {
+    }
+
+    private record AdminMembershipPlan(
+            int planId,
+            String planName,
+            String planType,
+            BigDecimal price,
+            int durationDays,
+            boolean allowsCoachBooking,
+            boolean active
+    ) {
+    }
+
+    private record PlanDraft(
+            String planName,
+            String planType,
+            BigDecimal price,
+            int durationDays,
+            boolean allowsCoachBooking,
+            boolean active
+    ) {
     }
 
     private enum CheckoutMode {
