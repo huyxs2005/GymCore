@@ -137,6 +137,11 @@ I1. Auth, identity, and account policy
   - Google login is supported for CUSTOMER, COACH, RECEPTIONIST.
   - ADMIN login is email/password only.
 - Passwords are stored hashed (bcrypt).
+- Password policy (enforced in auth service for register/change/reset):
+  - minimum 8 characters,
+  - at least 1 uppercase letter,
+  - at least 1 number,
+  - at least 1 special character.
 - OTP policy:
   - OTP expires after 2 minutes.
   - Resend cooldown is 5 seconds.
@@ -144,15 +149,22 @@ I1. Auth, identity, and account policy
 - Forgot-password policy:
   - Step 1: request + verify OTP at `/auth/forgot-password`.
   - Step 2: reset password at `/auth/forgot-password/reset`.
+- Login gating policy:
+  - Account must be active (`IsActive = 1`) and not locked (`IsLocked = 0`).
+  - Email/password login requires verified email.
+  - Email/password login is rejected when account has no password hash (Google-only account).
 - User data integrity:
   - `Users.AvatarSource` must be NULL, GOOGLE, or CUSTOM.
   - `Users.Phone` cannot be blank and must contain digits when provided.
+  - Phone normalization accepts optional leading `+`, strips common separators, and enforces 8..15 digits after normalization.
   - VN phone normalization is enforced for uniqueness (`+84...` and `0...` treated as same normalized number).
   - QR code token is unique and immutable after creation (`TRG_Users_BlockQrChange`).
 
 I2. Authorization and profile visibility policy
 - Route guards require authenticated session and correct role namespace.
 - Unauthorized route access redirects to `/`.
+- API auth header must use `Bearer <token>` format.
+- Expired/invalid access token or missing user is treated as unauthorized.
 - DOB/Gender fields are visible/editable for CUSTOMER and COACH only.
 - DOB/Gender fields are hidden for ADMIN and RECEPTIONIST.
 - QR entry in account menu is CUSTOMER-only.
@@ -171,6 +183,12 @@ I3. Membership plan and membership lifecycle rules
 - Only one SCHEDULED membership per customer at a time (unique filtered index).
 - Renew policy: extend from current EndDate (no downtime).
 - Upgrade policy: apply immediately (old ends today, new starts today), full price.
+- Membership checkout mode constraints:
+  - PURCHASE requires no ACTIVE and no SCHEDULED membership.
+  - RENEW requires ACTIVE membership and no SCHEDULED membership.
+  - UPGRADE requires ACTIVE membership and no SCHEDULED membership.
+- Membership checkout rejects inactive plans (`MembershipPlans.IsActive = 0`).
+- Pending membership checkout reuse window is 5 minutes; stale/mismatched pending checkout is cancelled (both Payment and CustomerMembership rows).
 - Payment success must not force a queued membership to ACTIVE if another ACTIVE exists.
 - Daily membership job (`sp_RunDailyMembershipJobs`) rules:
   - Send countdown notifications for ACTIVE memberships with 7..1 days left.
@@ -192,6 +210,16 @@ I4. Coach booking and PT scheduling rules
 - PTSession statuses: SCHEDULED, COMPLETED, CANCELLED.
 - Coach cannot be double-booked on same SessionDate + TimeSlotID for SCHEDULED/COMPLETED sessions.
 - Coach deny action requires DenyReason.
+- Customer can cancel only own future SCHEDULED sessions.
+- Customer reschedule constraints:
+  - only own SCHEDULED session can be requested for reschedule,
+  - only one pending reschedule request per session at a time,
+  - original session date cannot be in the past,
+  - requested date cannot be in the past,
+  - requested slot must be in coach weekly availability and have no conflict.
+- Coach reschedule review constraints:
+  - approve/deny only when session is SCHEDULED and has pending reschedule metadata,
+  - approval revalidates requested date/slot availability and no-conflict before applying.
 - Coach feedback constraints:
   - one feedback per PT session,
   - rating must be between 1 and 5.
@@ -218,6 +246,7 @@ I6. Product sales, cart, order, payment rules
 - Product purchase flow is online checkout + in-store pickup only.
 - Shipping/delivery is out of scope.
 - Cart item quantity must be > 0.
+- Checkout is blocked when cart is empty.
 - Order statuses: PENDING, PAID, CANCELLED.
 - Order money integrity: Subtotal, DiscountApplied, TotalAmount are non-negative and DiscountApplied <= Subtotal.
 - Product review rules:
@@ -234,7 +263,10 @@ I6. Product sales, cart, order, payment rules
 - Only one PENDING payment per order.
 - Only one PENDING payment per membership.
 - Payment method audit values are strictly PAYOS or CASH on Orders and Payments (defaults and checks applied in `alter.txt`).
+- API checkout currently accepts PAYOS only (membership and product checkout services normalize/reject non-PAYOS values).
 - Membership checkout channel is PayOS redirect.
+- Product checkout rejects coupons with `BonusDurationDays > 0` (membership-only coupon).
+- Membership webhook requires valid PayOS signature (missing/invalid signature is rejected).
 - Payment success procedure (`sp_ConfirmPaymentSuccess`) behavior:
   - payment moves PENDING -> SUCCESS,
   - linked order moves PENDING -> PAID,
@@ -252,6 +284,9 @@ I7. Promotions, coupon wallet, and claim usage rules
 - Claim-first policy:
   - Customer must claim coupon before apply/checkout.
 - One claim per user per promotion.
+- Coupon apply target is restricted to ORDER or MEMBERSHIP (default ORDER).
+- For ORDER target, coupon with `BonusDurationDays > 0` is rejected as membership-only.
+- Coupon definition must include at least one benefit: percent discount OR amount discount OR bonus duration days.
 - Claim usage shape integrity:
   - unused claim has no used fields,
   - used claim must have UsedAt + UsedPaymentID,
