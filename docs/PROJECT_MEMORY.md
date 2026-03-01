@@ -208,3 +208,61 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   2. `docs/alter.txt`
   3. `docs/InsertValues.txt`
   4. `docs/InsertTestingValues.txt` (optional)
+
+## 20) Latest verified test run (Mar 1, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`124` tests, `0` failures, `0` errors).
+- Frontend: `npm run test:run` -> passed (`18` files, `46` tests).
+- Added regression coverage:
+  - `frontend/src/components/frame/AppShell.test.jsx`
+  - Verifies customer cart header button behavior:
+    - shown on `/customer/shop`, click dispatches `gymcore:toggle-cart`
+    - hidden outside shop routes.
+
+## 21) Customer check-in health UI update (Mar 1, 2026)
+- `frontend/src/pages/customer/CustomerCheckinHealthPage.jsx` now includes a circular BMI meter (car-speedometer style):
+  - segmented color ring:
+    - low BMI = gray
+    - optimal BMI = green
+    - high BMI = red
+  - needle rotates based on current BMI value
+  - center shows BMI number and current level label.
+
+## 22) Coach booking UX update (Mar 1, 2026)
+- `frontend/src/pages/customer/CustomerCoachBookingPage.jsx`:
+  - "Set Desired PT Schedule" is compacted into a button-first flow.
+  - Clicking opens a planner modal with:
+    - date range controls
+    - month calendar
+    - per-date slot picking panel
+    - removable selected date-slot chips.
+  - Coach match display remains split into:
+    - `Fully Match`
+    - `Partial Match`
+  - Coach review modal uses transparent match indicators for readability:
+    - matched rows: green tinted (`.../10`)
+    - unmatched rows: red tinted (`.../10`)
+  - Booking confirm is blocked until all unmatched slots are resolved.
+
+## 23) Customer shop/cart UX update (Mar 1, 2026)
+- `frontend/src/components/frame/AppShell.jsx`:
+  - customer cart icon added to header and shown only on `/customer/shop`
+  - positioned between notifications and profile menu
+  - badge shows cart item count
+  - supports pulse animation event (`gymcore:cart-pulse`).
+- `frontend/src/pages/customer/CustomerShopPage.jsx`:
+  - replaced side checkout panel with cart drawer flow.
+  - add-to-cart "fly to cart" animation is implemented.
+  - product cards/detail include quantity `+/-` controls.
+  - two actions on products:
+    - `Add` / `Add to cart`
+    - `Buy now` (opens cart + checkout confirm immediately, no extra cart-icon click needed).
+  - cart drawer includes:
+    - items, quantity update/remove
+    - subtotal and coupon preview area
+    - checkout action and order history.
+
+## 24) Shared footer refinement (Mar 1, 2026)
+- `frontend/src/components/frame/AppShell.jsx` footer refreshed to a more professional layout:
+  - 3-column structure (brand, contact, quick links)
+  - gradient background and cleaner spacing/typography
+  - concise operational info and pickup note in footer bottom row.
