@@ -14,6 +14,72 @@ const DAYS = [
   { id: 7, label: 'Sun' },
 ]
 
+function formatDateValue(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseDateValue(value) {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day)
+}
+
+function addDays(value, amount) {
+  const parsed = parseDateValue(value)
+  if (!parsed) return value
+  parsed.setDate(parsed.getDate() + amount)
+  return formatDateValue(parsed)
+}
+
+function toDayOfWeek(value) {
+  const parsed = parseDateValue(value)
+  if (!parsed) return null
+  const day = parsed.getDay()
+  return day === 0 ? 7 : day
+}
+
+function buildCalendarWeeks(monthCursor) {
+  const monthStart = parseDateValue(monthCursor)
+  if (!monthStart) return []
+  monthStart.setDate(1)
+  const weekdayIndex = (monthStart.getDay() + 6) % 7
+  const gridStart = new Date(monthStart)
+  gridStart.setDate(monthStart.getDate() - weekdayIndex)
+
+  const weeks = []
+  for (let week = 0; week < 6; week += 1) {
+    const row = []
+    for (let day = 0; day < 7; day += 1) {
+      const current = new Date(gridStart)
+      current.setDate(gridStart.getDate() + (week * 7 + day))
+      row.push({
+        date: formatDateValue(current),
+        isCurrentMonth: current.getMonth() === monthStart.getMonth(),
+      })
+    }
+    weeks.push(row)
+  }
+  return weeks
+}
+
+function shiftMonth(monthCursor, delta) {
+  const base = parseDateValue(monthCursor)
+  if (!base) return monthCursor
+  base.setDate(1)
+  base.setMonth(base.getMonth() + delta)
+  return formatDateValue(base)
+}
+
+function toMonthTitle(monthCursor) {
+  const base = parseDateValue(monthCursor)
+  if (!base) return ''
+  return base.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+}
+
 function CustomerCoachBookingPage() {
   const [activeTab, setActiveTab] = useState('match')
   const [timeSlots, setTimeSlots] = useState([])
@@ -24,7 +90,16 @@ function CustomerCoachBookingPage() {
   const [form, setForm] = useState({
     startDate: '',
     endDate: '',
-    slots: [],
+  })
+  const [requestedDateSlots, setRequestedDateSlots] = useState([])
+  const [plannerModal, setPlannerModal] = useState({
+    open: false,
+    focusDate: '',
+    monthCursor: '',
+  })
+  const [coachReviewModal, setCoachReviewModal] = useState({
+    open: false,
+    coach: null,
   })
 
   const [matches, setMatches] = useState({
@@ -90,28 +165,138 @@ function CustomerCoachBookingPage() {
     }
   }
 
-  function toggleSlot(dayOfWeek, timeSlotId) {
-    const exists = form.slots.some((s) => s.dayOfWeek === dayOfWeek && s.timeSlotId === timeSlotId)
-    if (exists) {
+  const timeSlotById = useMemo(() => {
+    const map = new Map()
+    timeSlots.forEach((slot) => {
+      map.set(slot.timeSlotId, slot)
+    })
+    return map
+  }, [timeSlots])
+
+  const weeklySlots = useMemo(() => {
+    const dedup = new Map()
+    requestedDateSlots.forEach((item) => {
+      const dayOfWeek = toDayOfWeek(item.date)
+      if (!dayOfWeek) return
+      const key = `${dayOfWeek}-${item.timeSlotId}`
+      if (!dedup.has(key)) {
+        dedup.set(key, { dayOfWeek, timeSlotId: item.timeSlotId })
+      }
+    })
+    return Array.from(dedup.values()).sort((a, b) => {
+      if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek
+      return a.timeSlotId - b.timeSlotId
+    })
+  }, [requestedDateSlots])
+
+  const calendarWeeks = useMemo(() => buildCalendarWeeks(plannerModal.monthCursor), [plannerModal.monthCursor])
+
+  const coachReviewRows = useMemo(() => {
+    if (!coachReviewModal.coach) return []
+    const unavailable = Array.isArray(coachReviewModal.coach.unavailableSlots) ? coachReviewModal.coach.unavailableSlots : []
+    return requestedDateSlots
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlotId - b.timeSlotId)
+      .map((item) => {
+        const dayOfWeek = toDayOfWeek(item.date)
+        const blocked = unavailable.find((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === item.timeSlotId)
+        return {
+          ...item,
+          unavailable: Boolean(blocked),
+          reason: blocked?.reason || null,
+        }
+      })
+  }, [coachReviewModal.coach, requestedDateSlots])
+
+  const unresolvedReviewCount = useMemo(
+    () => coachReviewRows.filter((item) => item.unavailable).length,
+    [coachReviewRows],
+  )
+
+  function openPlannerModal() {
+    const today = formatDateValue(new Date())
+    const nextMonth = addDays(today, 30)
+    const startDate = form.startDate || today
+    const endDate = form.endDate || nextMonth
+
+    if (!form.startDate || !form.endDate) {
       setForm((prev) => ({
         ...prev,
-        slots: prev.slots.filter((s) => !(s.dayOfWeek === dayOfWeek && s.timeSlotId === timeSlotId)),
+        startDate,
+        endDate,
       }))
-      return
     }
-    setForm((prev) => ({
-      ...prev,
-      slots: [...prev.slots, { dayOfWeek, timeSlotId }],
-    }))
+
+    setPlannerModal({
+      open: true,
+      focusDate: startDate,
+      monthCursor: `${startDate.slice(0, 7)}-01`,
+    })
   }
 
-  function isSelected(dayOfWeek, timeSlotId) {
-    return form.slots.some((s) => s.dayOfWeek === dayOfWeek && s.timeSlotId === timeSlotId)
+  function isDateInSelectedRange(dateValue) {
+    if (!form.startDate || !form.endDate) return false
+    return dateValue >= form.startDate && dateValue <= form.endDate
+  }
+
+  function setPlannerRange(patch) {
+    setForm((prev) => {
+      const next = { ...prev, ...patch }
+      if (next.startDate && next.endDate && next.startDate > next.endDate) {
+        return { ...next, endDate: next.startDate }
+      }
+      return next
+    })
+  }
+
+  function selectCalendarDate(dateValue) {
+    if (!isDateInSelectedRange(dateValue)) return
+    setPlannerModal((prev) => ({ ...prev, focusDate: dateValue }))
+  }
+
+  function isDateSlotSelected(dateValue, timeSlotId) {
+    return requestedDateSlots.some((slot) => slot.date === dateValue && slot.timeSlotId === timeSlotId)
+  }
+
+  function toggleDateSlot(dateValue, timeSlotId) {
+    const exists = requestedDateSlots.some((slot) => slot.date === dateValue && slot.timeSlotId === timeSlotId)
+    if (exists) {
+      setRequestedDateSlots((prev) => prev.filter((slot) => !(slot.date === dateValue && slot.timeSlotId === timeSlotId)))
+      return
+    }
+    setRequestedDateSlots((prev) => [...prev, { date: dateValue, timeSlotId }])
+  }
+
+  function removeRequestedDateSlot(dateValue, timeSlotId) {
+    setRequestedDateSlots((prev) => prev.filter((slot) => !(slot.date === dateValue && slot.timeSlotId === timeSlotId)))
+  }
+
+  function formatSlotLabel(timeSlotId) {
+    const slot = timeSlotById.get(timeSlotId)
+    if (!slot) return `Slot ${timeSlotId}`
+    return `Slot ${slot.slotIndex} (${String(slot.startTime || '').slice(0, 5)}-${String(slot.endTime || '').slice(0, 5)})`
+  }
+
+  function getUnavailableReason(reason) {
+    if (reason === 'BOOKED_IN_RANGE') return 'Already booked in selected date range'
+    if (reason === 'NO_WEEKLY_AVAILABILITY') return 'Not in coach weekly availability'
+    return 'Unavailable'
+  }
+
+  function openCoachReview(coach) {
+    if (!form.startDate || !form.endDate || requestedDateSlots.length === 0) {
+      setError('Please set desired schedule first.')
+      return
+    }
+    setCoachReviewModal({
+      open: true,
+      coach,
+    })
   }
 
   async function previewMatches() {
-    if (!form.startDate || !form.endDate || form.slots.length === 0) {
-      setError('Please choose start date, end date, and at least one desired weekly slot.')
+    if (!form.startDate || !form.endDate || weeklySlots.length === 0) {
+      setError('Please set date range and pick at least one slot in planner.')
       return
     }
     if (new Date(form.startDate) > new Date(form.endDate)) {
@@ -125,7 +310,7 @@ function CustomerCoachBookingPage() {
       const response = await coachBookingApi.matchCoaches({
         startDate: form.startDate,
         endDate: form.endDate,
-        slots: form.slots,
+        slots: weeklySlots,
       })
       const payload = response?.data ?? response
       setMatches({
@@ -140,7 +325,7 @@ function CustomerCoachBookingPage() {
   }
 
   async function requestCoach(coachId) {
-    if (!form.startDate || !form.endDate || form.slots.length === 0) {
+    if (!form.startDate || !form.endDate || weeklySlots.length === 0) {
       setError('Please set desired schedule first.')
       return
     }
@@ -151,10 +336,11 @@ function CustomerCoachBookingPage() {
         coachId,
         startDate: form.startDate,
         endDate: form.endDate,
-        slots: form.slots,
+        slots: weeklySlots,
       })
       setMessage('Booking request sent. Coach will approve or deny your request.')
       setActiveTab('schedule')
+      setCoachReviewModal({ open: false, coach: null })
       await loadMySchedule()
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot create booking request')
@@ -245,37 +431,45 @@ function CustomerCoachBookingPage() {
         {activeTab === 'match' && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-              <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="text-sm font-semibold text-slate-700">Start date
-                  <input type="date" value={form.startDate} onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))} className="mt-1 w-full border border-slate-300 rounded-xl px-3 py-2" />
-                </label>
-                <label className="text-sm font-semibold text-slate-700">End date
-                  <input type="date" value={form.endDate} onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))} className="mt-1 w-full border border-slate-300 rounded-xl px-3 py-2" />
-                </label>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
+                  <p className="text-sm text-slate-600">Pick exact date slots in a calendar popup, then preview matched coaches.</p>
+                </div>
+                <button
+                  onClick={openPlannerModal}
+                  className="px-4 py-2 rounded-xl bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700"
+                >
+                  Open Schedule Planner
+                </button>
               </div>
 
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-700">Desired weekly recurring slots ({form.slots.length} selected)</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                  {DAYS.map((day) => (
-                    <div key={day.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{day.label}</p>
-                      <div className="space-y-2">
-                        {timeSlots.map((slot) => (
-                          <button
-                            key={`${day.id}-${slot.timeSlotId}`}
-                            onClick={() => toggleSlot(day.id, slot.timeSlotId)}
-                            className={`w-full text-left px-3 py-2 rounded-lg border ${isSelected(day.id, slot.timeSlotId) ? 'bg-gym-600 text-white border-gym-600' : 'bg-white text-slate-700 border-slate-200 hover:border-gym-400'}`}
-                          >
-                            <span className="text-xs font-semibold block">Slot {slot.slotIndex}</span>
-                            <span className="text-xs">{String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+                <div className="flex flex-wrap gap-5 text-xs text-slate-600">
+                  <span>Start: <strong className="text-slate-800">{form.startDate || '-'}</strong></span>
+                  <span>End: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
+                  <span>Selected date-slots: <strong className="text-slate-800">{requestedDateSlots.length}</strong></span>
+                  <span>Unique weekly slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
                 </div>
+                {requestedDateSlots.length === 0 && (
+                  <p className="text-sm text-slate-500">No slots selected yet.</p>
+                )}
+                {requestedDateSlots.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {requestedDateSlots
+                      .slice()
+                      .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlotId - b.timeSlotId)
+                      .slice(0, 10)
+                      .map((item) => (
+                        <span key={`${item.date}-${item.timeSlotId}`} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700">
+                          {item.date} · {formatSlotLabel(item.timeSlotId)}
+                        </span>
+                      ))}
+                    {requestedDateSlots.length > 10 && (
+                      <span className="text-xs text-slate-500 self-center">+{requestedDateSlots.length - 10} more</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
@@ -284,13 +478,13 @@ function CustomerCoachBookingPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+              <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
                 <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
                 <p className="text-sm text-emerald-700">Coaches whose requested slots are all available in your selected period.</p>
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
                   {matches.fullMatches.map((coach) => (
-                    <CoachCard key={`full-${coach.coachId}`} coach={coach} onRequest={requestCoach} />
+                    <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
                   ))}
                 </div>
               </div>
@@ -301,7 +495,7 @@ function CustomerCoachBookingPage() {
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
                   {matches.partialMatches.map((coach) => (
-                    <CoachCard key={`partial-${coach.coachId}`} coach={coach} onRequest={requestCoach} />
+                    <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
                   ))}
                 </div>
               </div>
@@ -384,6 +578,239 @@ function CustomerCoachBookingPage() {
         )}
       </div>
 
+      {plannerModal.open && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl bg-white rounded-2xl p-4 md:p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h4>
+              <button
+                onClick={() => setPlannerModal({ open: false, focusDate: '', monthCursor: '' })}
+                className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="text-xs text-slate-600">Start
+                  <input
+                    aria-label="Start date"
+                    type="date"
+                    value={form.startDate}
+                    onChange={(e) => {
+                      const nextStart = e.target.value
+                      setPlannerRange({ startDate: nextStart })
+                      if (nextStart) {
+                        setPlannerModal((prev) => ({
+                          ...prev,
+                          monthCursor: `${nextStart.slice(0, 7)}-01`,
+                          focusDate: nextStart,
+                        }))
+                      }
+                    }}
+                    className="mt-1 w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="text-xs text-slate-600">End
+                  <input
+                    aria-label="End date"
+                    type="date"
+                    value={form.endDate}
+                    onChange={(e) => setPlannerRange({ endDate: e.target.value })}
+                    className="mt-1 w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                  />
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPlannerModal((prev) => ({ ...prev, monthCursor: shiftMonth(prev.monthCursor, -1) }))}
+                  className="px-2 py-1 rounded-md border border-slate-300 text-slate-600"
+                >
+                  ‹
+                </button>
+                <span className="text-sm font-semibold text-slate-700 min-w-32 text-center">{toMonthTitle(plannerModal.monthCursor)}</span>
+                <button
+                  onClick={() => setPlannerModal((prev) => ({ ...prev, monthCursor: shiftMonth(prev.monthCursor, 1) }))}
+                  className="px-2 py-1 rounded-md border border-slate-300 text-slate-600"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 border border-slate-200 rounded-xl p-3">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {DAYS.map((day) => (
+                    <div key={day.id} className="text-[11px] font-semibold text-slate-500 text-center py-1">{day.label}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarWeeks.flat().map((cell) => {
+                    const isInRange = isDateInSelectedRange(cell.date)
+                    const isFocused = plannerModal.focusDate === cell.date
+                    const selectedCount = requestedDateSlots.filter((item) => item.date === cell.date).length
+                    return (
+                      <button
+                        key={cell.date}
+                        onClick={() => selectCalendarDate(cell.date)}
+                        disabled={!isInRange}
+                        className={`h-14 rounded-lg border text-left px-2 py-1 transition ${
+                          !cell.isCurrentMonth
+                            ? 'bg-slate-50 text-slate-400 border-slate-100'
+                            : 'bg-white text-slate-700 border-slate-200'
+                        } ${isInRange ? 'hover:border-gym-400' : 'opacity-45 cursor-not-allowed'} ${isFocused ? 'border-gym-600 ring-1 ring-gym-600/30' : ''}`}
+                      >
+                        <div className="text-xs font-semibold">{Number(cell.date.slice(8, 10))}</div>
+                        {selectedCount > 0 && (
+                          <div className="mt-1 inline-flex items-center justify-center min-w-5 px-1 text-[10px] font-semibold rounded-full bg-gym-100 text-gym-700">
+                            {selectedCount}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Selected date</p>
+                  <p className="text-sm font-bold text-slate-900">{plannerModal.focusDate || '-'}</p>
+                </div>
+
+                {plannerModal.focusDate && isDateInSelectedRange(plannerModal.focusDate) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-600">Available slots</p>
+                    <div className="max-h-72 overflow-y-auto space-y-2">
+                      {timeSlots.map((slot) => {
+                        const selected = isDateSlotSelected(plannerModal.focusDate, slot.timeSlotId)
+                        return (
+                          <button
+                            key={`planner-slot-${slot.timeSlotId}`}
+                            onClick={() => toggleDateSlot(plannerModal.focusDate, slot.timeSlotId)}
+                            className={`w-full text-left px-3 py-2 rounded-lg border text-xs ${
+                              selected
+                                ? 'bg-gym-600 text-white border-gym-600'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-gym-400'
+                            }`}
+                          >
+                            <div className="font-semibold">Slot {slot.slotIndex}</div>
+                            <div>{String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Choose a date inside the selected range to pick slots.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+              <p className="text-xs font-semibold text-slate-600 mb-2">Selected date-slots</p>
+              {requestedDateSlots.length === 0 ? (
+                <p className="text-sm text-slate-500">No slots selected.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {requestedDateSlots
+                    .slice()
+                    .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlotId - b.timeSlotId)
+                    .map((item) => (
+                      <button
+                        key={`picked-${item.date}-${item.timeSlotId}`}
+                        onClick={() => removeRequestedDateSlot(item.date, item.timeSlotId)}
+                        className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-red-300 hover:text-red-700"
+                        title="Remove slot"
+                      >
+                        {item.date} · {formatSlotLabel(item.timeSlotId)}
+                        <span className="font-bold">×</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {coachReviewModal.open && coachReviewModal.coach && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-bold text-slate-900">Coach Match Review</h4>
+                <p className="text-sm text-slate-600">{coachReviewModal.coach.fullName} · {coachReviewModal.coach.email}</p>
+              </div>
+              <button
+                onClick={() => setCoachReviewModal({ open: false, coach: null })}
+                className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">{coachReviewModal.coach.matchedSlots}/{coachReviewModal.coach.requestedSlots}</span> requested weekly slots are available.
+            </div>
+
+            <div className="space-y-2">
+              {coachReviewRows.length === 0 && <p className="text-sm text-slate-500">No selected slots to review.</p>}
+              {coachReviewRows.map((row) => (
+                <div
+                  key={`review-${row.date}-${row.timeSlotId}`}
+                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${row.unavailable ? 'border-red-500/30 bg-red-500/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
+                >
+                  <div>
+                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : 'text-emerald-800'}`}>
+                      {row.date} · {formatSlotLabel(row.timeSlotId)}
+                    </div>
+                    <div className={`text-xs ${row.unavailable ? 'text-red-700' : 'text-emerald-700'}`}>
+                      {row.unavailable ? getUnavailableReason(row.reason) : 'Matched'}
+                    </div>
+                  </div>
+                  {row.unavailable ? (
+                    <button
+                      onClick={() => removeRequestedDateSlot(row.date, row.timeSlotId)}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-700 bg-white"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <span className="text-xs font-semibold text-emerald-700">OK</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className={`rounded-lg px-3 py-2 text-sm ${unresolvedReviewCount > 0 ? 'bg-red-500/10 text-red-700' : 'bg-emerald-500/10 text-emerald-700'}`}>
+              {unresolvedReviewCount > 0
+                ? `${unresolvedReviewCount} unmatched slot(s) must be removed before requesting this coach.`
+                : 'All selected slots match this coach.'}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setCoachReviewModal({ open: false, coach: null })}
+                className="px-4 py-2 rounded-xl border border-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => requestCoach(coachReviewModal.coach.coachId)}
+                disabled={loading || unresolvedReviewCount > 0 || requestedDateSlots.length === 0}
+                className="px-4 py-2 rounded-xl bg-gym-600 text-white disabled:opacity-50"
+              >
+                Confirm Booking Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rescheduleModal.open && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white rounded-2xl p-5 space-y-3">
@@ -433,10 +860,11 @@ function CustomerCoachBookingPage() {
   )
 }
 
-function CoachCard({ coach, onRequest }) {
+function CoachCard({ coach, onReview }) {
   const unavailableSlots = Array.isArray(coach.unavailableSlots) ? coach.unavailableSlots : []
   const bookedCount = unavailableSlots.filter((s) => s.reason === 'BOOKED_IN_RANGE').length
   const weeklyUnavailableCount = unavailableSlots.filter((s) => s.reason === 'NO_WEEKLY_AVAILABILITY').length
+  const isFullMatch = String(coach.matchType || '').toUpperCase() === 'FULL'
 
   return (
     <article className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
@@ -445,7 +873,7 @@ function CoachCard({ coach, onRequest }) {
           <h5 className="font-bold text-slate-900">{coach.fullName}</h5>
           <p className="text-xs text-slate-500">{coach.email}</p>
         </div>
-        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
           {coach.matchedSlots}/{coach.requestedSlots} slots
         </span>
       </div>
@@ -454,8 +882,8 @@ function CoachCard({ coach, onRequest }) {
         {bookedCount > 0 && <div>{bookedCount} slot(s) already booked in selected range.</div>}
         {weeklyUnavailableCount > 0 && <div>{weeklyUnavailableCount} slot(s) not in coach weekly availability.</div>}
       </div>
-      <button onClick={() => onRequest(coach.coachId)} className="w-full mt-2 px-3 py-2 rounded-lg bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700">
-        Request This Coach
+      <button onClick={() => onReview(coach)} className="w-full mt-2 px-3 py-2 rounded-lg bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700">
+        Review Calendar Match
       </button>
     </article>
   )

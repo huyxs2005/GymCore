@@ -51,7 +51,7 @@ function ForgotPasswordResetPage() {
       <p className="mt-2 text-sm text-slate-600">Enter your new password.</p>
 
       {!canReset ? (
-        <div className="mt-6 space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mt-6 space-y-3 gc-card">
           <p className="text-sm text-slate-700">
             Please verify your OTP first.
           </p>
@@ -63,7 +63,7 @@ function ForgotPasswordResetPage() {
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleResetPassword} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleResetPassword} className="mt-6 space-y-4 gc-card">
           <p className="text-sm text-slate-600">Resetting password for {email}</p>
           <label className="block text-sm">
             <span className="mb-1 block text-slate-700">New password</span>
@@ -71,7 +71,7 @@ function ForgotPasswordResetPage() {
               type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>
@@ -81,7 +81,7 @@ function ForgotPasswordResetPage() {
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>

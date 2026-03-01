@@ -341,6 +341,12 @@ CREATE TABLE dbo.MembershipPlans (
     CONSTRAINT CK_MembershipPlans_DayPass CHECK (
         (PlanType <> 'DAY_PASS')
         OR (DurationDays = 1 AND AllowsCoachBooking = 0)
+    ),
+
+    -- Only Gym + Coach plans can enable coach booking
+    CONSTRAINT CK_MembershipPlans_CoachBookingByType CHECK (
+        (PlanType = 'GYM_PLUS_COACH' AND AllowsCoachBooking = 1)
+        OR (PlanType IN ('GYM_ONLY','DAY_PASS') AND AllowsCoachBooking = 0)
     )
 );
 GO
@@ -377,6 +383,29 @@ GO
 CREATE UNIQUE INDEX UX_CustomerMemberships_OneScheduled
 ON dbo.CustomerMemberships(CustomerID)
 WHERE Status = 'SCHEDULED';
+GO
+
+/* Day pass memberships must be valid only for one day (StartDate = EndDate) */
+CREATE TRIGGER dbo.TRG_CustomerMemberships_ValidateDayPassDate
+ON dbo.CustomerMemberships
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted cm
+        JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+        WHERE mp.PlanType = 'DAY_PASS'
+          AND cm.StartDate <> cm.EndDate
+    )
+    BEGIN
+        RAISERROR('DAY_PASS membership must have StartDate = EndDate.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
 GO
 
 /* =========================
@@ -657,6 +686,29 @@ CREATE TABLE dbo.CoachWeeklyAvailability (
     CONSTRAINT FK_CoachWeeklyAvailability_TimeSlot FOREIGN KEY (TimeSlotID) REFERENCES dbo.TimeSlots(TimeSlotID),
     CONSTRAINT CK_CoachWeeklyAvailability_Day CHECK (DayOfWeek BETWEEN 1 AND 7)
 );
+GO
+
+/* New coach defaults to full weekly availability (7 days * 8 slots) */
+CREATE TRIGGER dbo.TRG_Coaches_SeedDefaultAvailability
+ON dbo.Coaches
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.CoachWeeklyAvailability (CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    SELECT i.CoachID, d.DayOfWeek, ts.TimeSlotID, CAST(1 AS BIT)
+    FROM inserted i
+    CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6),(7)) AS d(DayOfWeek)
+    CROSS JOIN dbo.TimeSlots ts
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CoachWeeklyAvailability cwa
+        WHERE cwa.CoachID = i.CoachID
+          AND cwa.DayOfWeek = d.DayOfWeek
+          AND cwa.TimeSlotID = ts.TimeSlotID
+    );
+END;
 GO
 
 /* =========================

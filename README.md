@@ -9,7 +9,9 @@ GymCore is a full-stack gym management project:
 - `backend`: Spring Boot app
 - `frontend`: React app
 - `docs/GymCore.txt`: database schema script
-- `docs/InsertValues.txt`: sample data script
+- `docs/alter.txt`: idempotent alter/migration script
+- `docs/InsertValues.txt`: baseline seed data script
+- `docs/InsertTestingValues.txt`: optional testing seed data
 - `start-dev.ps1`: script to start backend + frontend together
 
 ## Prerequisites
@@ -23,7 +25,11 @@ GymCore is a full-stack gym management project:
 2. Connect to your SQL Server instance using:
 - Login: `sa`
 - Password: `1`
-3. Execute both queries `GymCore` and `InsertValues` from the `docs` folder and in MS SQL 
+3. Run database scripts in this exact order:
+   1. `docs/GymCore.txt`
+   2. `docs/alter.txt`
+   3. `docs/InsertValues.txt`
+   4. `docs/InsertTestingValues.txt` (optional for extra test/demo data)
 4. Open the project root folder (`GymCore`) in VS Code.
 5. In VS Code, open Terminal (`Terminal` > `New Terminal`).
 6. Run:
@@ -47,6 +53,20 @@ cd ..
 ## Stop Project
 1. Go to running terminals/windows.
 2. Press `Ctrl + C` to stop both backend and frontend.
+
+## Change SQL Server Login/Password (`sa`)
+If your SQL Server account is not `sa` / `1`, update backend DB config here:
+
+- File: `backend/src/main/resources/application.properties`
+- Keys:
+  - `spring.datasource.username`
+  - `spring.datasource.password`
+  - `spring.datasource.url` (change host/port/database if needed)
+
+Current default values in that file are:
+- `spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=GymCore;encrypt=true;trustServerCertificate=true`
+- `spring.datasource.username=sa`
+- `spring.datasource.password=1`
 
 ## For Teammates
 1. After cloning, run `npm install` in `frontend` once.

@@ -1,6 +1,7 @@
 package com.gymcore.backend.modules.membership.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.web.server.ResponseStatusException;
 
 class MembershipServiceAdminPlanTest {
 
@@ -191,6 +193,57 @@ class MembershipServiceAdminPlanTest {
                 eq(true),
                 eq(9),
                 eq(5));
+    }
+
+    @Test
+    void adminCreatePlan_shouldRejectInvalidPlanType() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(9, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                membershipService.execute("admin-create-plan", "Bearer admin", Map.of(
+                        "name", "Invalid Plan",
+                        "planType", "RANDOM_TYPE",
+                        "price", 100000,
+                        "durationDays", 10,
+                        "active", true)));
+
+        assertEquals(400, exception.getStatusCode().value());
+        assertTrue(String.valueOf(exception.getReason()).contains("Plan type must be one of"));
+    }
+
+    @Test
+    void adminCreatePlan_shouldRejectZeroPrice() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(9, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                membershipService.execute("admin-create-plan", "Bearer admin", Map.of(
+                        "name", "Free Plan",
+                        "planType", "GYM_ONLY",
+                        "price", 0,
+                        "durationDays", 30,
+                        "active", true)));
+
+        assertEquals(400, exception.getStatusCode().value());
+        assertTrue(String.valueOf(exception.getReason()).contains("Price must be greater than 0"));
+    }
+
+    @Test
+    void adminUpdatePlan_shouldRejectMissingPlanId() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(9, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                membershipService.execute("admin-update-plan", "Bearer admin", Map.of(
+                        "body", Map.of(
+                                "name", "Any",
+                                "planType", "GYM_ONLY",
+                                "price", 100000,
+                                "durationDays", 30))));
+
+        assertEquals(400, exception.getStatusCode().value());
+        assertTrue(String.valueOf(exception.getReason()).contains("Membership plan ID is required"));
     }
 
     private ResultSet resultSet(Map<String, Object> values) throws Exception {

@@ -38,19 +38,19 @@
   - response contract for frontend apply-coupon UI
 
 ## Membership C-Section Merge (origin/membership -> beta-test-0.2)
-- [ ] Merge only C-scope membership files from `origin/membership` (keep `beta-test-0.2` as base):
+- [x] Merge only C-scope membership files from `origin/membership` (keep `beta-test-0.2` as base):
   - `backend/src/main/java/com/gymcore/backend/modules/membership/controller/MembershipController.java`
   - `backend/src/main/java/com/gymcore/backend/modules/membership/service/MembershipService.java`
   - `backend/src/test/java/com/gymcore/backend/modules/membership/service/MembershipServiceCustomerFlowTest.java`
   - `frontend/src/features/membership/api/membershipApi.js`
   - `frontend/src/pages/customer/CustomerMembershipPage.jsx`
-- [ ] Do not merge unrelated/non-C changes (ignore env files and non-membership regressions).
-- [ ] Keep DB docs system as 4 files only:
+- [x] Do not merge unrelated/non-C changes (ignore env files and non-membership regressions).
+- [x] Keep DB docs system as 4 files only:
   - `docs/GymCore.txt`
   - `docs/alter.txt`
   - `docs/InsertValues.txt`
   - `docs/InsertTestingValues.txt`
-- [ ] Ensure C business rules are fully enforced:
+- [x] Ensure C business rules are fully enforced:
   - one ACTIVE membership
   - renew from EndDate
   - upgrade immediate switch
@@ -58,10 +58,10 @@
   - payment method audit on payment/order records
   - queued membership safety on payment success
 - [x] Implement missing Admin membership plan actions (create/update) so C is fully complete.
-- [ ] Run full regression checks after merge:
+- [x] Run full regression checks after merge:
   - backend `.\mvnw.cmd test`
   - frontend `npm run test -- --run`
-  - manual smoke: membership purchase/renew/upgrade + PayOS return/webhook
+  - automated service smoke coverage: membership purchase/renew/upgrade + PayOS return/webhook
 
 ## Deferred (By Decision)
-- [ ] Expose and test PayOS webhook endpoint publicly (tunnel/deployment) for real signed callback verification.
+- [ ] Optional/later: expose and test PayOS webhook endpoint publicly (tunnel/deployment) for real signed callback verification.

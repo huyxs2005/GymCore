@@ -7,7 +7,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
@@ -25,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class MembershipService {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
+    private static final int CHECKOUT_REUSE_WINDOW_MINUTES = 5;
 
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
@@ -110,11 +113,15 @@ public class MembershipService {
 
     private Map<String, Object> customerGetCurrentMembership(String authorizationHeader) {
         UserInfo user = currentUserService.requireCustomer(authorizationHeader);
+        expireStalePendingCheckouts(user.userId());
 
         String sql = """
                 SELECT TOP (1)
                     cm.CustomerMembershipID,
-                    cm.Status,
+                    CASE
+                        WHEN cm.EndDate < CAST(GETDATE() AS DATE) THEN 'EXPIRED'
+                        ELSE cm.Status
+                    END AS Status,
                     cm.StartDate,
                     cm.EndDate,
                     cm.CreatedAt AS MembershipCreatedAt,
@@ -147,14 +154,13 @@ public class MembershipService {
                     ORDER BY p.PaymentID DESC
                 ) pay
                 WHERE cm.CustomerID = ?
+                  AND cm.Status IN ('ACTIVE', 'EXPIRED')
                 ORDER BY
-                    CASE cm.Status
-                        WHEN 'ACTIVE' THEN 1
-                        WHEN 'SCHEDULED' THEN 2
-                        WHEN 'PENDING' THEN 3
-                        WHEN 'EXPIRED' THEN 4
-                        WHEN 'CANCELLED' THEN 5
-                        ELSE 6
+                    CASE
+                        WHEN cm.EndDate >= CAST(GETDATE() AS DATE) AND cm.Status = 'ACTIVE' THEN 1
+                        WHEN cm.EndDate < CAST(GETDATE() AS DATE) THEN 2
+                        WHEN cm.Status = 'EXPIRED' THEN 2
+                        ELSE 3
                     END,
                     cm.EndDate DESC,
                     cm.CustomerMembershipID DESC
@@ -177,15 +183,6 @@ public class MembershipService {
             CheckoutMode mode) {
         UserInfo user = currentUserService.requireCustomer(authorizationHeader);
         String paymentMethod = normalizePaymentMethod(payload.get("paymentMethod"));
-
-        Map<String, Object> existingPending = findExistingPendingCheckout(user.userId());
-        if (!existingPending.isEmpty()) {
-            Map<String, Object> response = new LinkedHashMap<>(existingPending);
-            response.put("reusedCheckout", true);
-            response.put("mode", mode.name());
-            return response;
-        }
-
         int planId = requirePositiveInt(firstNonNull(payload.get("planId"), payload.get("membershipPlanId")),
                 "Membership plan ID is required.");
         MembershipPlan plan = requireActivePlan(planId);
@@ -196,6 +193,17 @@ public class MembershipService {
 
         LocalDate startDate = resolveStartDate(mode, activeMembership, scheduledMembership);
         LocalDate endDate = resolveEndDate(startDate, plan.planType(), plan.durationDays());
+        expireStalePendingCheckouts(user.userId());
+
+        Map<String, Object> existingPending = findExistingPendingCheckout(
+                user.userId(),
+                plan,
+                startDate,
+                endDate,
+                mode);
+        if (!existingPending.isEmpty()) {
+            return existingPending;
+        }
 
         if (plan.price().compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -699,15 +707,22 @@ public class MembershipService {
         return response;
     }
 
-    private Map<String, Object> findExistingPendingCheckout(int customerId) {
+    private Map<String, Object> findExistingPendingCheckout(
+            int customerId,
+            MembershipPlan requestedPlan,
+            LocalDate requestedStartDate,
+            LocalDate requestedEndDate,
+            CheckoutMode requestedMode) {
         String sql = """
                 SELECT TOP (1)
                     p.PaymentID,
                     p.PayOS_CheckoutUrl,
+                    p.PayOS_Status,
                     p.PaymentMethod,
                     p.OriginalAmount,
                     p.DiscountAmount,
                     p.Amount,
+                    p.CreatedAt AS PaymentCreatedAt,
                     cm.CustomerMembershipID,
                     cm.StartDate,
                     cm.EndDate,
@@ -725,39 +740,107 @@ public class MembershipService {
                   AND p.Status = 'PENDING'
                 ORDER BY p.PaymentID DESC
                 """;
-        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> {
-            MembershipPlan plan = new MembershipPlan(
+        List<PendingCheckout> rows = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            MembershipPlan pendingPlan = new MembershipPlan(
                     rs.getInt("MembershipPlanID"),
                     rs.getString("PlanName"),
                     rs.getString("PlanType"),
                     rs.getBigDecimal("Price"),
                     rs.getInt("DurationDays"),
                     rs.getBoolean("AllowsCoachBooking"));
-            LocalDate startDate = toLocalDate(rs, "StartDate");
-            LocalDate endDate = toLocalDate(rs, "EndDate");
-            return buildCheckoutResponse(
+            return new PendingCheckout(
                     rs.getInt("PaymentID"),
                     rs.getInt("CustomerMembershipID"),
-                    rs.getString("PayOS_CheckoutUrl"),
+                    pendingPlan,
+                    toLocalDate(rs, "StartDate"),
+                    toLocalDate(rs, "EndDate"),
                     rs.getBigDecimal("OriginalAmount"),
                     rs.getBigDecimal("DiscountAmount"),
                     rs.getBigDecimal("Amount"),
                     asNullableString(rs.getString("PaymentMethod")) == null ? "PAYOS" : rs.getString("PaymentMethod"),
-                    CheckoutMode.PURCHASE,
-                    plan,
-                    startDate,
-                    endDate,
-                    true);
+                    asNullableString(rs.getString("PayOS_CheckoutUrl")),
+                    rs.getTimestamp("PaymentCreatedAt"));
         }, customerId);
         if (rows.isEmpty()) {
             return Map.of();
         }
-        Map<String, Object> existing = rows.get(0);
-        if (asNullableString(existing.get("checkoutUrl")) == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A pending membership payment already exists. Please contact support.");
+
+        PendingCheckout pending = rows.get(0);
+        if (isPendingCheckoutExpired(pending.paymentCreatedAt())) {
+            cancelPendingCheckout(pending.customerMembershipId(), pending.paymentId(), "EXPIRED");
+            return Map.of();
         }
-        return existing;
+
+        boolean isSameRequestedCheckout = pending.plan().planId() == requestedPlan.planId()
+                && requestedStartDate.equals(pending.startDate())
+                && requestedEndDate.equals(pending.endDate());
+        if (!isSameRequestedCheckout) {
+            cancelPendingCheckout(pending.customerMembershipId(), pending.paymentId(), "CANCELLED");
+            return Map.of();
+        }
+
+        if (pending.checkoutUrl() == null) {
+            cancelPendingCheckout(pending.customerMembershipId(), pending.paymentId(), "CANCELLED");
+            return Map.of();
+        }
+
+        return buildCheckoutResponse(
+                pending.paymentId(),
+                pending.customerMembershipId(),
+                pending.checkoutUrl(),
+                pending.originalAmount(),
+                pending.discountAmount(),
+                pending.amount(),
+                pending.paymentMethod(),
+                requestedMode,
+                pending.plan(),
+                pending.startDate(),
+                pending.endDate(),
+                true);
+    }
+
+    private void expireStalePendingCheckouts(int customerId) {
+        String sql = """
+                SELECT
+                    p.PaymentID,
+                    cm.CustomerMembershipID
+                FROM dbo.Payments p
+                JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = p.CustomerMembershipID
+                WHERE cm.CustomerID = ?
+                  AND cm.Status = 'PENDING'
+                  AND p.Status = 'PENDING'
+                  AND p.CreatedAt < DATEADD(MINUTE, -?, SYSDATETIME())
+                """;
+        List<PendingCheckoutRef> staleRows = jdbcTemplate.query(sql, (rs, rowNum) -> new PendingCheckoutRef(
+                rs.getInt("PaymentID"),
+                rs.getInt("CustomerMembershipID")), customerId, CHECKOUT_REUSE_WINDOW_MINUTES);
+        for (PendingCheckoutRef stale : staleRows) {
+            cancelPendingCheckout(stale.customerMembershipId(), stale.paymentId(), "EXPIRED");
+        }
+    }
+
+    private boolean isPendingCheckoutExpired(Timestamp paymentCreatedAt) {
+        if (paymentCreatedAt == null) {
+            return false;
+        }
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(CHECKOUT_REUSE_WINDOW_MINUTES);
+        return paymentCreatedAt.toLocalDateTime().isBefore(cutoff);
+    }
+
+    private void cancelPendingCheckout(int customerMembershipId, int paymentId, String payOsStatusFallback) {
+        String safeFallback = asNullableString(payOsStatusFallback) == null ? "CANCELLED" : payOsStatusFallback;
+        jdbcTemplate.update("""
+                UPDATE dbo.Payments
+                SET Status = 'CANCELLED',
+                    PayOS_Status = COALESCE(NULLIF(PayOS_Status, ''), ?)
+                WHERE PaymentID = ? AND Status = 'PENDING'
+                """, safeFallback, paymentId);
+        jdbcTemplate.update("""
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'CANCELLED',
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerMembershipID = ? AND Status = 'PENDING'
+                """, customerMembershipId);
     }
 
     private MembershipPlan requireActivePlan(int planId) {
@@ -1263,6 +1346,24 @@ public class MembershipService {
     }
 
     private record CheckoutContact(String buyerName, String buyerPhone, String buyerEmail) {
+    }
+
+    private record PendingCheckout(
+            int paymentId,
+            int customerMembershipId,
+            MembershipPlan plan,
+            LocalDate startDate,
+            LocalDate endDate,
+            BigDecimal originalAmount,
+            BigDecimal discountAmount,
+            BigDecimal amount,
+            String paymentMethod,
+            String checkoutUrl,
+            Timestamp paymentCreatedAt
+    ) {
+    }
+
+    private record PendingCheckoutRef(int paymentId, int customerMembershipId) {
     }
 
     private record UpgradeCandidate(int customerMembershipId, int customerId) {

@@ -143,9 +143,9 @@ BEGIN TRY
     INSERT INTO dbo.MembershipPlans (PlanName, PlanType, Price, DurationDays, AllowsCoachBooking, UpdatedBy)
     SELECT v.PlanName, v.PlanType, v.Price, v.DurationDays, v.AllowsCoachBooking, @AdminID
     FROM (VALUES
-        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(500000  AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
-        (N'Day Pass',               N'DAY_PASS',       CAST(80000   AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
-        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(5000000 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
+        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Day Pass',               N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
     ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
     WHERE NOT EXISTS (
         SELECT 1
@@ -154,6 +154,22 @@ BEGIN TRY
           AND mp.PlanType = v.PlanType
           AND mp.DurationDays = v.DurationDays
     );
+
+    /* Keep baseline plan prices synchronized on re-run */
+    UPDATE mp
+    SET mp.Price = v.Price,
+        mp.AllowsCoachBooking = v.AllowsCoachBooking,
+        mp.UpdatedAt = SYSDATETIME(),
+        mp.UpdatedBy = @AdminID
+    FROM dbo.MembershipPlans mp
+    JOIN (VALUES
+        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Day Pass',               N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
+    ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
+      ON mp.PlanName = v.PlanName
+     AND mp.PlanType = v.PlanType
+     AND mp.DurationDays = v.DurationDays;
 
     /* Baseline goals for AI module setup */
     INSERT INTO dbo.FitnessGoals (GoalCode, GoalName, Description)

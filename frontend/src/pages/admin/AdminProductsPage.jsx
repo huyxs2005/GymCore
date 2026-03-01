@@ -75,10 +75,10 @@ function AdminProductsPage() {
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2.2fr)]">
         {/* Products table + editor */}
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-4 gc-card-compact">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Products</h2>
+              <h2 className="gc-section-kicker">Products</h2>
               <p className="mt-0.5 text-xs text-slate-500">
                 Add new products or update existing ones.
               </p>
@@ -269,10 +269,10 @@ function AdminProductsPage() {
         </section>
 
         {/* Review monitoring */}
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-3 gc-card-compact">
           <header className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="gc-section-kicker">
                 Product reviews
               </h2>
               <p className="mt-0.5 text-xs text-slate-500">

@@ -64,18 +64,23 @@ describe('CustomerCoachBookingPage', () => {
     const user = userEvent.setup()
     render(<CustomerCoachBookingPage />)
 
-    await user.type(screen.getByLabelText(/Start date/i), '2026-03-01')
-    await user.type(screen.getByLabelText(/End date/i), '2026-03-31')
+    await user.click(screen.getByRole('button', { name: /Open Schedule Planner/i }))
+    const startDateInput = screen.getByLabelText(/Start date/i)
+    const endDateInput = screen.getByLabelText(/End date/i)
+    await user.clear(startDateInput)
+    await user.type(startDateInput, '2026-03-01')
+    await user.clear(endDateInput)
+    await user.type(endDateInput, '2026-03-31')
 
-    const slotButtons = await screen.findAllByRole('button', { name: /Slot 1/i })
-    await user.click(slotButtons[0])
+    const slotButton = await screen.findByRole('button', { name: /Slot 1/i })
+    await user.click(slotButton)
     await user.click(screen.getByRole('button', { name: /Preview Matches/i }))
 
     await waitFor(() => {
       expect(coachBookingApi.matchCoaches).toHaveBeenCalledWith({
         startDate: '2026-03-01',
         endDate: '2026-03-31',
-        slots: [{ dayOfWeek: 1, timeSlotId: 1 }],
+        slots: [{ dayOfWeek: 7, timeSlotId: 1 }],
       })
     })
 

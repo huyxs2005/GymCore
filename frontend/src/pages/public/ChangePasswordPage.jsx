@@ -39,7 +39,7 @@ function ChangePasswordPage() {
       <h1 className="text-2xl font-bold text-slate-900">Change password</h1>
       <p className="mt-2 text-sm text-slate-600">Starter page for authenticated password change flow.</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="mt-6 space-y-4 gc-card">
         <label className="block text-sm">
           <span className="mb-1 block text-slate-700">Current password</span>
           <input
@@ -47,7 +47,7 @@ function ChangePasswordPage() {
             name="oldPassword"
             value={form.oldPassword}
             onChange={handleChange}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="gc-input"
             required
           />
         </label>
@@ -58,7 +58,7 @@ function ChangePasswordPage() {
             name="newPassword"
             value={form.newPassword}
             onChange={handleChange}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="gc-input"
             required
           />
         </label>
@@ -69,7 +69,7 @@ function ChangePasswordPage() {
             name="confirmPassword"
             value={form.confirmPassword}
             onChange={handleChange}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="gc-input"
             required
           />
         </label>

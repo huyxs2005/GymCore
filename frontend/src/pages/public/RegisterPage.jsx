@@ -107,7 +107,7 @@ function RegisterPage() {
       {step === 'register' ? (
         <form
           onSubmit={handleStartRegistration}
-          className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          className="mt-6 space-y-4 gc-card"
         >
           <label className="block text-sm">
             <span className="mb-1 block text-slate-700">Full name</span>
@@ -115,7 +115,7 @@ function RegisterPage() {
               name="fullName"
               value={registerForm.fullName}
               onChange={handleRegisterChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>
@@ -126,7 +126,7 @@ function RegisterPage() {
               name="email"
               value={registerForm.email}
               onChange={handleRegisterChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>
@@ -136,7 +136,7 @@ function RegisterPage() {
               name="phone"
               value={registerForm.phone}
               onChange={handleRegisterChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
             />
           </label>
           <label className="block text-sm">
@@ -146,7 +146,7 @@ function RegisterPage() {
               name="password"
               value={registerForm.password}
               onChange={handleRegisterChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>
@@ -157,7 +157,7 @@ function RegisterPage() {
               name="confirmPassword"
               value={registerForm.confirmPassword}
               onChange={handleRegisterChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>
@@ -176,7 +176,7 @@ function RegisterPage() {
       {step === 'verify' ? (
         <form
           onSubmit={handleVerifyOtp}
-          className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          className="mt-6 space-y-4 gc-card"
         >
           <p className="text-sm text-slate-600">Enter the 6-digit OTP sent to {registerForm.email}.</p>
           <label className="block text-sm">
@@ -184,7 +184,7 @@ function RegisterPage() {
             <input
               value={otp}
               onChange={(event) => setOtp(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               maxLength={6}
               required
             />

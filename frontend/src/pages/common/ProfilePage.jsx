@@ -155,7 +155,7 @@ function ProfilePage() {
       <h1 className="text-2xl font-bold text-slate-900">My Profile</h1>
       <p className="mt-2 text-sm text-slate-600">Starter page for view/edit profile use-case.</p>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="mt-6 gc-card">
         {profileQuery.isLoading && <p className="text-sm text-slate-600">Loading profile...</p>}
         {profileQuery.isError && <p className="text-sm text-rose-700">Failed to load profile.</p>}
         {viewUser ? (
@@ -211,7 +211,7 @@ function ProfilePage() {
                   <input
                     value={form.fullName}
                     onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                    className="gc-input"
                     required
                   />
                 </label>
@@ -230,7 +230,7 @@ function ProfilePage() {
                     inputMode="tel"
                     autoComplete="tel"
                     maxLength={16}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                    className="gc-input"
                   />
                   {phoneError ? <p className="mt-1 text-xs text-rose-700">{phoneError}</p> : null}
                 </label>
@@ -243,7 +243,7 @@ function ProfilePage() {
                         type="date"
                         value={form.dateOfBirth}
                         onChange={(e) => setForm((s) => ({ ...s, dateOfBirth: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        className="gc-input"
                       />
                     </label>
 
@@ -252,7 +252,7 @@ function ProfilePage() {
                       <select
                         value={form.gender}
                         onChange={(e) => setForm((s) => ({ ...s, gender: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        className="gc-input"
                       >
                         <option value="">Select</option>
                         <option value="Male">Male</option>

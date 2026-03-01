@@ -92,14 +92,14 @@ function ForgotPasswordPage() {
       <p className="mt-2 text-sm text-slate-600">Request OTP, then confirm OTP and set your new password.</p>
 
       {step === 'request' ? (
-        <form onSubmit={handleRequestOtp} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleRequestOtp} className="mt-6 space-y-4 gc-card">
           <label className="block text-sm">
             <span className="mb-1 block text-slate-700">Email</span>
             <input
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               required
             />
           </label>
@@ -116,14 +116,14 @@ function ForgotPasswordPage() {
       ) : null}
 
       {step === 'verify' ? (
-        <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4 gc-card">
           <p className="text-sm text-slate-600">Enter the 6-digit OTP sent to {email}.</p>
           <label className="block text-sm">
             <span className="mb-1 block text-slate-700">OTP</span>
             <input
               value={otp}
               onChange={(event) => setOtp(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
               maxLength={6}
               required
             />

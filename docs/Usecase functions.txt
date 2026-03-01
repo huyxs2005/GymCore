@@ -42,7 +42,8 @@ Business rules
 - Renew: extend current membership from its EndDate (no downtime, PT keeps going)
 - Upgrade: apply immediately (old ends today, new starts today), full price
 - Day pass is active until midnight (StartDate = EndDate)
-- Payment method is tracked on order/payment records for audit; current checkout channel is PayOS redirect.
+- Membership checkout channel is PayOS redirect.
+- Payment method is tracked on order/payment records for audit; supported values are PAYOS and CASH (cash is used for front-desk/offline flows).
 - Payment success must not force queued memberships to ACTIVE if another ACTIVE membership already exists.
 
 ________________________________________
@@ -105,6 +106,7 @@ Admin
 
 Product order rules
 - Product purchase is online checkout + in-store pickup only.
+- Payment methods in system: PAYOS (online checkout) and CASH (front desk/offline).
 - Shipping/delivery flow is out of scope.
 
 ________________________________________
@@ -149,3 +151,40 @@ AI Assistant
 - Recommend workouts + foods based on saved goals
 - Show which goal(s) each recommendation fits
 - Assist PT booking using the same matching rules
+
+________________________________________
+I. DB-Enforced Business Rules (from GymCore.txt)
+Membership / Payment
+- Membership plan types are strictly: GYM_ONLY, DAY_PASS, GYM_PLUS_COACH.
+- Only GYM_PLUS_COACH plans can set AllowsCoachBooking = 1 (GYM_ONLY/DAY_PASS must be 0).
+- DAY_PASS must have DurationDays = 1 and AllowsCoachBooking = 0.
+- DAY_PASS customer memberships must have StartDate = EndDate.
+- Customer membership statuses are: PENDING, SCHEDULED, ACTIVE, EXPIRED, CANCELLED.
+- Only one ACTIVE membership per customer at a time.
+- Only one SCHEDULED membership per customer at a time.
+- Payment row must target exactly one domain: Order OR CustomerMembership (not both).
+- Only one PENDING payment per order.
+- Only one PENDING payment per membership.
+
+Coach booking / PT
+- Time slots are fixed 8 slots/day; each slot has valid StartTime < EndTime and index range 1..8.
+- Coach weekly availability uses DayOfWeek 1..7 and IsAvailable default = 1.
+- New coaches are auto-seeded with full weekly availability (7 days x 8 slots).
+- PT recurring request statuses are: PENDING, APPROVED, DENIED, CANCELLED.
+- A PT request must use an ACTIVE membership of the same customer, that allows coach booking, and fully covers requested StartDate..EndDate.
+- One customer can have only one APPROVED PT recurring request at a time.
+- Coach cannot be double-booked on same date + slot (scheduled/completed uniqueness).
+
+Check-in
+- Check-in is blocked unless membership is ACTIVE, belongs to the same customer, and check-in date is within membership StartDate..EndDate.
+
+Promotions / claims
+- One claim per user per promotion.
+- Claim usage must be consistent: unused claim has no used fields; used claim must link to exactly one target (order or membership) and used payment.
+- Claim source post/promotion must be active and within valid windows.
+
+Daily job (membership lifecycle)
+- Daily job sends expiry countdown notifications for ACTIVE memberships (7..1 days left).
+- Daily job expires memberships whose EndDate is before today.
+- Daily job activates due SCHEDULED memberships only when customer has no ACTIVE membership.
+- Daily job cancels future SCHEDULED PT sessions for customers with no ACTIVE membership and notifies customer.

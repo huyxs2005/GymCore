@@ -6,12 +6,12 @@ function CustomerKnowledgePage() {
   return (
     <WorkspaceScaffold
       title="Customer Workout/Food/AI"
-      subtitle="Implement content browsing (workouts, foods) and AI workout assistant integration."
+      subtitle="Implement content browsing (workouts, foods) and AI recommendation integration."
       links={customerNav}
     >
       <StarterPage
         title="Knowledge & AI module"
-        subtitle="AI bot scope is workout recommendation + PT booking assistance (no food suggestions)."
+        subtitle="AI bot scope is recommendations for workouts + foods only."
         endpoints={[
           'GET /api/v1/workouts/categories',
           'GET /api/v1/workouts',
@@ -19,8 +19,7 @@ function CustomerKnowledgePage() {
           'GET /api/v1/foods/categories',
           'GET /api/v1/foods',
           'GET /api/v1/foods/{id}',
-          'POST /api/v1/ai/workout-assistant',
-          'POST /api/v1/ai/coach-booking-assistant',
+          'POST /api/v1/ai/recommendations',
         ]}
         frontendFiles={[
           'src/pages/customer/CustomerKnowledgePage.jsx',

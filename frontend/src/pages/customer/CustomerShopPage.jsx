@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff } from 'lucide-react'
+import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff, Zap, X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { productApi } from '../../features/product/api/productApi'
@@ -15,6 +15,8 @@ function CustomerShopPage() {
   const [reviewText, setReviewText] = useState('')
   const [reviewRating, setReviewRating] = useState(5)
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
+  const [isCartDrawerOpen, setCartDrawerOpen] = useState(false)
+  const [productQuantities, setProductQuantities] = useState({})
   const [checkoutOptions, setCheckoutOptions] = useState({
     paymentMethod: 'PAYOS',
     promoCode: '',
@@ -26,6 +28,22 @@ function CustomerShopPage() {
     const normalizedStatus = status ? status.trim().toUpperCase() : ''
     return normalizedStatus === 'PAID' || normalizedStatus === 'SUCCESS'
   })
+
+  useEffect(() => {
+    const openCart = () => setCartDrawerOpen(true)
+    const closeCart = () => setCartDrawerOpen(false)
+    const toggleCart = () => setCartDrawerOpen((prev) => !prev)
+
+    window.addEventListener('gymcore:open-cart', openCart)
+    window.addEventListener('gymcore:close-cart', closeCart)
+    window.addEventListener('gymcore:toggle-cart', toggleCart)
+
+    return () => {
+      window.removeEventListener('gymcore:open-cart', openCart)
+      window.removeEventListener('gymcore:close-cart', closeCart)
+      window.removeEventListener('gymcore:toggle-cart', toggleCart)
+    }
+  }, [])
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -132,6 +150,11 @@ function CustomerShopPage() {
     : products
   const cart = cartQuery.data?.data ?? { items: [], subtotal: 0, currency: 'VND' }
   const orders = ordersQuery.data?.data?.orders ?? []
+  const cartItems = useMemo(() => cart.items ?? [], [cart.items])
+  const cartItemCount = useMemo(
+    () => cartItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    [cartItems],
+  )
   const productDetail = productDetailQuery.data?.data ?? null
   const paidProductIds = new Set(
     orders
@@ -139,13 +162,87 @@ function CustomerShopPage() {
       .flatMap((order) => (order.items || []).map((item) => item.productId)),
   )
   const canReviewSelectedProduct = selectedProductId != null && paidProductIds.has(selectedProductId)
+  const selectedProductQuantity = selectedProductId ? getDesiredQuantity(selectedProductId) : 1
 
-  const handleAddToCart = (product) => {
-    addToCartMutation.mutate({ productId: product.productId, quantity: 1 })
+  function getDesiredQuantity(productId) {
+    const parsed = Number(productQuantities[productId] || 1)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 1
+  }
+
+  const changeDesiredQuantity = (productId, delta) => {
+    setProductQuantities((prev) => {
+      const parsed = Number(prev[productId] || 1)
+      const current = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 1
+      const next = Math.max(1, current + delta)
+      return { ...prev, [productId]: next }
+    })
+  }
+
+  const triggerAddToCartAnimation = (sourceElement) => {
+    if (!sourceElement) return
+    const targetElement = document.getElementById('customer-cart-button')
+    if (!targetElement) return
+
+    const sourceRect = sourceElement.getBoundingClientRect()
+    const targetRect = targetElement.getBoundingClientRect()
+    const startX = sourceRect.left + sourceRect.width / 2
+    const startY = sourceRect.top + sourceRect.height / 2
+    const endX = targetRect.left + targetRect.width / 2
+    const endY = targetRect.top + targetRect.height / 2
+    const dx = endX - startX
+    const dy = endY - startY
+
+    const ghost = document.createElement('div')
+    ghost.className = 'pointer-events-none fixed z-[120] h-4 w-4 rounded-full border border-gym-600 bg-gym-500/80 shadow-lg'
+    ghost.style.left = `${startX}px`
+    ghost.style.top = `${startY}px`
+    ghost.style.transform = 'translate(-50%, -50%)'
+    document.body.appendChild(ghost)
+
+    const animation = ghost.animate(
+      [
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 0.95 },
+        { transform: `translate(calc(-50% + ${dx * 0.55}px), calc(-50% + ${dy * 0.45}px)) scale(0.82)`, opacity: 0.9, offset: 0.65 },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.25)`, opacity: 0.15 },
+      ],
+      { duration: 650, easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)', fill: 'forwards' },
+    )
+    animation.onfinish = () => {
+      ghost.remove()
+      window.dispatchEvent(new Event('gymcore:cart-pulse'))
+    }
+  }
+
+  const handleAddToCart = async (product, options = {}) => {
+    const {
+      quantity = 1,
+      sourceElement = null,
+      openCart = false,
+      openCheckout = false,
+    } = options
+
+    try {
+      await addToCartMutation.mutateAsync({ productId: product.productId, quantity: Math.max(1, Number(quantity || 1)) })
+      triggerAddToCartAnimation(sourceElement)
+      if (openCart || openCheckout) {
+        setCartDrawerOpen(true)
+      }
+      if (openCheckout) {
+        setShowCheckoutModal(true)
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || error?.message || 'Unable to add item to cart.'
+      alert(message)
+    }
   }
 
   const handleUpdateCartQty = (productId, quantity) => {
-    updateCartMutation.mutate({ productId, quantity })
+    const nextQuantity = Number(quantity || 0)
+    if (nextQuantity <= 0) {
+      handleRemoveCartItem(productId)
+      return
+    }
+    updateCartMutation.mutate({ productId, quantity: nextQuantity })
   }
 
   const handleRemoveCartItem = (productId) => {
@@ -317,11 +414,11 @@ function CustomerShopPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Product list */}
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-3 gc-card-compact">
           <header className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Products</h2>
+            <h2 className="gc-section-kicker">Products</h2>
             <span className="text-xs text-slate-500">{filteredProducts.length} / {products.length} items</span>
           </header>
           <div>
@@ -363,17 +460,63 @@ function CustomerShopPage() {
                   <p className="text-sm font-bold text-gym-600">
                     {product.price?.toLocaleString('en-US')} <span className="text-xs font-medium text-slate-500">VND</span>
                   </p>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      handleAddToCart(product)
-                    }}
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-gym-700 bg-gym-600 px-4 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2"
-                  >
-                    <ShoppingCart size={14} />
-                    Add to Cart
-                  </button>
+                  <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">
+                    <button
+                      type="button"
+                      className="rounded-full px-1 text-slate-500 hover:text-slate-900"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        changeDesiredQuantity(product.productId, -1)
+                      }}
+                    >
+                      -
+                    </button>
+                    <span className="min-w-[1.25rem] text-center font-semibold text-slate-800">
+                      {getDesiredQuantity(product.productId)}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-full px-1 text-slate-500 hover:text-slate-900"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        changeDesiredQuantity(product.productId, 1)
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleAddToCart(product, {
+                          quantity: getDesiredQuantity(product.productId),
+                          sourceElement: event.currentTarget,
+                        })
+                      }}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-gym-700 bg-gym-600 px-3 py-2 text-[11px] font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2"
+                    >
+                      <ShoppingCart size={13} />
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleAddToCart(product, {
+                          quantity: getDesiredQuantity(product.productId),
+                          sourceElement: event.currentTarget,
+                          openCart: true,
+                          openCheckout: true,
+                        })
+                      }}
+                      className="inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-400 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 transition-colors hover:bg-amber-100"
+                    >
+                      <Zap size={13} />
+                      Buy now
+                    </button>
+                  </div>
                 </div>
               </button>
             ))}
@@ -381,10 +524,10 @@ function CustomerShopPage() {
         </section>
 
         {/* Product detail + reviews */}
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-4 gc-card-compact">
           <header className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Product detail</h2>
+              <h2 className="gc-section-kicker">Product detail</h2>
               <p className="mt-1 text-xs text-slate-500">
                 Select a product on the left to view details and customer reviews.
               </p>
@@ -418,14 +561,55 @@ function CustomerShopPage() {
                     {productDetail.product.price?.toLocaleString('en-US')}{' '}
                     <span className="text-xs font-medium text-slate-500">VND</span>
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => handleAddToCart(productDetail.product)}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2"
-                  >
-                    <ShoppingCart size={16} />
-                    Add to Cart
-                  </button>
+                  <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-sm">
+                    <button
+                      type="button"
+                      className="rounded-full px-2 text-slate-500 hover:text-slate-900"
+                      onClick={() => changeDesiredQuantity(productDetail.product.productId, -1)}
+                    >
+                      -
+                    </button>
+                    <span className="min-w-[2rem] text-center font-semibold text-slate-800">
+                      {selectedProductQuantity}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-full px-2 text-slate-500 hover:text-slate-900"
+                      onClick={() => changeDesiredQuantity(productDetail.product.productId, 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={(event) =>
+                        handleAddToCart(productDetail.product, {
+                          quantity: selectedProductQuantity,
+                          sourceElement: event.currentTarget,
+                        })
+                      }
+                      className="inline-flex min-h-10 items-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2"
+                    >
+                      <ShoppingCart size={16} />
+                      Add to cart
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) =>
+                        handleAddToCart(productDetail.product, {
+                          quantity: selectedProductQuantity,
+                          sourceElement: event.currentTarget,
+                          openCart: true,
+                          openCheckout: true,
+                        })
+                      }
+                      className="inline-flex min-h-10 items-center gap-2 rounded-full border border-amber-400 bg-amber-50 px-5 py-2 text-sm font-bold text-amber-700 transition-colors hover:bg-amber-100"
+                    >
+                      <Zap size={16} />
+                      Buy now
+                    </button>
+                  </div>
                 </div>
               </article>
 
@@ -501,161 +685,191 @@ function CustomerShopPage() {
           )}
         </section>
 
-        {/* Cart + checkout */}
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <header className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="rounded-md bg-gym-600 p-1.5 text-white">
-                <ShoppingCart size={14} />
-              </span>
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Cart</h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Review items, pay online via PayOS, then pick up in person at the gym front desk.
-                </p>
+      <CartDrawer
+        open={isCartDrawerOpen}
+        itemCount={cartItemCount}
+        cart={cart}
+        cartItems={cartItems}
+        orders={orders}
+        checkoutMutation={checkoutMutation}
+        onClose={() => setCartDrawerOpen(false)}
+        onCheckout={handleCheckout}
+        onUpdateQuantity={handleUpdateCartQty}
+        onRemoveItem={handleRemoveCartItem}
+      />
+      </div>
+    </WorkspaceScaffold>
+  )
+}
+
+function CartDrawer({
+  open,
+  itemCount,
+  cart,
+  cartItems,
+  orders,
+  checkoutMutation,
+  onClose,
+  onCheckout,
+  onUpdateQuantity,
+  onRemoveItem,
+}) {
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-[70] bg-slate-900/35 transition-opacity duration-200 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        onClick={onClose}
+      />
+      <aside
+        className={`fixed right-0 top-0 z-[80] h-screen w-full max-w-md transform border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex h-full flex-col">
+          <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-gym-600 p-1.5 text-white">
+                  <ShoppingCart size={14} />
+                </span>
+                <h2 className="text-base font-bold text-slate-900">Your Cart</h2>
               </div>
+              <p className="mt-1 text-xs text-slate-500">{itemCount} item(s) selected</p>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              <X size={18} />
+            </button>
           </header>
 
-          <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1">
-            {cart.items?.length === 0 && (
-              <p className="text-xs text-slate-500">Your cart is empty. Start by adding a product.</p>
-            )}
-            {cart.items?.map((item) => (
-              <div
-                key={item.productId}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
-              >
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                  <p className="text-xs text-slate-600">
-                    {item.price?.toLocaleString('en-US')} VND / unit
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">
+          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="space-y-3">
+              {cartItems.length === 0 && (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                  Your cart is empty. Add products to continue.
+                </p>
+              )}
+              {cartItems.map((item) => (
+                <article
+                  key={item.productId}
+                  className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                      <p className="text-xs text-slate-600">{Number(item.price || 0).toLocaleString('en-US')} VND / unit</p>
+                    </div>
                     <button
                       type="button"
-                      className="px-1 text-slate-500 hover:text-slate-900"
-                      onClick={() => handleUpdateCartQty(item.productId, item.quantity - 1)}
-                    >
-                      -
-                    </button>
-                    <span className="min-w-[1.5rem] text-center font-semibold text-slate-800">
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      className="px-1 text-slate-500 hover:text-slate-900"
-                      onClick={() => handleUpdateCartQty(item.productId, item.quantity + 1)}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-semibold text-slate-900">
-                      {item.lineTotal?.toLocaleString('en-US')} VND
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCartItem(item.productId)}
-                      className="text-[11px] font-medium text-red-500 hover:text-red-600"
+                      onClick={() => onRemoveItem(item.productId)}
+                      className="text-[11px] font-medium text-red-600 hover:text-red-700"
                     >
                       Remove
                     </button>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-600">Subtotal</span>
-              <span className="font-semibold text-slate-900">
-                {cart.subtotal?.toLocaleString('en-US')} {cart.currency || 'VND'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Discount</span>
-              <span className="font-medium text-gym-600">Calculated at PayOS</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            disabled={checkoutMutation.isPending || !cart.items || cart.items.length === 0}
-            onClick={handleCheckout}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400 disabled:text-slate-100"
-          >
-            <CreditCard size={16} />
-            {checkoutMutation.isPending ? 'Redirecting to PayOS...' : 'Checkout with PayOS'}
-          </button>
-
-          {/* Purchase history */}
-          <article className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
-            <header className="flex items-center gap-2">
-              <span className="rounded-md bg-slate-900 p-1.5 text-white">
-                <History size={14} />
-              </span>
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Purchase history
-                </h3>
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  Recently paid and pending orders.
-                </p>
-              </div>
-            </header>
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1 pt-1">
-              {orders.length === 0 && (
-                <p className="text-xs text-slate-500">You do not have any orders yet.</p>
-              )}
-              {orders.map((order) => (
-                <div
-                  key={order.orderId}
-                  className="space-y-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-800">
-                      Order #{order.orderId} •{' '}
-                      <span
-                        className={
-                          order.status === 'PAID'
-                            ? 'text-emerald-600'
-                            : order.status === 'PENDING'
-                              ? 'text-amber-600'
-                              : 'text-slate-500'
-                        }
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => onUpdateQuantity(item.productId, Number(item.quantity || 0) - 1)}
+                        className="rounded-full px-1 text-slate-500 hover:text-slate-900"
                       >
-                        {order.status}
-                      </span>
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      {order.orderDate ? new Date(order.orderDate).toLocaleString() : ''}
+                        -
+                      </button>
+                      <span className="min-w-[1.5rem] text-center font-semibold text-slate-800">{item.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => onUpdateQuantity(item.productId, Number(item.quantity || 0) + 1)}
+                        className="rounded-full px-1 text-slate-500 hover:text-slate-900"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {Number(item.lineTotal || 0).toLocaleString('en-US')} VND
                     </p>
                   </div>
-                  <ul className="space-y-0.5 text-[11px] text-slate-700">
-                    {order.items?.map((item) => (
-                      <li key={item.productId}>
-                        {item.quantity} × {item.name}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs font-semibold text-slate-900">
-                    Total:{' '}
-                    {order.totalAmount?.toLocaleString('en-US')} {order.currency || 'VND'}
-                  </p>
-                  <p className="text-[11px] text-slate-600">
-                    Fulfillment: {order.fulfillmentMethod === 'PICKUP_AT_STORE' ? 'Pickup at gym front desk' : 'Pickup at gym front desk'}
-                  </p>
-                </div>
+                </article>
               ))}
             </div>
-          </article>
-        </section>
-      </div>
-    </WorkspaceScaffold>
+
+            <section className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Subtotal</span>
+                <span className="font-semibold text-slate-900">
+                  {Number(cart.subtotal || 0).toLocaleString('en-US')} {cart.currency || 'VND'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Discount</span>
+                <span className="font-medium text-gym-600">Calculated at PayOS</span>
+              </div>
+              <button
+                type="button"
+                disabled={checkoutMutation.isPending || cartItems.length === 0}
+                onClick={onCheckout}
+                className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400 disabled:text-slate-100"
+              >
+                <CreditCard size={16} />
+                {checkoutMutation.isPending ? 'Redirecting to PayOS...' : 'Checkout with PayOS'}
+              </button>
+            </section>
+
+            <section className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
+              <header className="flex items-center gap-2">
+                <span className="rounded-md bg-slate-900 p-1.5 text-white">
+                  <History size={14} />
+                </span>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Purchase history</h3>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Recently paid and pending orders.</p>
+                </div>
+              </header>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1 pt-1">
+                {orders.length === 0 && <p className="text-xs text-slate-500">You do not have any orders yet.</p>}
+                {orders.map((order) => (
+                  <div
+                    key={order.orderId}
+                    className="space-y-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-800">
+                        Order #{order.orderId}{' '}
+                        <span
+                          className={
+                            order.status === 'PAID'
+                              ? 'text-emerald-600'
+                              : order.status === 'PENDING'
+                                ? 'text-amber-600'
+                                : 'text-slate-500'
+                          }
+                        >
+                          {order.status}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {order.orderDate ? new Date(order.orderDate).toLocaleString() : ''}
+                      </p>
+                    </div>
+                    <ul className="space-y-0.5 text-[11px] text-slate-700">
+                      {order.items?.map((item) => (
+                        <li key={item.productId}>
+                          {item.quantity} x {item.name}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs font-semibold text-slate-900">
+                      Total: {Number(order.totalAmount || 0).toLocaleString('en-US')} {order.currency || 'VND'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+      </aside>
+    </>
   )
 }
 

@@ -95,10 +95,10 @@ function AdminMembershipsPage() {
       links={adminNav}
     >
       <div className="space-y-4">
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-4 gc-card-compact">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Membership Plans</h2>
+              <h2 className="gc-section-kicker">Membership Plans</h2>
               <p className="mt-0.5 text-xs text-slate-500">
                 Types: <span className="font-medium">DAY_PASS</span>, <span className="font-medium">GYM_ONLY</span>, <span className="font-medium">GYM_PLUS_COACH</span>.
               </p>
@@ -189,7 +189,7 @@ function AdminMembershipsPage() {
         </section>
 
         {editingPlan && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="gc-card-compact">
             <form onSubmit={handleSubmit} className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-900">
                 {editingPlan.planId ? 'Update membership plan' : 'Create membership plan'}

@@ -55,6 +55,11 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - Unique filtered indexes enforce max one `ACTIVE` and one `SCHEDULED` per customer.
     - Daily job `sp_RunDailyMembershipJobs` activates due `SCHEDULED` memberships.
   - Promotions support `BonusDurationDays` (for coupon discount + extra days at the same time).
+  - Membership plan strictness:
+    - Only `GYM_PLUS_COACH` can have `AllowsCoachBooking = 1`.
+    - `GYM_ONLY` and `DAY_PASS` must have `AllowsCoachBooking = 0`.
+  - Day pass membership validity enforcement:
+    - `DAY_PASS` memberships must satisfy `StartDate = EndDate`.
   - Coach/PT booking tables include:
     - `TimeSlots` (8 fixed slots/day)
     - `CoachWeeklyAvailability` with `IsAvailable`
@@ -63,6 +68,9 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - PT booking rule is strict:
     - `PTRecurringRequests.CustomerMembershipID` is `NOT NULL`
     - customer must have active Gym+Coach membership for booking flow.
+  - New coach availability defaulting:
+    - New rows in `Coaches` auto-seed `CoachWeeklyAvailability` for all 7 days x 8 slots.
+  - Check-in/PT integrity is trigger-enforced (active membership checks, coach-booking eligibility, date coverage).
 
 ## 7) Seed data status
 - `docs/InsertValues.txt` = required baseline seed (roles/users/profiles/time slots/plans/goals), idempotent.
@@ -71,6 +79,7 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - Seeds one queued `SCHEDULED` membership sample for membership-switch testing.
   - Seeds promotion `SUMMERPLUS30` (5% + 30 bonus days) example.
   - Seeds coach weekly availability rows for testing flow.
+  - Seeded plan/product demo prices were reduced to low values for easier local testing (1k/2k/3k scale and incremental tiers).
 - Seeded login passwords:
   - Admin: `Admin123456!`
   - Receptionist: `Reception123456!`
@@ -169,3 +178,33 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 ## 17) Layout/UI architecture memory
 - App now uses one shared global shell header/footer; duplicate page headers were removed.
 - `WorkspaceScaffold` is content wrapper only (no duplicate top nav/user bar).
+
+## 18) README onboarding updates (Feb 28, 2026)
+- Root `README.md` now documents the exact DB execution order for local setup:
+  1. `docs/GymCore.txt`
+  2. `docs/alter.txt`
+  3. `docs/InsertValues.txt`
+  4. `docs/InsertTestingValues.txt` (optional)
+- Root `README.md` now explicitly tells teammates where to change SQL Server auth:
+  - `backend/src/main/resources/application.properties`
+  - `spring.datasource.username`
+  - `spring.datasource.password`
+  - `spring.datasource.url`
+- `frontend/README.md` was replaced with project-specific notes:
+  - points to `../README.md` for full setup
+  - references backend datasource config location for SQL credentials.
+
+## 19) Membership/Payment policy alignment (Mar 1, 2026)
+- `docs/Usecase functions.txt` and DB docs are aligned on payment channels:
+  - Membership checkout channel is PayOS redirect.
+  - System payment methods tracked for audit are `PAYOS` and `CASH`.
+  - Product flow remains online checkout + in-store pickup, with no shipping.
+- `docs/alter.txt` now includes idempotent compatibility migration blocks for:
+  - strict membership coach-booking constraint (`CK_MembershipPlans_CoachBookingByType`)
+  - day-pass date enforcement trigger (`TRG_CustomerMemberships_ValidateDayPassDate`)
+  - new-coach full-week availability seeding trigger (`TRG_Coaches_SeedDefaultAvailability`)
+- DB rerun order remains unchanged:
+  1. `docs/GymCore.txt`
+  2. `docs/alter.txt`
+  3. `docs/InsertValues.txt`
+  4. `docs/InsertTestingValues.txt` (optional)

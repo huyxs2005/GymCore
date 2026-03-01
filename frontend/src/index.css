@@ -4,6 +4,24 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .gc-input {
+    @apply w-full rounded-lg border border-slate-300 px-3 py-2;
+  }
+
+  .gc-section-kicker {
+    @apply text-sm font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .gc-card {
+    @apply rounded-2xl border border-slate-200 bg-white p-6 shadow-sm;
+  }
+
+  .gc-card-compact {
+    @apply rounded-2xl border border-slate-200 bg-white p-4 shadow-sm;
+  }
+}
+
 :root {
   font-family: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
   text-rendering: optimizeLegibility;
