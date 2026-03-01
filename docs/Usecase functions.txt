@@ -36,16 +36,6 @@ Admin
 - Create Membership Plan
 - Update Membership Plan
 
-Business rules
-- 3 types: Gym Only, Day Pass (unlimited check-ins that day), Gym + Coach
-- Only ONE ACTIVE membership at a time
-- Renew: extend current membership from its EndDate (no downtime, PT keeps going)
-- Upgrade: apply immediately (old ends today, new starts today), full price
-- Day pass is active until midnight (StartDate = EndDate)
-- Membership checkout channel is PayOS redirect.
-- Payment method is tracked on order/payment records for audit; supported values are PAYOS and CASH (cash is used for front-desk/offline flows).
-- Payment success must not force queued memberships to ACTIVE if another ACTIVE membership already exists.
-
 ________________________________________
 D. Check-in and Personal Health
 Customer
@@ -104,11 +94,6 @@ Admin
 - Update Product
 - View Product Reviews
 
-Product order rules
-- Product purchase is online checkout + in-store pickup only.
-- Payment methods in system: PAYOS (online checkout) and CASH (front desk/offline).
-- Shipping/delivery flow is out of scope.
-
 ________________________________________
 G. Promotions, Coupons, Notifications, Revenue
 Customer
@@ -124,15 +109,6 @@ Admin
 - Update Promotion Post
 - View Revenue Report
 - Export reports to PDF (backend feature)
-
-Coupon rules
-- Must claim first, then apply at payment
-- One-time per customer per coupon (one claim, one use)
-- Coupon can provide discount amount/percent and can also add bonus duration days for memberships.
-
-Notification rules
-- Membership expiry countdown notifications: 7 -> 1 days left (daily job)
-- If membership expires and not renewed: cancel PT schedules (daily job) + notify
 
 ________________________________________
 H. Workout and Food Info Pages plus AI Assistant
@@ -153,38 +129,162 @@ AI Assistant
 - Assist PT booking using the same matching rules
 
 ________________________________________
-I. DB-Enforced Business Rules (from GymCore.txt)
-Membership / Payment
+I. Consolidated Business Rules (App + DB)
+
+I1. Auth, identity, and account policy
+- Login channels:
+  - Email/password is supported.
+  - Google login is supported for CUSTOMER, COACH, RECEPTIONIST.
+  - ADMIN login is email/password only.
+- Passwords are stored hashed (bcrypt).
+- OTP policy:
+  - OTP expires after 2 minutes.
+  - Resend cooldown is 5 seconds.
+  - Resending invalidates previous OTP.
+- Forgot-password policy:
+  - Step 1: request + verify OTP at `/auth/forgot-password`.
+  - Step 2: reset password at `/auth/forgot-password/reset`.
+- User data integrity:
+  - `Users.AvatarSource` must be NULL, GOOGLE, or CUSTOM.
+  - `Users.Phone` cannot be blank and must contain digits when provided.
+  - VN phone normalization is enforced for uniqueness (`+84...` and `0...` treated as same normalized number).
+  - QR code token is unique and immutable after creation (`TRG_Users_BlockQrChange`).
+
+I2. Authorization and profile visibility policy
+- Route guards require authenticated session and correct role namespace.
+- Unauthorized route access redirects to `/`.
+- DOB/Gender fields are visible/editable for CUSTOMER and COACH only.
+- DOB/Gender fields are hidden for ADMIN and RECEPTIONIST.
+- QR entry in account menu is CUSTOMER-only.
+- Customer QR dialog does not expose token copy/paste actions.
+
+I3. Membership plan and membership lifecycle rules
 - Membership plan types are strictly: GYM_ONLY, DAY_PASS, GYM_PLUS_COACH.
-- Only GYM_PLUS_COACH plans can set AllowsCoachBooking = 1 (GYM_ONLY/DAY_PASS must be 0).
-- DAY_PASS must have DurationDays = 1 and AllowsCoachBooking = 0.
-- DAY_PASS customer memberships must have StartDate = EndDate.
-- Customer membership statuses are: PENDING, SCHEDULED, ACTIVE, EXPIRED, CANCELLED.
-- Only one ACTIVE membership per customer at a time.
-- Only one SCHEDULED membership per customer at a time.
-- Payment row must target exactly one domain: Order OR CustomerMembership (not both).
+- Only GYM_PLUS_COACH can have `AllowsCoachBooking = 1`.
+- GYM_ONLY and DAY_PASS must have `AllowsCoachBooking = 0`.
+- DAY_PASS plan must have `DurationDays = 1`.
+- DAY_PASS membership rows must satisfy `StartDate = EndDate` (`TRG_CustomerMemberships_ValidateDayPassDate`).
+- DAY_PASS allows unlimited check-ins on that day (still requires ACTIVE status and date-valid membership).
+- Membership statuses are: PENDING, SCHEDULED, ACTIVE, EXPIRED, CANCELLED.
+- Membership date integrity: `EndDate >= StartDate`.
+- Only one ACTIVE membership per customer at a time (unique filtered index).
+- Only one SCHEDULED membership per customer at a time (unique filtered index).
+- Renew policy: extend from current EndDate (no downtime).
+- Upgrade policy: apply immediately (old ends today, new starts today), full price.
+- Payment success must not force a queued membership to ACTIVE if another ACTIVE exists.
+- Daily membership job (`sp_RunDailyMembershipJobs`) rules:
+  - Send countdown notifications for ACTIVE memberships with 7..1 days left.
+  - Move ACTIVE memberships to EXPIRED when `EndDate < today`.
+  - Activate due SCHEDULED memberships only when customer has no ACTIVE membership.
+
+I4. Coach booking and PT scheduling rules
+- Time slots are fixed to 8 slots/day (`SlotIndex` 1..8, `EndTime > StartTime`).
+- Weekly availability uses DayOfWeek 1..7 with default `IsAvailable = 1`.
+- New coach rows auto-seed full 7x8 weekly availability (`TRG_Coaches_SeedDefaultAvailability`).
+- PT recurring request statuses: PENDING, APPROVED, DENIED, CANCELLED.
+- PT request must use a membership that:
+  - belongs to the same customer,
+  - is ACTIVE,
+  - allows coach booking,
+  - covers requested StartDate..EndDate (`TRG_PTRecurringRequests_ValidateMembership`).
+- PT request must reference `CustomerMembershipID` (not nullable in DB).
+- One customer can have only one APPROVED recurring PT request at a time.
+- PTSession statuses: SCHEDULED, COMPLETED, CANCELLED.
+- Coach cannot be double-booked on same SessionDate + TimeSlotID for SCHEDULED/COMPLETED sessions.
+- Coach deny action requires DenyReason.
+- Coach feedback constraints:
+  - one feedback per PT session,
+  - rating must be between 1 and 5.
+- Match results are separated into fully matched and partially matched coach lists.
+- Customer must resolve unmatched selected slots before confirming a booking request in match review UI.
+
+I5. Check-in and personal health rules
+- Reception check-in supports 2 flows:
+  - QR scan
+  - Manual search/select by phone/fullName.
+- QR scan is one-shot per success; reception then starts next scan explicitly.
+- No manual QR token paste fallback is exposed on reception check-in screen.
+- Reception check-in timestamps are displayed in VN-friendly `dd/mm/yy HH:mm` format.
+- Check-in is blocked unless membership is:
+  - linked to the same customer,
+  - ACTIVE,
+  - valid for the check-in date (`TRG_CheckIns_ValidateMembershipActive`).
+- Health data rules:
+  - Height and weight must be > 0.
+  - BMI is computed from height/weight (persisted computed column).
+  - Inserting health history upserts current health snapshot (`TRG_CustomerHealthHistory_UpsertCurrent`).
+
+I6. Product sales, cart, order, payment rules
+- Product purchase flow is online checkout + in-store pickup only.
+- Shipping/delivery is out of scope.
+- Cart item quantity must be > 0.
+- Order statuses: PENDING, PAID, CANCELLED.
+- Order money integrity: Subtotal, DiscountApplied, TotalAmount are non-negative and DiscountApplied <= Subtotal.
+- Product review rules:
+  - Rating must be 1..5.
+  - One review per customer per product.
+  - Review allowed only when customer has a PAID order containing that product (`TRG_ProductReviews_RequirePurchase`).
+- Payment statuses: PENDING, SUCCESS, FAILED, CANCELLED.
+- Each payment must target exactly one domain:
+  - Order OR CustomerMembership (not both).
+- Payment money integrity:
+  - non-negative amounts,
+  - DiscountAmount <= OriginalAmount,
+  - Amount = OriginalAmount - DiscountAmount.
 - Only one PENDING payment per order.
 - Only one PENDING payment per membership.
+- Payment method audit values are strictly PAYOS or CASH on Orders and Payments (defaults and checks applied in `alter.txt`).
+- Membership checkout channel is PayOS redirect.
+- Payment success procedure (`sp_ConfirmPaymentSuccess`) behavior:
+  - payment moves PENDING -> SUCCESS,
+  - linked order moves PENDING -> PAID,
+  - linked claim is marked used,
+  - membership PENDING -> ACTIVE if no other ACTIVE exists, else -> SCHEDULED.
 
-Coach booking / PT
-- Time slots are fixed 8 slots/day; each slot has valid StartTime < EndTime and index range 1..8.
-- Coach weekly availability uses DayOfWeek 1..7 and IsAvailable default = 1.
-- New coaches are auto-seeded with full weekly availability (7 days x 8 slots).
-- PT recurring request statuses are: PENDING, APPROVED, DENIED, CANCELLED.
-- A PT request must use an ACTIVE membership of the same customer, that allows coach booking, and fully covers requested StartDate..EndDate.
-- One customer can have only one APPROVED PT recurring request at a time.
-- Coach cannot be double-booked on same date + slot (scheduled/completed uniqueness).
-
-Check-in
-- Check-in is blocked unless membership is ACTIVE, belongs to the same customer, and check-in date is within membership StartDate..EndDate.
-
-Promotions / claims
+I7. Promotions, coupon wallet, and claim usage rules
+- Promotion validity:
+  - `ValidTo > ValidFrom`.
+  - DiscountPercent and DiscountAmount cannot both be set at same time.
+  - DiscountPercent must be 0..100 when present.
+  - DiscountAmount must be >= 0 when present.
+  - BonusDurationDays must be >= 0.
+- PromotionPost validity: `EndAt > StartAt`.
+- Claim-first policy:
+  - Customer must claim coupon before apply/checkout.
 - One claim per user per promotion.
-- Claim usage must be consistent: unused claim has no used fields; used claim must link to exactly one target (order or membership) and used payment.
-- Claim source post/promotion must be active and within valid windows.
+- Claim usage shape integrity:
+  - unused claim has no used fields,
+  - used claim must have UsedAt + UsedPaymentID,
+  - used target must be exactly one of Order or Membership.
+- Claim source validity (`TRG_UserPromotionClaims_Validate`):
+  - source post must belong to same promotion,
+  - source post and promotion must be active and inside valid windows.
+- Order claim validation (`TRG_Orders_ValidateClaim`):
+  - claim user must match order customer,
+  - claim must be unused,
+  - promotion must still be active/valid.
+- Payment claim validation (`TRG_Payments_ValidateClaim`):
+  - claim user must match payment target customer,
+  - claim must be unused,
+  - promotion must still be active/valid.
+- Coupon can provide discount and/or bonus duration days for membership flow.
 
-Daily job (membership lifecycle)
-- Daily job sends expiry countdown notifications for ACTIVE memberships (7..1 days left).
-- Daily job expires memberships whose EndDate is before today.
-- Daily job activates due SCHEDULED memberships only when customer has no ACTIVE membership.
-- Daily job cancels future SCHEDULED PT sessions for customers with no ACTIVE membership and notifies customer.
+I8. Notification and anti-spam rules
+- Notification row has read/unread state (`IsRead`).
+- Notification dedupe index prevents duplicate same-type notifications per `(UserID, NotificationType, RefId, ExtraKey)` when RefId is set.
+- Daily job also cancels future SCHEDULED PT sessions for customers with no ACTIVE membership and sends cancellation notification.
+
+I9. Workout/Food/Goal modeling rules
+- Goal code is unique and used for AI filtering.
+- Customer goals are many-to-many and multi-select.
+- Workout/Food to Goal mapping is many-to-many.
+- Food calories (when provided) must be non-negative.
+
+I10. Operational SQL run rules (current project standard)
+- Official DB execution order:
+  1) docs/GymCore.txt
+  2) docs/alter.txt
+  3) docs/InsertValues.txt
+  4) docs/InsertTestingValues.txt (optional)
+- `InsertValues.txt` and `InsertTestingValues.txt` are idempotent seed scripts.
+- `alter.txt` is idempotent compatibility migration script and must not be skipped.
