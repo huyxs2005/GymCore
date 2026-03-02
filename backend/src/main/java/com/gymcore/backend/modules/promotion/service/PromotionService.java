@@ -234,7 +234,7 @@ public class PromotionService {
                         """);
     }
 
-    private Map<String, Object> customerClaimCoupon(String auth, Map<String, Object> payload) {
+   private Map<String, Object> customerClaimCoupon(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
         int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         int sourcePostId = requireInt(payload.get("sourcePostId"), "Source post ID is required.");
