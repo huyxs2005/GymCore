@@ -131,7 +131,7 @@ function CustomerCurrentMembershipPage() {
         <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
           <section className="space-y-6">
             <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-5">
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusTone[status] || 'bg-slate-200 text-slate-700'}`}>
@@ -147,39 +147,40 @@ function CustomerCurrentMembershipPage() {
                       {membership?.startDate || '-'} to {membership?.endDate || '-'}
                     </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {highlights.map((item) => (
-                      <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-                        <p className={`mt-2 text-sm font-semibold ${item.tone}`}>{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
                 </div>
 
-                <div className="min-w-[220px] rounded-3xl border border-gym-100 bg-gym-50 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gym-700">Plan summary</p>
-                  <div className="mt-3 space-y-3 text-sm text-slate-700">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Price paid</span>
-                      <strong className="text-slate-900">{formatCurrency(plan?.price)}</strong>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {highlights.map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
+                      <p className={`mt-2 text-sm font-semibold ${item.tone}`}>{item.value}</p>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Duration</span>
-                      <strong className="text-slate-900">{plan?.durationDays || 0} day(s)</strong>
+                  ))}
+
+                  <div className="rounded-2xl border border-gym-100 bg-gym-50 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gym-700">Plan summary</p>
+                    <div className="mt-3 space-y-3 text-sm text-slate-700">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Price paid</span>
+                        <strong className="text-slate-900">{formatCurrency(plan?.price)}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Duration</span>
+                        <strong className="text-slate-900">{plan?.durationDays || 0} day(s)</strong>
+                      </div>
+                      {'daysRemaining' in membership ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Time remaining</span>
+                          <strong className="text-emerald-700">{membership.daysRemaining} day(s)</strong>
+                        </div>
+                      ) : null}
+                      {'daysUntilActive' in membership ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Starts in</span>
+                          <strong className="text-amber-700">{membership.daysUntilActive} day(s)</strong>
+                        </div>
+                      ) : null}
                     </div>
-                    {'daysRemaining' in membership ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Time remaining</span>
-                        <strong className="text-emerald-700">{membership.daysRemaining} day(s)</strong>
-                      </div>
-                    ) : null}
-                    {'daysUntilActive' in membership ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Starts in</span>
-                        <strong className="text-amber-700">{membership.daysUntilActive} day(s)</strong>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </div>

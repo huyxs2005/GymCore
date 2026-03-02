@@ -67,6 +67,7 @@ describe('ProfilePage', () => {
     expect(await screen.findByText('My Profile')).toBeInTheDocument()
     expect(screen.getByText(/Choose image/i)).toBeInTheDocument()
     expect(screen.queryByText(/Raw API payload/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Role:/i)).not.toBeInTheDocument()
   })
 
   it('hides Date of birth and Gender for ADMIN and RECEPTIONIST', async () => {

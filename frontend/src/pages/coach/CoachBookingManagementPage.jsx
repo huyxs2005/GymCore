@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
@@ -9,6 +9,18 @@ function CoachBookingManagementPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [bookingActionModal, setBookingActionModal] = useState({
+    open: false,
+    request: null,
+    action: '',
+    reason: '',
+  })
+  const [rescheduleActionModal, setRescheduleActionModal] = useState({
+    open: false,
+    request: null,
+    action: '',
+    reason: '',
+  })
 
   useEffect(() => {
     loadRequests()
@@ -30,50 +42,95 @@ function CoachBookingManagementPage() {
     }
   }
 
-  async function handleAction(requestId, action) {
-    if (!confirm(`Confirm ${action === 'ACCEPT' ? 'approve' : 'deny'} this booking request?`)) return
+  function openBookingActionModal(request, action) {
+    setBookingActionModal({
+      open: true,
+      request,
+      action,
+      reason: '',
+    })
+  }
+
+  function closeBookingActionModal() {
+    setBookingActionModal({
+      open: false,
+      request: null,
+      action: '',
+      reason: '',
+    })
+  }
+
+  function openRescheduleActionModal(request, action) {
+    setRescheduleActionModal({
+      open: true,
+      request,
+      action,
+      reason: '',
+    })
+  }
+
+  function closeRescheduleActionModal() {
+    setRescheduleActionModal({
+      open: false,
+      request: null,
+      action: '',
+      reason: '',
+    })
+  }
+
+  async function submitBookingAction() {
+    const requestId = bookingActionModal.request?.ptRequestId
+    if (!requestId) return
+
+    const isDeny = bookingActionModal.action === 'DENY'
+    const reason = bookingActionModal.reason.trim()
+    if (isDeny && !reason) {
+      setError('Deny reason is required.')
+      return
+    }
+
     try {
       setLoading(true)
-      let body = {}
-      if (action === 'DENY') {
-        const reason = prompt('Reason for denial (shown to customer):', '')
-        if (reason === null) {
-          setLoading(false)
-          return
-        }
-        if (!String(reason).trim()) {
-          setError('Deny reason is required.')
-          setLoading(false)
-          return
-        }
-        body = { reason: String(reason).trim() }
-      }
-      await coachBookingApi.actionRequest(requestId, action, body)
-      setMessage(action === 'ACCEPT' ? 'Booking request approved and sessions generated.' : 'Booking request denied.')
-      loadRequests()
+      await coachBookingApi.actionRequest(
+        requestId,
+        bookingActionModal.action,
+        isDeny ? { reason } : {},
+      )
+      closeBookingActionModal()
+      setMessage(bookingActionModal.action === 'ACCEPT'
+        ? 'Booking request approved and sessions generated.'
+        : 'Booking request denied.')
+      await loadRequests()
     } catch (err) {
       setError(err?.response?.data?.message || 'Booking request action failed')
-      loadRequests()
+      await loadRequests()
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleRescheduleAction(sessionId, action) {
-    if (!confirm(`Confirm ${action === 'APPROVE' ? 'approve' : 'deny'} this reschedule request?`)) return
+  async function submitRescheduleAction() {
+    const sessionId = rescheduleActionModal.request?.ptSessionId
+    if (!sessionId) return
+
     try {
       setLoading(true)
-      if (action === 'APPROVE') {
+      if (rescheduleActionModal.action === 'APPROVE') {
         await coachBookingApi.approveRescheduleRequest(sessionId)
         setMessage('Reschedule request approved.')
       } else {
-        await coachBookingApi.denyRescheduleRequest(sessionId)
+        const reason = rescheduleActionModal.reason.trim()
+        await coachBookingApi.denyRescheduleRequest(
+          sessionId,
+          reason ? { reason } : {},
+        )
         setMessage('Reschedule request denied.')
       }
-      loadRequests()
+      closeRescheduleActionModal()
+      await loadRequests()
     } catch (err) {
       setError(err?.response?.data?.message || 'Reschedule action failed')
-      loadRequests()
+      await loadRequests()
     } finally {
       setLoading(false)
     }
@@ -129,20 +186,21 @@ function CoachBookingManagementPage() {
                     <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-2">
                       <p className="text-slate-600">Current: <span className="font-semibold">{req.currentSessionDate}</span> - Slot {req.currentSlot?.slotIndex || req.currentTimeSlotId}</p>
                       <p className="text-slate-900">Requested: <span className="font-semibold">{req.requestedSessionDate}</span> - Slot {req.requestedSlot?.slotIndex || req.requestedTimeSlotId}</p>
+                      {req.reason && <p className="text-slate-700">Customer reason: <span className="font-semibold">{req.reason}</span></p>}
                       {!req.weeklyAvailable && <p className="text-red-600 text-xs font-semibold">Requested slot is not in your weekly availability.</p>}
                       {req.hasConflict && <p className="text-red-600 text-xs font-semibold">Requested slot conflicts with another session.</p>}
                     </div>
                   </div>
                   <div className="px-5 pb-5 flex gap-3">
                     <button
-                      onClick={() => handleRescheduleAction(req.ptSessionId, 'APPROVE')}
+                      onClick={() => openRescheduleActionModal(req, 'APPROVE')}
                       disabled={loading}
                       className="flex-1 py-2.5 rounded-xl bg-gym-500 text-white font-bold hover:bg-gym-600 disabled:opacity-50"
                     >
                       Approve
                     </button>
                     <button
-                      onClick={() => handleRescheduleAction(req.ptSessionId, 'DENY')}
+                      onClick={() => openRescheduleActionModal(req, 'DENY')}
                       disabled={loading}
                       className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 disabled:opacity-50"
                     >
@@ -194,14 +252,14 @@ function CoachBookingManagementPage() {
               <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col gap-4">
                 <div className="flex gap-3 w-full">
                   <button
-                    onClick={() => handleAction(req.ptRequestId, 'ACCEPT')}
+                    onClick={() => openBookingActionModal(req, 'ACCEPT')}
                     disabled={loading}
                     className="flex-1 py-3 bg-gym-500 text-white rounded-xl font-bold hover:bg-gym-600 transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Approve
                   </button>
                   <button
-                    onClick={() => handleAction(req.ptRequestId, 'DENY')}
+                    onClick={() => openBookingActionModal(req, 'DENY')}
                     disabled={loading}
                     className="flex-1 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -213,6 +271,103 @@ function CoachBookingManagementPage() {
           ))}
         </div>
       </div>
+
+      {bookingActionModal.open && bookingActionModal.request && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${bookingActionModal.action === 'ACCEPT' ? 'text-gym-600' : 'text-rose-500'}`}>
+              {bookingActionModal.action === 'ACCEPT' ? 'Approve booking request' : 'Deny booking request'}
+            </p>
+            <h4 className="mt-2 text-2xl font-bold text-slate-900">
+              {bookingActionModal.action === 'ACCEPT' ? 'Confirm this PT booking request?' : 'Deny this PT booking request?'}
+            </h4>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              {bookingActionModal.request.customerName} requested sessions from {bookingActionModal.request.startDate} to {bookingActionModal.request.endDate}.
+            </p>
+
+            {bookingActionModal.action === 'DENY' && (
+              <label className="mt-5 block text-sm font-semibold text-slate-700">
+                Reason for denial
+                <textarea
+                  value={bookingActionModal.reason}
+                  onChange={(e) => setBookingActionModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                  rows={3}
+                  placeholder="Explain why you cannot take this booking request."
+                />
+              </label>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeBookingActionModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={submitBookingAction}
+                disabled={loading}
+                className={`rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${bookingActionModal.action === 'ACCEPT' ? 'bg-gym-600 hover:bg-gym-700' : 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {bookingActionModal.action === 'ACCEPT' ? 'Approve request' : 'Confirm denial'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rescheduleActionModal.open && rescheduleActionModal.request && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${rescheduleActionModal.action === 'APPROVE' ? 'text-gym-600' : 'text-rose-500'}`}>
+              {rescheduleActionModal.action === 'APPROVE' ? 'Approve reschedule request' : 'Deny reschedule request'}
+            </p>
+            <h4 className="mt-2 text-2xl font-bold text-slate-900">
+              {rescheduleActionModal.action === 'APPROVE' ? 'Approve this reschedule request?' : 'Deny this reschedule request?'}
+            </h4>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+              <p className="text-slate-600">Customer: <span className="font-semibold text-slate-900">{rescheduleActionModal.request.customerName}</span></p>
+              <p className="text-slate-600">Current slot: <span className="font-semibold text-slate-900">{rescheduleActionModal.request.currentSessionDate} - Slot {rescheduleActionModal.request.currentSlot?.slotIndex || rescheduleActionModal.request.currentTimeSlotId}</span></p>
+              <p className="text-slate-600">Requested slot: <span className="font-semibold text-slate-900">{rescheduleActionModal.request.requestedSessionDate} - Slot {rescheduleActionModal.request.requestedSlot?.slotIndex || rescheduleActionModal.request.requestedTimeSlotId}</span></p>
+              {rescheduleActionModal.request.reason && <p className="text-slate-700">Customer reason: <span className="font-semibold">{rescheduleActionModal.request.reason}</span></p>}
+            </div>
+
+            {rescheduleActionModal.action === 'DENY' && (
+              <label className="mt-5 block text-sm font-semibold text-slate-700">
+                Reason for denial (optional)
+                <textarea
+                  value={rescheduleActionModal.reason}
+                  onChange={(e) => setRescheduleActionModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                  rows={3}
+                  placeholder="Explain why you cannot accept this requested slot."
+                />
+              </label>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeRescheduleActionModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Keep current session
+              </button>
+              <button
+                type="button"
+                onClick={submitRescheduleAction}
+                disabled={loading}
+                className={`rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${rescheduleActionModal.action === 'APPROVE' ? 'bg-gym-600 hover:bg-gym-700' : 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {rescheduleActionModal.action === 'APPROVE' ? 'Approve request' : 'Confirm denial'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </WorkspaceScaffold>
   )
 }

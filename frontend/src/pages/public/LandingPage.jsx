@@ -84,18 +84,18 @@ const faqs = [
   },
 ]
 
-function workspaceLabelByRole(role) {
+function rolePrimaryCtaLabel(role) {
   switch (role) {
     case 'CUSTOMER':
-      return 'Customer Workspace'
+      return 'Go to Membership'
     case 'COACH':
-      return 'Coach Workspace'
+      return 'Go to Schedule'
     case 'RECEPTIONIST':
-      return 'Reception Workspace'
+      return 'Open Check-in Scanner'
     case 'ADMIN':
-      return 'Admin Workspace'
+      return 'Open Dashboard'
     default:
-      return 'Workspace'
+      return 'Continue'
   }
 }
 
@@ -103,7 +103,7 @@ function LandingPage() {
   const { isAuthenticated, user } = useSession()
   const role = String(user?.role || '').toUpperCase()
   const workspacePath = roleLandingPath(role)
-  const workspaceLabel = workspaceLabelByRole(role)
+  const primaryCtaLabel = rolePrimaryCtaLabel(role)
   const [hotlineCopied, setHotlineCopied] = useState(false)
 
   async function handleCopyHotline() {
@@ -135,7 +135,7 @@ function LandingPage() {
                 to={workspacePath}
                 className="inline-flex items-center gap-2 rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white transition hover:bg-gym-700"
               >
-                Open {workspaceLabel}
+                {primaryCtaLabel}
                 <ArrowRight size={16} />
               </Link>
             ) : (

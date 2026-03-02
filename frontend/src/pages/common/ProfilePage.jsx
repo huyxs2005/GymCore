@@ -177,7 +177,6 @@ function ProfilePage() {
                 <div>
                   <p className="text-base font-semibold text-slate-900">{viewUser?.fullName}</p>
                   <p className="text-sm text-slate-600">{viewUser?.email}</p>
-                  <p className="mt-1 text-xs text-slate-500">Role: {viewUser?.role}</p>
                 </div>
               </div>
 

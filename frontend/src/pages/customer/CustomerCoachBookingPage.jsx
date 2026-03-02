@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { X } from 'lucide-react'
+import WeekdayDropdown from '../../components/common/WeekdayDropdown'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
@@ -171,6 +172,7 @@ function CustomerCoachBookingPage() {
     open: false,
     focusDay: 1,
   })
+  const [selectedWeeklySummaryDay, setSelectedWeeklySummaryDay] = useState(1)
   const [datePicker, setDatePicker] = useState({
     field: '',
     monthCursor: '',
@@ -205,6 +207,11 @@ function CustomerCoachBookingPage() {
     session: null,
     rating: 0,
     comment: '',
+  })
+  const [cancelModal, setCancelModal] = useState({
+    open: false,
+    session: null,
+    reason: '',
   })
   const [membershipGate, setMembershipGate] = useState({
     loading: true,
@@ -307,6 +314,17 @@ function CustomerCoachBookingPage() {
     })
     return counts
   }, [weeklySlots])
+
+  const groupedWeeklySlots = useMemo(() => {
+    return DAYS.map((day) => ({
+      ...day,
+      slots: weeklySlots.filter((item) => item.dayOfWeek === day.id),
+    })).filter((day) => day.slots.length > 0)
+  }, [weeklySlots])
+
+  const selectedWeeklySummaryGroup = useMemo(() => {
+    return groupedWeeklySlots.find((day) => day.id === selectedWeeklySummaryDay) || groupedWeeklySlots[0] || null
+  }, [groupedWeeklySlots, selectedWeeklySummaryDay])
 
   const coachReviewRows = useMemo(() => {
     if (!coachReviewModal.coach) return []
@@ -598,11 +616,51 @@ function CustomerCoachBookingPage() {
     }
   }
 
-  async function cancelSession(sessionId) {
-    if (!window.confirm('Cancel this PT session?')) return
+  function openCancelModal(session) {
+    setCancelModal({
+      open: true,
+      session,
+      reason: '',
+    })
+  }
+
+  function closeCancelModal() {
+    setCancelModal({
+      open: false,
+      session: null,
+      reason: '',
+    })
+  }
+
+  function openRescheduleModal(session) {
+    setRescheduleModal({
+      open: true,
+      session,
+      sessionDate: '',
+      timeSlotId: '',
+      reason: '',
+    })
+  }
+
+  function closeRescheduleModal() {
+    setRescheduleModal({
+      open: false,
+      session: null,
+      sessionDate: '',
+      timeSlotId: '',
+      reason: '',
+    })
+  }
+
+  async function confirmCancelSession() {
+    const sessionId = cancelModal.session?.ptSessionId
+    if (!sessionId) return
     try {
       setLoading(true)
-      await coachBookingApi.cancelSession(sessionId, { cancelReason: 'Cancelled by customer' })
+      await coachBookingApi.cancelSession(sessionId, {
+        cancelReason: cancelModal.reason.trim() || 'Cancelled by customer',
+      })
+      closeCancelModal()
       await loadMySchedule()
       setMessage('Session cancelled.')
     } catch (err) {
@@ -624,7 +682,7 @@ function CustomerCoachBookingPage() {
         timeSlotId: Number(rescheduleModal.timeSlotId),
         reason: rescheduleModal.reason || undefined,
       })
-      setRescheduleModal({ open: false, session: null, sessionDate: '', timeSlotId: '', reason: '' })
+      closeRescheduleModal()
       setMessage('Reschedule request sent to coach.')
       await loadMySchedule()
     } catch (err) {
@@ -698,6 +756,15 @@ function CustomerCoachBookingPage() {
     setSelectedScheduleDate('')
   }, [scheduleData.items])
 
+  useEffect(() => {
+    if (groupedWeeklySlots.length === 0) {
+      return
+    }
+    if (!groupedWeeklySlots.some((day) => day.id === selectedWeeklySummaryDay)) {
+      setSelectedWeeklySummaryDay(groupedWeeklySlots[0].id)
+    }
+  }, [groupedWeeklySlots, selectedWeeklySummaryDay])
+
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
@@ -744,17 +811,38 @@ function CustomerCoachBookingPage() {
                   <p className="text-sm text-slate-500">No slots selected yet.</p>
                 )}
                 {weeklySlots.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {weeklySlots
-                      .slice(0, 10)
-                      .map((item) => (
-                        <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700">
-                          {getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`} | {formatSlotLabel(item.timeSlotId)}
-                        </span>
-                      ))}
-                    {weeklySlots.length > 10 && (
-                      <span className="text-xs text-slate-500 self-center">+{weeklySlots.length - 10} more</span>
-                    )}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <WeekdayDropdown
+                          id="customer-summary-day"
+                          label="Weekday"
+                          value={selectedWeeklySummaryGroup?.id || ''}
+                          onChange={(nextValue) => setSelectedWeeklySummaryDay(Number(nextValue))}
+                          options={groupedWeeklySlots.map((day) => ({
+                            value: day.id,
+                            label: day.label,
+                            meta: `${day.slots.length} recurring slot(s) selected`,
+                            badge: `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''}`,
+                          }))}
+                          summaryText="Browse each weekday without expanding all selected slots."
+                        />
+                      </div>
+                      {selectedWeeklySummaryGroup ? (
+                        <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
+                        </div>
+                      ) : null}
+                    </div>
+                    {selectedWeeklySummaryGroup ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {selectedWeeklySummaryGroup.slots.map((item) => (
+                          <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                            {formatSlotLabel(item.timeSlotId)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -937,10 +1025,13 @@ function CustomerCoachBookingPage() {
                           </div>
                           {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-700">Reschedule pending coach approval</div>}
                           {s.reschedule?.status === 'DENIED' && <div className="text-xs text-red-700">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
+                          {String(s.status || '').toUpperCase() === 'CANCELLED' && s.cancelReason && (
+                            <div className="text-xs text-red-700">Cancellation reason: {s.cancelReason}</div>
+                          )}
                           {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
                             <div className="flex gap-2">
-                              <button onClick={() => cancelSession(s.ptSessionId)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
-                              <button onClick={() => setRescheduleModal({ open: true, session: s, sessionDate: '', timeSlotId: '', reason: '' })} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">Reschedule</button>
+                              <button onClick={() => openCancelModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
+                              <button onClick={() => openRescheduleModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">Reschedule</button>
                             </div>
                           )}
                         </div>
@@ -1110,19 +1201,44 @@ function CustomerCoachBookingPage() {
                 {weeklySlots.length === 0 ? (
                   <p className="mt-3 text-sm text-slate-500">No slots selected.</p>
                 ) : (
-                  <div className="mt-3 flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1">
-                    {weeklySlots
-                      .map((item) => (
-                        <button
-                          key={`picked-${item.dayOfWeek}-${item.timeSlotId}`}
-                          onClick={() => removeRequestedWeeklySlot(item.dayOfWeek, item.timeSlotId)}
-                          className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-red-300 hover:text-red-700"
-                          title="Remove slot"
-                        >
-                          {getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`} | {formatSlotLabel(item.timeSlotId)}
-                          <span className="font-bold">x</span>
-                        </button>
-                      ))}
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div className="min-w-0">
+                        <WeekdayDropdown
+                          id="planner-summary-day"
+                          label="Weekday"
+                          value={selectedWeeklySummaryGroup?.id || ''}
+                          onChange={(nextValue) => setSelectedWeeklySummaryDay(Number(nextValue))}
+                          options={groupedWeeklySlots.map((day) => ({
+                            value: day.id,
+                            label: day.label,
+                            meta: `${day.slots.length} slot(s) ready to keep or remove`,
+                            badge: `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''}`,
+                          }))}
+                          summaryText="Switch weekdays and remove slots directly from this planner summary."
+                        />
+                      </div>
+                      {selectedWeeklySummaryGroup ? (
+                        <span className="text-[11px] font-semibold text-slate-500">
+                          {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
+                        </span>
+                      ) : null}
+                    </div>
+                    {selectedWeeklySummaryGroup ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {selectedWeeklySummaryGroup.slots.map((item) => (
+                          <button
+                            key={`picked-${item.dayOfWeek}-${item.timeSlotId}`}
+                            onClick={() => removeRequestedWeeklySlot(item.dayOfWeek, item.timeSlotId)}
+                            className="inline-flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                            title="Remove slot"
+                          >
+                            <span className="min-w-0 flex-1 truncate">{formatSlotLabel(item.timeSlotId)}</span>
+                            <span className="shrink-0 font-bold">x</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1206,28 +1322,77 @@ function CustomerCoachBookingPage() {
       )}
 
       {rescheduleModal.open && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl p-5 space-y-3">
-            <h4 className="text-lg font-bold text-slate-900">Reschedule Request</h4>
-            <label className="text-sm font-semibold text-slate-700">New date
-              <input type="date" value={rescheduleModal.sessionDate} onChange={(e) => setRescheduleModal((prev) => ({ ...prev, sessionDate: e.target.value }))} className="mt-1 w-full border border-slate-300 rounded-xl px-3 py-2" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Reschedule PT session</p>
+              <h4 className="text-2xl font-bold text-slate-900">Request a new date and time</h4>
+              <p className="text-sm leading-relaxed text-slate-600">
+                Your coach will be notified and must approve the new session schedule before it changes.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">{rescheduleModal.session?.coachName || 'Assigned coach'}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Current session: {rescheduleModal.session?.sessionDate || '-'} | {formatSlotLabel(rescheduleModal.session?.timeSlotId)}
+              </p>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-semibold text-slate-700">
+                New date
+                <input
+                  type="date"
+                  value={rescheduleModal.sessionDate}
+                  onChange={(e) => setRescheduleModal((prev) => ({ ...prev, sessionDate: e.target.value }))}
+                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                />
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                New time slot
+                <select
+                  value={rescheduleModal.timeSlotId}
+                  onChange={(e) => setRescheduleModal((prev) => ({ ...prev, timeSlotId: e.target.value }))}
+                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                >
+                  <option value="">Select slot</option>
+                  {timeSlots.map((slot) => (
+                    <option key={slot.timeSlotId} value={slot.timeSlotId}>
+                      Slot {slot.slotIndex} ({String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
+              Reason (optional)
+              <textarea
+                value={rescheduleModal.reason}
+                onChange={(e) => setRescheduleModal((prev) => ({ ...prev, reason: e.target.value }))}
+                className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                rows={3}
+                placeholder="Tell the coach why you need to move this session."
+              />
             </label>
-            <label className="text-sm font-semibold text-slate-700">New time slot
-              <select value={rescheduleModal.timeSlotId} onChange={(e) => setRescheduleModal((prev) => ({ ...prev, timeSlotId: e.target.value }))} className="mt-1 w-full border border-slate-300 rounded-xl px-3 py-2">
-                <option value="">Select slot</option>
-                {timeSlots.map((slot) => (
-                  <option key={slot.timeSlotId} value={slot.timeSlotId}>
-                    Slot {slot.slotIndex} ({String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-slate-700">Reason (optional)
-              <textarea value={rescheduleModal.reason} onChange={(e) => setRescheduleModal((prev) => ({ ...prev, reason: e.target.value }))} className="mt-1 w-full border border-slate-300 rounded-xl px-3 py-2" rows={3} />
-            </label>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setRescheduleModal({ open: false, session: null, sessionDate: '', timeSlotId: '', reason: '' })} className="px-4 py-2 rounded-xl border border-slate-300">Close</button>
-              <button onClick={submitReschedule} className="px-4 py-2 rounded-xl bg-gym-600 text-white">Send Request</button>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeRescheduleModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Keep current session
+              </button>
+              <button
+                type="button"
+                onClick={submitReschedule}
+                disabled={loading}
+                className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:opacity-50"
+              >
+                Send reschedule request
+              </button>
             </div>
           </div>
         </div>
@@ -1246,6 +1411,56 @@ function CustomerCoachBookingPage() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setFeedbackModal({ open: false, session: null, rating: 0, comment: '' })} className="px-4 py-2 rounded-xl border border-slate-300">Close</button>
               <button onClick={submitFeedback} className="px-4 py-2 rounded-xl bg-gym-600 text-white">Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelModal.open && cancelModal.session && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Cancel PT session</p>
+              <h4 className="text-2xl font-bold text-slate-900">Cancel this coaching session?</h4>
+              <p className="text-sm leading-relaxed text-slate-600">
+                This will notify the coach and mark the session as cancelled for both sides.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">{cancelModal.session.coachName || 'Assigned coach'}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {cancelModal.session.sessionDate || '-'} | {formatSlotLabel(cancelModal.session.timeSlotId)}
+              </p>
+            </div>
+
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
+              Reason for cancellation
+              <textarea
+                value={cancelModal.reason}
+                onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
+                className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                rows={3}
+                placeholder="Tell the coach why you need to cancel this session."
+              />
+            </label>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeCancelModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Keep session
+              </button>
+              <button
+                type="button"
+                onClick={confirmCancelSession}
+                disabled={loading}
+                className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                Confirm cancel
+              </button>
             </div>
           </div>
         </div>

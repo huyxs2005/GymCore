@@ -9,6 +9,7 @@ const ForgotPasswordPage = lazy(() => import('../pages/public/ForgotPasswordPage
 const ForgotPasswordResetPage = lazy(() => import('../pages/public/ForgotPasswordResetPage'))
 const ChangePasswordPage = lazy(() => import('../pages/public/ChangePasswordPage'))
 const ProfilePage = lazy(() => import('../pages/common/ProfilePage'))
+const NotificationsPage = lazy(() => import('../pages/common/NotificationsPage'))
 const CustomerMembershipPage = lazy(() => import('../pages/customer/CustomerMembershipPage'))
 const CustomerCurrentMembershipPage = lazy(() => import('../pages/customer/CustomerCurrentMembershipPage'))
 const CustomerCheckinHealthPage = lazy(() => import('../pages/customer/CustomerCheckinHealthPage'))
@@ -76,6 +77,7 @@ function AppRouter() {
         <Route path="/auth/forgot-password/reset" element={<ForgotPasswordResetPage />} />
         <Route path="/auth/change-password" element={withAuth(<ChangePasswordPage />)} />
         <Route path="/profile" element={withAuth(<ProfilePage />)} />
+        <Route path="/notifications" element={withAuth(<NotificationsPage />)} />
 
         <Route path="/customer/membership" element={withRole(['CUSTOMER'], <CustomerMembershipPage />)} />
         <Route path="/customer/current-membership" element={withRole(['CUSTOMER'], <CustomerCurrentMembershipPage />)} />

@@ -1,5 +1,6 @@
 package com.gymcore.backend.modules.membership.service;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService.UserInfo;
 import com.gymcore.backend.modules.product.service.PayOsService;
@@ -32,12 +33,14 @@ public class MembershipService {
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
     private final PayOsService payOsService;
+    private final UserNotificationService notificationService;
 
     public MembershipService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
-            PayOsService payOsService) {
+            PayOsService payOsService, UserNotificationService notificationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.payOsService = payOsService;
+        this.notificationService = notificationService;
     }
 
     public Map<String, Object> execute(String action, String authorizationHeader, Object payload) {
@@ -330,6 +333,7 @@ public class MembershipService {
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
             markMembershipClaimUsageIfNeeded(paymentId);
+            notifySuccessfulPayment(paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to confirm payment from return URL.", exception);
@@ -391,6 +395,7 @@ public class MembershipService {
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
             markMembershipClaimUsageIfNeeded(paymentId);
+            notifySuccessfulPayment(paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.", exception);
         }
@@ -480,6 +485,104 @@ public class MembershipService {
                     mp.MembershipPlanID DESC
                 """;
         return Map.of("plans", jdbcTemplate.query(sql, (rs, rowNum) -> mapPlan(rs)));
+    }
+
+    private void notifySuccessfulPayment(int paymentId) {
+        Integer membershipCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Payments
+                WHERE PaymentID = ? AND CustomerMembershipID IS NOT NULL
+                """, Integer.class, paymentId);
+        if (membershipCount != null && membershipCount > 0) {
+            notifyMembershipPaymentSuccess(paymentId);
+            return;
+        }
+        Integer orderCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Payments
+                WHERE PaymentID = ? AND OrderID IS NOT NULL
+                """, Integer.class, paymentId);
+        if (orderCount != null && orderCount > 0) {
+            notifyOrderPaymentSuccess(paymentId);
+        }
+    }
+
+    private void notifyMembershipPaymentSuccess(int paymentId) {
+        jdbcTemplate.query("""
+                SELECT TOP (1)
+                    cm.CustomerID,
+                    mp.PlanName,
+                    p.Amount,
+                    promo.PromoCode,
+                    promo.BonusDurationMonths
+                FROM dbo.Payments p
+                JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = p.CustomerMembershipID
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                LEFT JOIN dbo.UserPromotionClaims c ON c.ClaimID = p.ClaimID
+                LEFT JOIN dbo.Promotions promo ON promo.PromotionID = c.PromotionID
+                WHERE p.PaymentID = ?
+                """, rs -> {
+            int customerId = rs.getInt("CustomerID");
+            String planName = rs.getString("PlanName");
+            BigDecimal amount = rs.getBigDecimal("Amount");
+            String promoCode = asNullableString(rs.getString("PromoCode"));
+            int bonusMonths = tryParsePositiveInt(rs.getObject("BonusDurationMonths")) == null ? 0
+                    : tryParsePositiveInt(rs.getObject("BonusDurationMonths"));
+
+            StringBuilder message = new StringBuilder("Your ")
+                    .append(planName)
+                    .append(" membership payment was confirmed");
+            if (amount != null) {
+                message.append(" for ").append(amount.stripTrailingZeros().toPlainString()).append(" VND");
+            }
+            if (promoCode != null) {
+                message.append(". Coupon applied: ").append(promoCode);
+                if (bonusMonths > 0) {
+                    message.append(" (+").append(bonusMonths).append(" month");
+                    if (bonusMonths != 1) {
+                        message.append('s');
+                    }
+                    message.append(')');
+                }
+            } else {
+                message.append(".");
+            }
+
+            notificationService.notifyUser(
+                    customerId,
+                    "MEMBERSHIP_PAYMENT_SUCCESS",
+                    "Membership payment successful",
+                    message.toString(),
+                    "/customer/current-membership",
+                    paymentId,
+                    "PAYMENT_SUCCESS_" + paymentId);
+        }, paymentId);
+    }
+
+    private void notifyOrderPaymentSuccess(int paymentId) {
+        jdbcTemplate.query("""
+                SELECT TOP (1)
+                    o.CustomerID,
+                    o.OrderID,
+                    p.Amount
+                FROM dbo.Payments p
+                JOIN dbo.Orders o ON o.OrderID = p.OrderID
+                WHERE p.PaymentID = ?
+                """, rs -> {
+            int customerId = rs.getInt("CustomerID");
+            int orderId = rs.getInt("OrderID");
+            BigDecimal amount = rs.getBigDecimal("Amount");
+            String message = "Your product order #" + orderId + " payment was confirmed"
+                    + (amount == null ? "." : " for " + amount.stripTrailingZeros().toPlainString() + " VND.");
+            notificationService.notifyUser(
+                    customerId,
+                    "ORDER_PAYMENT_SUCCESS",
+                    "Order payment successful",
+                    message,
+                    "/customer/shop",
+                    orderId,
+                    "ORDER_PAYMENT_SUCCESS_" + paymentId);
+        }, paymentId);
     }
 
     private Map<String, Object> adminCreatePlan(String authorizationHeader, Map<String, Object> payload) {

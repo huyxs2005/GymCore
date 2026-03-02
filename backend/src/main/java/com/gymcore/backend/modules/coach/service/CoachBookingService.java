@@ -1,5 +1,6 @@
 package com.gymcore.backend.modules.coach.service;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.AuthService;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -30,10 +31,13 @@ public class CoachBookingService {
 
     private final JdbcTemplate jdbcTemplate;
     private final AuthService authService;
+    private final UserNotificationService notificationService;
 
-    public CoachBookingService(JdbcTemplate jdbcTemplate, AuthService authService) {
+    public CoachBookingService(JdbcTemplate jdbcTemplate, AuthService authService,
+            UserNotificationService notificationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.authService = authService;
+        this.notificationService = notificationService;
     }
 
     public Map<String, Object> execute(String action, Object payload) {
@@ -63,6 +67,7 @@ public class CoachBookingService {
             case "coach-get-customer-detail" -> coachGetCustomerDetail(request);
             case "coach-get-customer-history" -> coachGetCustomerHistory(request);
             case "coach-update-customer-progress" -> coachUpdateCustomerProgress(request);
+            case "coach-cancel-session" -> coachCancelSession(request);
             case "coach-delete-session" -> coachDeleteSession(request);
             case "coach-complete-session" -> coachCompleteSession(request);
             case "coach-get-feedback" -> coachGetFeedback(request);
@@ -375,6 +380,8 @@ public class CoachBookingService {
                     ptRequestId, dayOfWeek, timeSlotId);
         }
 
+        notifyPtRequestCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
+
         // In PENDING flow, we do NOT generate sessions until coach approves
         return Map.of(
                 "ptRequestId", ptRequestId,
@@ -455,7 +462,7 @@ public class CoachBookingService {
                         FROM dbo.PTSessions s
                         JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
                         JOIN dbo.Users u ON u.UserID = s.CoachID
-                        WHERE s.CustomerID = ? AND s.Status != 'CANCELLED'
+                        WHERE s.CustomerID = ?
                         ORDER BY s.SessionDate DESC, ts.SlotIndex DESC
                         """,
                 myScheduleRowMapper(), customer.userId());
@@ -577,6 +584,7 @@ public class CoachBookingService {
         AuthService.AuthContext customer = requireCustomer(payload);
         int sessionId = requireInteger(payload, "sessionId");
         String reason = asText(((Map<?, ?>) payload.getOrDefault("body", Map.of())).get("cancelReason"));
+        SessionNotificationContext session = loadSessionNotificationContext(sessionId);
 
         int updated = jdbcTemplate.update(
                 """
@@ -588,6 +596,8 @@ public class CoachBookingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Session not found, already cancelled, or cannot be cancelled (past or not yours).");
         }
+        String resolvedReason = reason != null ? reason : "Cancelled by customer";
+        notifyCustomerCancelledSession(session, resolvedReason);
         return Map.of("sessionId", sessionId, "status", "CANCELLED");
     }
 
@@ -652,6 +662,7 @@ public class CoachBookingService {
                 UPDATE dbo.PTSessions SET CancelReason = ?, UpdatedAt = SYSDATETIME()
                 WHERE PTSessionID = ? AND CustomerID = ?
                 """, encodeRescheduleRequest(newDate, newTimeSlotId, reason), sessionId, customer.userId());
+        notifyCoachAboutRescheduleRequest(sessionId, customer.userId(), coachId, requestedSlotSummary(newDate, newTimeSlotId));
         return Map.of(
                 "sessionId", sessionId,
                 "status", "PENDING_COACH_APPROVAL",
@@ -763,6 +774,7 @@ public class CoachBookingService {
             out.remove("cancelReason");
             out.put("requestedSessionDate", dateToString(requestedDate));
             out.put("requestedTimeSlotId", requestedTimeSlotId);
+            out.put("reason", meta.note());
 
             Map<String, Object> currentSlot = timeSlotMap.getOrDefault(requireInteger(row, "currentTimeSlotId"), Map.of());
             Map<String, Object> requestedSlot = timeSlotMap.getOrDefault(requestedTimeSlotId, Map.of());
@@ -828,6 +840,9 @@ public class CoachBookingService {
                 WHERE PTSessionID = ? AND CoachID = ?
                 """, requestedDate, requestedTimeSlotId, requestedDate.getDayOfWeek().getValue(), sessionId, coach.userId());
 
+        notifyCustomerAboutRescheduleDecision(sessionId, "APPROVED",
+                "Your coach approved the reschedule request. New slot: " + requestedSlotSummary(requestedDate, requestedTimeSlotId));
+
         return Map.of(
                 "ptSessionId", sessionId,
                 "status", "APPROVED",
@@ -867,6 +882,9 @@ public class CoachBookingService {
                 SET CancelReason = ?, UpdatedAt = SYSDATETIME()
                 WHERE PTSessionID = ? AND CoachID = ?
                 """, encodeRescheduleDenied(meta.requestedDate(), meta.requestedTimeSlotId(), reason), sessionId, coach.userId());
+
+        notifyCustomerAboutRescheduleDecision(sessionId, "DENIED",
+                "Your coach denied the reschedule request." + (reason == null || reason.isBlank() ? "" : " Reason: " + reason));
 
         return Map.of(
                 "ptSessionId", sessionId,
@@ -927,6 +945,9 @@ public class CoachBookingService {
         int count = generatePTSessions(requestId, (Integer) req.get("customerId"), coach.userId(),
                 actualStartDate, endDate, slots);
 
+        notifyPtRequestDecision(requestId, (Integer) req.get("customerId"), "APPROVED",
+                "Your PT booking request was approved. Coaching starts on " + dateToString(actualStartDate) + ".");
+
         return Map.of(
                 "ptRequestId", requestId,
                 "status", "APPROVED",
@@ -953,6 +974,13 @@ public class CoachBookingService {
                 reason, requestId, coach.userId());
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request not found or already processed.");
+        }
+        Integer customerId = jdbcTemplate.queryForObject(
+                "SELECT CustomerID FROM dbo.PTRecurringRequests WHERE PTRequestID = ?",
+                Integer.class, requestId);
+        if (customerId != null) {
+            notifyPtRequestDecision(requestId, customerId, "DENIED",
+                    "Your PT booking request was denied. Reason: " + reason);
         }
         return Map.of("ptRequestId", requestId, "status", "DENIED");
     }
@@ -1033,6 +1061,30 @@ public class CoachBookingService {
         jdbcTemplate.update("INSERT INTO dbo.PTSessionNotes (PTSessionID, NoteContent) VALUES (?, ?)", sessionId,
                 noteContent);
         return Map.of("ptSessionId", sessionId, "message", "Note added.");
+    }
+
+    private Map<String, Object> coachCancelSession(Map<String, Object> payload) {
+        AuthService.AuthContext coach = requireCoach(payload);
+        int sessionId = requireInteger(payload, "sessionId");
+        String reason = asText(((Map<?, ?>) payload.getOrDefault("body", Map.of())).get("cancelReason"));
+        SessionNotificationContext session = loadSessionNotificationContext(sessionId);
+
+        int updated = jdbcTemplate.update("""
+                UPDATE dbo.PTSessions
+                SET Status = 'CANCELLED', CancelReason = ?, UpdatedAt = SYSDATETIME()
+                WHERE PTSessionID = ? AND CoachID = ? AND Status = 'SCHEDULED' AND SessionDate >= CAST(GETDATE() AS DATE)
+                """, reason != null ? reason : "Cancelled by coach", sessionId, coach.userId());
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Session not found, already cancelled, or cannot be cancelled.");
+        }
+
+        String resolvedReason = reason != null ? reason : "Cancelled by coach";
+        notifyCoachCancelledSession(session, resolvedReason);
+        return Map.of(
+                "sessionId", sessionId,
+                "status", "CANCELLED",
+                "message", "Session cancelled successfully.");
     }
 
     private Map<String, Object> coachDeleteSession(Map<String, Object> payload) {
@@ -1840,6 +1892,7 @@ public class CoachBookingService {
             m.put("startTime", rs.getTime("StartTime") != null ? rs.getTime("StartTime").toString() : null);
             m.put("endTime", rs.getTime("EndTime") != null ? rs.getTime("EndTime").toString() : null);
             m.put("status", rs.getString("Status"));
+            m.put("cancelReason", rs.getString("CancelReason"));
             return m;
         };
     }
@@ -1907,6 +1960,162 @@ public class CoachBookingService {
         };
     }
 
+    private void notifyPtRequestCreated(int requestId, int customerId, int coachId, LocalDate startDate, LocalDate endDate) {
+        String customerName = loadUserFullName(customerId);
+        notificationService.notifyUser(
+                coachId,
+                "PT_REQUEST_CREATED",
+                "New PT booking request",
+                customerName + " sent you a PT booking request for " + dateToString(startDate) + " to "
+                        + dateToString(endDate) + ".",
+                "/coach/booking-requests",
+                requestId,
+                "PT_REQUEST_CREATED_" + requestId);
+        notificationService.notifyUser(
+                customerId,
+                "PT_REQUEST_SUBMITTED",
+                "PT booking request submitted",
+                "Your PT booking request was sent successfully and is waiting for coach approval.",
+                "/customer/coach-booking",
+                requestId,
+                "PT_REQUEST_SUBMITTED_" + requestId);
+    }
+
+    private void notifyPtRequestDecision(int requestId, int customerId, String decision, String message) {
+        notificationService.notifyUser(
+                customerId,
+                "PT_REQUEST_" + decision,
+                "APPROVED".equals(decision) ? "PT booking request approved" : "PT booking request denied",
+                message,
+                "/customer/coach-booking",
+                requestId,
+                "PT_REQUEST_" + decision + "_" + requestId);
+    }
+
+    private void notifyCustomerCancelledSession(SessionNotificationContext session, String reason) {
+        notificationService.notifyUser(
+                session.coachId(),
+                "PT_SESSION_CANCELLED_BY_CUSTOMER",
+                "Session cancelled by customer",
+                session.customerName() + " cancelled the PT session on " + session.sessionDate() + " at "
+                        + session.timeLabel() + ". Reason: " + reason,
+                "/coach/schedule?tab=schedule",
+                session.sessionId(),
+                "PT_SESSION_CANCELLED_BY_CUSTOMER_" + session.sessionId());
+        notificationService.notifyUser(
+                session.customerId(),
+                "PT_SESSION_CANCEL_CONFIRM",
+                "PT session cancelled",
+                "You cancelled the PT session on " + session.sessionDate() + " at " + session.timeLabel() + ".",
+                "/customer/coach-booking",
+                session.sessionId(),
+                "PT_SESSION_CANCEL_CONFIRM_" + session.sessionId());
+    }
+
+    private void notifyCoachCancelledSession(SessionNotificationContext session, String reason) {
+        notificationService.notifyUser(
+                session.customerId(),
+                "PT_SESSION_CANCELLED_BY_COACH",
+                "Session cancelled by coach",
+                session.coachName() + " cancelled your PT session on " + session.sessionDate() + " at "
+                        + session.timeLabel() + ". Reason: " + reason,
+                "/customer/coach-booking",
+                session.sessionId(),
+                "PT_SESSION_CANCELLED_BY_COACH_" + session.sessionId());
+        notificationService.notifyUser(
+                session.coachId(),
+                "PT_SESSION_CANCEL_CONFIRM",
+                "PT session cancelled",
+                "You cancelled the PT session with " + session.customerName() + " on " + session.sessionDate()
+                        + " at " + session.timeLabel() + ".",
+                "/coach/schedule?tab=schedule",
+                session.sessionId(),
+                "PT_SESSION_COACH_CANCEL_CONFIRM_" + session.sessionId());
+    }
+
+    private void notifyCoachAboutRescheduleRequest(int sessionId, int customerId, int coachId, String requestedSlot) {
+        notificationService.notifyUser(
+                coachId,
+                "PT_RESCHEDULE_REQUESTED",
+                "New reschedule request",
+                loadUserFullName(customerId) + " requested to move a PT session to " + requestedSlot + ".",
+                "/coach/schedule?tab=schedule",
+                sessionId,
+                "PT_RESCHEDULE_REQUESTED_" + sessionId);
+    }
+
+    private void notifyCustomerAboutRescheduleDecision(int sessionId, String decision, String message) {
+        Integer customerId = jdbcTemplate.queryForObject(
+                "SELECT CustomerID FROM dbo.PTSessions WHERE PTSessionID = ?",
+                Integer.class, sessionId);
+        if (customerId == null) {
+            return;
+        }
+        notificationService.notifyUser(
+                customerId,
+                "PT_RESCHEDULE_" + decision,
+                "APPROVED".equals(decision) ? "Reschedule approved" : "Reschedule denied",
+                message,
+                "/customer/coach-booking",
+                sessionId,
+                "PT_RESCHEDULE_" + decision + "_" + sessionId);
+    }
+
+    private SessionNotificationContext loadSessionNotificationContext(int sessionId) {
+        return jdbcTemplate.query("""
+                SELECT TOP (1)
+                    s.PTSessionID,
+                    s.CustomerID,
+                    s.CoachID,
+                    s.SessionDate,
+                    uCustomer.FullName AS CustomerName,
+                    uCoach.FullName AS CoachName,
+                    ts.StartTime,
+                    ts.EndTime
+                FROM dbo.PTSessions s
+                JOIN dbo.Users uCustomer ON uCustomer.UserID = s.CustomerID
+                JOIN dbo.Users uCoach ON uCoach.UserID = s.CoachID
+                JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
+                WHERE s.PTSessionID = ?
+                """, (rs, i) -> new SessionNotificationContext(
+                rs.getInt("PTSessionID"),
+                rs.getInt("CustomerID"),
+                rs.getInt("CoachID"),
+                rs.getString("CustomerName"),
+                rs.getString("CoachName"),
+                dateToString(rs.getDate("SessionDate").toLocalDate()),
+                (rs.getTime("StartTime") != null ? rs.getTime("StartTime").toString().substring(0, 5) : "--:--")
+                        + "-"
+                        + (rs.getTime("EndTime") != null ? rs.getTime("EndTime").toString().substring(0, 5) : "--:--")),
+                sessionId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found."));
+    }
+
+    private String requestedSlotSummary(LocalDate sessionDate, int timeSlotId) {
+        Map<String, Object> slot = jdbcTemplate.query("""
+                SELECT TOP (1) StartTime, EndTime
+                FROM dbo.TimeSlots
+                WHERE TimeSlotID = ?
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("startTime", rs.getTime("StartTime") != null ? rs.getTime("StartTime").toString() : null);
+            item.put("endTime", rs.getTime("EndTime") != null ? rs.getTime("EndTime").toString() : null);
+            return item;
+        }, timeSlotId).stream().findFirst().orElse(Map.of());
+        String start = asText(slot.get("startTime"));
+        String end = asText(slot.get("endTime"));
+        String compactStart = start != null && start.length() >= 5 ? start.substring(0, 5) : "--:--";
+        String compactEnd = end != null && end.length() >= 5 ? end.substring(0, 5) : "--:--";
+        return dateToString(sessionDate) + " at " + compactStart + "-" + compactEnd;
+    }
+
+    private String loadUserFullName(int userId) {
+        String name = jdbcTemplate.queryForObject(
+                "SELECT FullName FROM dbo.Users WHERE UserID = ?",
+                String.class, userId);
+        return name == null || name.isBlank() ? "A customer" : name;
+    }
+
     private RowMapper<Map<String, Object>> customerDetailRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -1956,6 +2165,10 @@ public class CoachBookingService {
     }
 
     private record RescheduleMeta(String state, LocalDate requestedDate, int requestedTimeSlotId, String note) {
+    }
+
+    private record SessionNotificationContext(int sessionId, int customerId, int coachId, String customerName,
+            String coachName, String sessionDate, String timeLabel) {
     }
 }
 

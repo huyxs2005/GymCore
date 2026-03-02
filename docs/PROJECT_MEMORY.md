@@ -174,11 +174,15 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - Customer can cancel session.
   - Customer reschedule is request-based (coach approves/denies).
   - Customer can submit coach feedback (rating + comment) for completed sessions.
+  - Session cancellation is counterpart-notified:
+    - customer cancel -> coach notification
+    - coach cancel -> customer notification
 - Coach flow:
   - Update weekly availability.
   - Review booking requests (`PENDING`) and approve/deny.
   - Deny requires reason.
   - Review reschedule requests and approve/deny.
+  - Coach can cancel scheduled PT sessions from coach schedule page.
   - View own schedule, customer list/profile/history, update progress, notes, and feedback.
 - Admin flow:
   - View coaches, coach students, and coach/customer feedback views through coach-management endpoints.
@@ -245,6 +249,61 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Backend: `.\mvnw.cmd test` -> passed (`144` tests, `0` failures, `0` errors).
 - Frontend: `npm run test:run` -> passed (`24` files, `65` tests).
 - Frontend lint: `npm run lint` -> passed.
+
+## 27) Notification center and PT event alerts (Mar 2, 2026)
+- Backend notification handling is centralized in:
+  - `backend/src/main/java/com/gymcore/backend/common/service/UserNotificationService.java`
+- Notification API is exposed through:
+  - `GET /api/v1/notifications`
+  - `PATCH /api/v1/notifications/{id}/read`
+  - `PATCH /api/v1/notifications/{id}/unread`
+  - `PATCH /api/v1/notifications/read-all`
+- Frontend notification UX now includes:
+  - header bell dropdown with recent alerts
+  - dedicated `/notifications` page
+  - `Notifications` entry in account/profile dropdown
+- Implemented notification triggers include:
+  - membership payment success
+  - product order payment success
+  - coupon claimed successfully
+  - new promotion post published to customers
+  - PT request created
+  - PT request approved / denied
+  - PT session cancelled by customer or coach
+  - PT reschedule request submitted
+  - PT reschedule request approved / denied
+- PT cancellation counterpart rules are now explicit in app behavior:
+  - if a customer cancels a session, the assigned coach is notified
+  - if a coach cancels a session, the customer is notified
+- Frontend files added for notification UX:
+  - `frontend/src/components/common/NotificationDropdown.jsx`
+  - `frontend/src/pages/common/NotificationsPage.jsx`
+  - `frontend/src/features/notification/api/notificationApi.js`
+
+## 29) PT schedule UX refinement (Mar 2, 2026)
+- `frontend/src/pages/coach/CoachSchedulePage.jsx`
+  - Weekly availability is no longer the old wide table; it uses a Monday-Sunday selector with slot cards.
+  - Booked sessions use a monthly calendar view similar to the customer PT page.
+  - Calendar signal colors are status-aware:
+    - scheduled/active dates stay green,
+    - cancelled-only dates are red.
+  - Selected booked-session date uses a separate blue ring so selection does not visually conflict with green/red status colors.
+  - Selected availability summary is no longer an all-day chip wall; it uses a compact weekday drill-down with a themed custom dropdown.
+- `frontend/src/pages/customer/CustomerCoachBookingPage.jsx`
+  - Top recurring-slot summary and planner modal summary now use the same weekday drill-down pattern instead of rendering all selected-day groups at once.
+  - The weekday selector is a custom themed dropdown, not a browser-native select.
+  - Customer cancel and reschedule actions both use in-app modals.
+  - Customer can type cancellation reason and optional reschedule reason; coach can see those reasons in coach pages.
+  - Customer can see coach cancellation reasons on cancelled PT sessions.
+- Shared UI component added:
+  - `frontend/src/components/common/WeekdayDropdown.jsx`
+  - Used for compact weekday summary drill-down on coach/customer PT scheduling screens.
+
+## 28) Latest verified test run (Mar 2, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`146` tests, `0` failures, `0` errors).
+- Frontend: `npm run test:run` -> passed (`27` files, `70` tests).
+- Frontend lint: `npm run lint` -> passed.
+- Frontend build: `npm run build` -> passed.
 
 ## 21) Customer check-in health UI update (Mar 1, 2026)
 - `frontend/src/pages/customer/CustomerCheckinHealthPage.jsx` now includes a circular BMI meter (car-speedometer style):

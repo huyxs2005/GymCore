@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.product.service.PayOsService;
 import java.math.BigDecimal;
@@ -31,6 +32,7 @@ class MembershipServiceAdminPlanTest {
     private JdbcTemplate jdbcTemplate;
     private CurrentUserService currentUserService;
     private PayOsService payOsService;
+    private UserNotificationService notificationService;
     private MembershipService membershipService;
 
     @BeforeEach
@@ -38,7 +40,8 @@ class MembershipServiceAdminPlanTest {
         jdbcTemplate = Mockito.mock(JdbcTemplate.class);
         currentUserService = Mockito.mock(CurrentUserService.class);
         payOsService = Mockito.mock(PayOsService.class);
-        membershipService = new MembershipService(jdbcTemplate, currentUserService, payOsService);
+        notificationService = Mockito.mock(UserNotificationService.class);
+        membershipService = new MembershipService(jdbcTemplate, currentUserService, payOsService, notificationService);
     }
 
     @Test

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -56,9 +57,11 @@ public class PromotionController {
 
         @GetMapping("/notifications")
         public ApiResponse<Map<String, Object>> getNotifications(
-                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
+                        @RequestParam(required = false, defaultValue = "false") boolean unreadOnly) {
                 return ApiResponse.ok("Notifications retrieved",
-                                promotionService.execute("customer-get-notifications", authorization, null));
+                                promotionService.execute("customer-get-notifications", authorization,
+                                                Map.of("unreadOnly", unreadOnly)));
         }
 
         @PatchMapping("/notifications/{notificationId}/read")
@@ -68,6 +71,22 @@ public class PromotionController {
                 return ApiResponse.ok("Notification marked as read",
                                 promotionService.execute("customer-mark-notification-read", authorization,
                                                 Map.of("notificationId", notificationId)));
+        }
+
+        @PatchMapping("/notifications/{notificationId}/unread")
+        public ApiResponse<Map<String, Object>> markAsUnread(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
+                        @PathVariable Integer notificationId) {
+                return ApiResponse.ok("Notification marked as unread",
+                                promotionService.execute("customer-mark-notification-unread", authorization,
+                                                Map.of("notificationId", notificationId)));
+        }
+
+        @PatchMapping("/notifications/read-all")
+        public ApiResponse<Map<String, Object>> markAllAsRead(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
+                return ApiResponse.ok("All notifications marked as read",
+                                promotionService.execute("customer-mark-all-notifications-read", authorization, null));
         }
 
         @GetMapping("/admin/promotions/coupons")

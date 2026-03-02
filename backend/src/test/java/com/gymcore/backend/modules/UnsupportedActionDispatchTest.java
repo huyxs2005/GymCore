@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.AdminService;
 import com.gymcore.backend.modules.auth.service.AuthService;
 import com.gymcore.backend.modules.checkin.service.CheckinHealthService;
@@ -20,6 +21,7 @@ class UnsupportedActionDispatchTest {
 
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final AuthService authService = mock(AuthService.class);
+    private final UserNotificationService notificationService = mock(UserNotificationService.class);
 
     @Test
     void userManagementService_shouldRejectUnsupportedAction() {
@@ -56,7 +58,7 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void coachBookingService_shouldRejectUnsupportedAction() {
-        CoachBookingService service = new CoachBookingService(jdbcTemplate, authService);
+        CoachBookingService service = new CoachBookingService(jdbcTemplate, authService, notificationService);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));

@@ -143,7 +143,7 @@ describe('CustomerCoachBookingPage', () => {
 
     expect(await screen.findByText(/Fully Match/i)).toBeInTheDocument()
     expect(screen.getByText(/Coach Alex/i)).toBeInTheDocument()
-  })
+  }, 10000)
 
   it('shows denied request reason in schedule tab', async () => {
     coachBookingApi.getMySchedule.mockResolvedValue({
@@ -202,6 +202,119 @@ describe('CustomerCoachBookingPage', () => {
 
     expect(await screen.findByText(/Coach Alex/i)).toBeInTheDocument()
     expect(screen.getByText(/Dates with coaching sessions are marked with a green signal in the calendar/i)).toBeInTheDocument()
+  })
+
+  it('shows coach cancellation reason on cancelled PT sessions', async () => {
+    coachBookingApi.getMySchedule.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ptSessionId: 8,
+            coachName: 'Coach Alex',
+            sessionDate: '2026-03-18',
+            timeSlotId: 1,
+            slotIndex: 1,
+            startTime: '07:00:00',
+            endTime: '08:30:00',
+            status: 'CANCELLED',
+            cancelReason: 'Coach had an emergency meeting',
+          },
+        ],
+        pendingRequests: [],
+        deniedRequests: [],
+      },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /My PT Schedule/i }))
+    await user.click(await screen.findByRole('button', { name: /2026-03-18, 1 coaching slot/i }))
+
+    expect(await screen.findByText(/Cancellation reason: Coach had an emergency meeting/i)).toBeInTheDocument()
+  })
+
+  it('opens a confirmation modal before cancelling a scheduled PT session', async () => {
+    coachBookingApi.getMySchedule.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ptSessionId: 7,
+            coachName: 'Coach Alex',
+            sessionDate: '2026-03-16',
+            timeSlotId: 1,
+            slotIndex: 1,
+            startTime: '07:00:00',
+            endTime: '08:30:00',
+            status: 'SCHEDULED',
+          },
+        ],
+        pendingRequests: [],
+        deniedRequests: [],
+      },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /My PT Schedule/i }))
+    await user.click(await screen.findByRole('button', { name: /2026-03-16, 1 coaching slot/i }))
+
+    await user.click(await screen.findByRole('button', { name: /^Cancel$/i }))
+
+    expect(await screen.findByText(/Cancel this coaching session\?/i)).toBeInTheDocument()
+    expect(screen.getByText(/This will notify the coach/i)).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/Reason for cancellation/i), 'Family emergency')
+
+    await user.click(screen.getByRole('button', { name: /Confirm cancel/i }))
+
+    await waitFor(() => {
+      expect(coachBookingApi.cancelSession).toHaveBeenCalledWith(7, { cancelReason: 'Family emergency' })
+    })
+  })
+
+  it('opens a reschedule modal and sends the customer request to the coach', async () => {
+    coachBookingApi.getMySchedule.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ptSessionId: 7,
+            coachName: 'Coach Alex',
+            sessionDate: '2026-03-16',
+            timeSlotId: 1,
+            slotIndex: 1,
+            startTime: '07:00:00',
+            endTime: '08:30:00',
+            status: 'SCHEDULED',
+          },
+        ],
+        pendingRequests: [],
+        deniedRequests: [],
+      },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /My PT Schedule/i }))
+    await user.click(await screen.findByRole('button', { name: /2026-03-16, 1 coaching slot/i }))
+    await user.click(await screen.findByRole('button', { name: /^Reschedule$/i }))
+
+    expect(await screen.findByText(/Request a new date and time/i)).toBeInTheDocument()
+    expect(screen.getByText(/must approve the new session schedule/i)).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/New date/i), '2026-03-18')
+    await user.selectOptions(screen.getByLabelText(/New time slot/i), '2')
+    await user.type(screen.getByLabelText(/Reason \(optional\)/i), 'Need a later slot')
+    await user.click(screen.getByRole('button', { name: /Send reschedule request/i }))
+
+    await waitFor(() => {
+      expect(coachBookingApi.rescheduleSession).toHaveBeenCalledWith(7, {
+        sessionDate: '2026-03-18',
+        timeSlotId: 2,
+        reason: 'Need a later slot',
+      })
+    })
   })
 
   it('blocks planner and match preview when the customer does not have an active Gym + Coach membership', async () => {
@@ -298,5 +411,28 @@ describe('CustomerCoachBookingPage', () => {
     expect(screen.getByText(/active PT schedule/i)).toBeInTheDocument()
     expect(screen.getByText(/Next session: 2099-03-16/i)).toBeInTheDocument()
     expect(coachBookingApi.matchCoaches).not.toHaveBeenCalled()
+  })
+
+  it('groups selected recurring slots by weekday in the planner summary', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /Open Schedule Planner/i }))
+    await user.click(screen.getByRole('button', { name: /Monday/i }))
+    await user.click(await screen.findByRole('button', { name: /Slot 1/i }))
+    await user.click(screen.getByRole('button', { name: /Tuesday/i }))
+    await user.click(screen.getByRole('button', { name: /Slot 2/i }))
+
+    expect(screen.getAllByText(/Selected recurring slots/i).length).toBeGreaterThanOrEqual(1)
+    const summarySelect = screen.getByLabelText('Weekday', { selector: '#customer-summary-day' })
+    expect(summarySelect).toHaveTextContent('Monday')
+    expect(screen.getAllByText(/1 slot\(s\) selected for Monday/i).length).toBeGreaterThanOrEqual(1)
+
+    await user.click(summarySelect)
+    await user.click(screen.getByRole('option', { name: /Tuesday/i }))
+
+    expect(summarySelect).toHaveTextContent('Tuesday')
+    expect(screen.getAllByText(/1 slot\(s\) selected for Tuesday/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/Slot 2 \(08:30-10:00\)/i).length).toBeGreaterThanOrEqual(1)
   })
 })

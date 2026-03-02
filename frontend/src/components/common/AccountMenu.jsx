@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, LogOut, QrCode, User } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Bell, CreditCard, LogOut, QrCode, User } from 'lucide-react'
 import { authApi } from '../../features/auth/api/authApi'
 import { clearSession } from '../../features/auth/session'
 import { useSession } from '../../features/auth/useSession'
@@ -24,6 +24,7 @@ function normalizeAvatarUrl(url) {
 
 function AccountMenu({ className = '' }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, isAuthenticated } = useSession()
   const [open, setOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
@@ -57,6 +58,24 @@ function AccountMenu({ className = '' }) {
       setOpen(false)
       navigate('/', { replace: true })
     }
+  }
+
+  function jumpToTop() {
+    window.scrollTo(0, 0)
+  }
+
+  function smoothScrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function handleMenuNavigation(targetPath) {
+    setOpen(false)
+    if (location.pathname === targetPath) {
+      smoothScrollToTop()
+      return
+    }
+    jumpToTop()
+    navigate(targetPath)
   }
 
   if (!isAuthenticated) {
@@ -99,24 +118,32 @@ function AccountMenu({ className = '' }) {
             <p className="truncate text-xs text-slate-600">{user?.email}</p>
           </div>
           <div className="p-2">
-            <Link
-              to="/profile"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+            <button
+              type="button"
+              onClick={() => handleMenuNavigation('/profile')}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
             >
               <User size={16} />
               View profile
-            </Link>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleMenuNavigation('/notifications')}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+            >
+              <Bell size={16} />
+              Notifications
+            </button>
             {isCustomer ? (
               <>
-                <Link
-                  to="/customer/current-membership"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                <button
+                  type="button"
+                  onClick={() => handleMenuNavigation('/customer/current-membership')}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                 >
                   <CreditCard size={16} />
                   Current membership
-                </Link>
+                </button>
                 <button
                   type="button"
                   onClick={() => {

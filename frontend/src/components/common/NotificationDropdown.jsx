@@ -1,126 +1,212 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Bell, CheckCheck, ChevronRight } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { notificationApi } from '../../features/notification/api/notificationApi'
-import { Bell, Check, ExternalLink } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {
+  formatNotificationTimestamp,
+  getNotificationAvatarText,
+  markAllNotificationsRead,
+  resolveNotificationLink,
+  updateNotificationCollection,
+} from '../../features/notification/notificationUtils'
 
-const NotificationDropdown = () => {
-    const [isOpen, setIsOpen] = useState(false)
-    const dropdownRef = useRef(null)
-    const queryClient = useQueryClient()
+function NotificationDropdown() {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef(null)
+  const queryClient = useQueryClient()
+  const location = useLocation()
+  const navigate = useNavigate()
 
-    const { data: notifData } = useQuery({
-        queryKey: ['notifications'],
-        queryFn: () => notificationApi.getNotifications(),
-        refetchInterval: 30000, // Refetch every 30 seconds
-    })
+  const { data: notifData } = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: async () => {
+      const result = await notificationApi.getNotifications({ unreadOnly: true })
+      return { ...result, __unreadOnly: true }
+    },
+    refetchInterval: 30000,
+  })
 
-    const markReadMutation = useMutation({
-        mutationFn: (id) => notificationApi.markAsRead(id),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['notifications'] })
-        },
-    })
+  const unreadCount = notifData?.data?.unreadCount || 0
+  const notifications = useMemo(() => notifData?.data?.notifications || [], [notifData?.data?.notifications])
+  const previewItems = useMemo(() => notifications.slice(0, 4), [notifications])
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
+  const refreshNotifications = () => {
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+  }
 
-    const notifications = notifData?.data?.notifications || []
-    const unreadCount = notifData?.data?.unreadCount || 0
+  const markReadMutation = useMutation({
+    mutationFn: (notificationId) => notificationApi.markAsRead(notificationId),
+    onSuccess: (_, notificationId) => {
+      queryClient.setQueryData(['notifications', 'unread'], (current) =>
+        updateNotificationCollection(current, notificationId, true),
+      )
+      queryClient.setQueryData(['notifications', 'all'], (current) =>
+        updateNotificationCollection(current, notificationId, true),
+      )
+      refreshNotifications()
+    },
+  })
 
-    return (
-        <div className="relative" ref={dropdownRef}>
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="relative p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors focus:outline-none"
-            >
-                <Bell size={20} />
-                {unreadCount > 0 && (
-                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full border-2 border-white">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                )}
-            </button>
+  const markAllReadMutation = useMutation({
+    mutationFn: () => notificationApi.markAllAsRead(),
+    onSuccess: () => {
+      queryClient.setQueryData(['notifications', 'unread'], (current) => markAllNotificationsRead(current))
+      queryClient.setQueryData(['notifications', 'all'], (current) => markAllNotificationsRead(current))
+      refreshNotifications()
+    },
+  })
 
-            {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden transform transition-all animate-in fade-in slide-in-from-top-2">
-                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                        <h3 className="font-bold text-slate-900">Notifications</h3>
-                        {unreadCount > 0 && (
-                            <span className="text-xs font-medium text-gym-600 bg-gym-50 px-2 py-0.5 rounded-full">
-                                {unreadCount} New
-                            </span>
-                        )}
+  function handleOpenNotification(notification) {
+    const resolvedLink = resolveNotificationLink(notification)
+    if (!resolvedLink) return
+    if (!notification.isRead) {
+      markReadMutation.mutate(notification.notificationId)
+    }
+    setIsOpen(false)
+    navigate(resolvedLink)
+  }
+
+  function jumpToTop() {
+    window.scrollTo(0, 0)
+  }
+
+  function smoothScrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function handleShowAllNotifications() {
+    setIsOpen(false)
+    if (location.pathname === '/notifications') {
+      smoothScrollToTop()
+      return
+    }
+    jumpToTop()
+    navigate('/notifications')
+  }
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen((value) => !value)}
+        className="relative rounded-full border border-slate-200 bg-white p-2 text-slate-700 transition hover:border-gym-300 hover:bg-gym-50 hover:text-slate-950 focus:outline-none"
+        aria-label="Open notifications"
+      >
+        <Bell size={20} />
+        {unreadCount > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full border-2 border-white bg-gym-500 px-1 text-[10px] font-black text-white">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        ) : null}
+      </button>
+
+      {isOpen ? (
+        <div className="absolute right-0 mt-2 w-[24rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10">
+          <div className="border-b border-slate-200 bg-gradient-to-r from-gym-50 via-white to-slate-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[1.05rem] font-semibold text-slate-900">Alerts</h3>
+              {unreadCount > 0 ? (
+                <span className="rounded-full border border-gym-200 bg-gym-100 px-2.5 py-0.5 text-[11px] font-semibold text-gym-800">
+                  {unreadCount} unread
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="max-h-[24rem] overflow-y-auto">
+            {previewItems.length > 0 ? (
+              previewItems.map((notification) => {
+                const isUnread = !notification.isRead
+                return (
+                  <div
+                    key={notification.notificationId}
+                    className={`border-b border-slate-100 px-4 py-3 transition hover:bg-slate-50 ${isUnread ? 'bg-gym-50/60' : 'bg-white'}`}
+                  >
+                    <div className="flex gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gym-400 to-gym-600 text-xs font-black text-white shadow-sm">
+                        {getNotificationAvatarText(notification)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm leading-5 text-slate-700">
+                          <span className={`font-semibold ${isUnread ? 'text-gym-800' : 'text-slate-900'}`}>{notification.title}</span>{' '}
+                          <span className="text-slate-600">{notification.message}</span>
+                        </p>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                          <span>{formatNotificationTimestamp(notification.createdAt)}</span>
+                          <span>&bull;</span>
+                          <span className={`font-medium ${isUnread ? 'text-gym-700' : 'text-slate-400'}`}>
+                            {isUnread ? 'Unread' : 'Read'}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-3">
+                          {!notification.isRead ? (
+                            <button
+                              type="button"
+                              onClick={() => markReadMutation.mutate(notification.notificationId)}
+                              className="text-xs font-medium text-gym-700 transition hover:text-gym-800"
+                            >
+                              Mark read
+                            </button>
+                          ) : null}
+                          {resolveNotificationLink(notification) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenNotification(notification)}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-gym-700 transition hover:text-gym-800"
+                            >
+                              Open
+                              <ChevronRight size={12} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="max-h-[400px] overflow-y-auto">
-                        {notifications.length > 0 ? (
-                            notifications.map((notif) => (
-                                <div
-                                    key={notif.NotificationID}
-                                    className={`p-4 border-b border-slate-50 transition-colors hover:bg-slate-50 relative group ${!notif.IsRead ? 'bg-gym-50/20' : ''
-                                        }`}
-                                >
-                                    <div className="flex gap-3">
-                                        <div className="flex-1">
-                                            <p className={`text-sm ${!notif.IsRead ? 'font-bold text-slate-900' : 'text-slate-600'}`}>
-                                                {notif.Title}
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{notif.Message}</p>
-                                            <div className="flex items-center justify-between mt-2">
-                                                <span className="text-[10px] text-slate-400">
-                                                    {new Date(notif.CreatedAt).toLocaleDateString()}
-                                                </span>
-                                                {notif.LinkUrl && (
-                                                    <Link
-                                                        to={notif.LinkUrl}
-                                                        onClick={() => setIsOpen(false)}
-                                                        className="text-[10px] font-bold text-gym-600 hover:text-gym-700 flex items-center"
-                                                    >
-                                                        View <ExternalLink size={10} className="ml-0.5" />
-                                                    </Link>
-                                                )}
-                                            </div>
-                                        </div>
-                                        {!notif.IsRead && (
-                                            <button
-                                                onClick={() => markReadMutation.mutate(notif.NotificationID)}
-                                                className="opacity-0 group-hover:opacity-100 p-1 text-gym-600 hover:bg-gym-50 rounded-md transition-all self-start"
-                                                title="Mark as read"
-                                            >
-                                                <Check size={14} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="p-8 text-center">
-                                <div className="bg-slate-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <Bell size={20} className="text-slate-400" />
-                                </div>
-                                <p className="text-sm text-slate-500 font-medium">No notifications yet</p>
-                                <p className="text-xs text-slate-400 mt-1">We'll let you know when something happens</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="p-3 bg-slate-50 text-center border-t border-slate-100">
-                        <button className="text-xs font-bold text-gym-600 hover:text-gym-700 transition">
-                            Clear All Notifications
-                        </button>
-                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="px-6 py-10 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-gym-200 bg-gym-50 text-gym-700">
+                  <Bell size={18} />
                 </div>
+                <p className="text-sm font-medium text-slate-900">No alerts yet</p>
+                <p className="mt-1 text-xs text-slate-500">Successful actions and coach updates will show up here.</p>
+              </div>
             )}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-sm">
+            <button
+              type="button"
+              onClick={handleShowAllNotifications}
+              className="font-medium text-gym-700 transition hover:text-gym-800"
+            >
+              Show All
+            </button>
+            <button
+              type="button"
+              onClick={() => markAllReadMutation.mutate()}
+              disabled={unreadCount === 0}
+              className="inline-flex items-center gap-2 font-medium text-gym-700 transition hover:text-gym-800 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              <CheckCheck size={14} />
+              Mark Read
+            </button>
+          </div>
         </div>
-    )
+      ) : null}
+    </div>
+  )
 }
 
 export default NotificationDropdown

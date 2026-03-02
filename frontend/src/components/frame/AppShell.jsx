@@ -6,7 +6,6 @@ import AuthHeaderActions from '../common/AuthHeaderActions'
 import NotificationDropdown from '../common/NotificationDropdown'
 import { useSession } from '../../features/auth/useSession'
 import { adminNav, coachNav, customerNav, receptionNav } from '../../config/navigation'
-import { roleLandingPath } from '../../features/auth/session'
 import { gymPublicInfo } from '../../config/publicInfo'
 import { cartApi } from '../../features/product/api/cartApi'
 
@@ -18,19 +17,23 @@ function getWorkspaceLinks(pathname) {
   return []
 }
 
-function roleHomeCta(role) {
+function getRoleLinks(role) {
   switch (role) {
     case 'CUSTOMER':
-      return 'Customer'
+      return customerNav
     case 'COACH':
-      return 'Coach'
+      return coachNav
     case 'RECEPTIONIST':
-      return 'Reception'
+      return receptionNav
     case 'ADMIN':
-      return 'Admin'
+      return adminNav
     default:
-      return null
+      return []
   }
+}
+
+function shouldUseRoleHeader(pathname) {
+  return pathname === '/' || pathname === '/profile' || pathname === '/notifications'
 }
 
 function CustomerShopCartButton({ visible, onOpenCart }) {
@@ -81,12 +84,11 @@ function AppShell({ children }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, user } = useSession()
-  const workspaceLinks = getWorkspaceLinks(pathname)
-  const showWorkspaceNav = workspaceLinks.length > 0
   const userRole = String(user?.role || '').toUpperCase()
-  const roleDestination = roleLandingPath(userRole)
-  const roleLabel = roleHomeCta(userRole)
-  const showRoleShortcut = isAuthenticated && !showWorkspaceNav && roleDestination !== '/' && roleLabel
+  const roleLinks = getRoleLinks(userRole)
+  const workspaceLinks = getWorkspaceLinks(pathname)
+  const headerLinks = workspaceLinks.length > 0 ? workspaceLinks : (isAuthenticated && shouldUseRoleHeader(pathname) ? roleLinks : [])
+  const showWorkspaceNav = headerLinks.length > 0
   const showShopCartButton = isAuthenticated && userRole === 'CUSTOMER'
 
   function jumpToTop() {
@@ -117,18 +119,9 @@ function AppShell({ children }) {
           </Link>
 
           <div className="flex items-center gap-3">
-            {showRoleShortcut && (
-              <Link
-                to={roleDestination}
-                onClick={() => handleRouteClick(roleDestination)}
-                className="hidden rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
-              >
-                Open {roleLabel}
-              </Link>
-            )}
             {showWorkspaceNav && (
               <nav className="hidden flex-wrap items-center gap-3 text-xs font-medium sm:flex sm:text-sm">
-                {workspaceLinks.map((link) => (
+                {headerLinks.map((link) => (
                   <NavLink
                     key={link.to}
                     to={link.to}
@@ -162,7 +155,7 @@ function AppShell({ children }) {
         {showWorkspaceNav && (
           <div className="mx-auto max-w-7xl px-4 pb-3 sm:hidden sm:px-6">
             <nav className="flex flex-wrap gap-2 text-xs font-medium">
-              {workspaceLinks.map((link) => (
+              {headerLinks.map((link) => (
                 <NavLink
                   key={link.to}
                   to={link.to}

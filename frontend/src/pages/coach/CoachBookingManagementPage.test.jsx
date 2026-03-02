@@ -22,10 +22,9 @@ const { coachBookingApi } = await import('../../features/coach/api/coachBookingA
 describe('CoachBookingManagementPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal('confirm', vi.fn(() => true))
   })
 
-  it('renders reschedule requests and approves one', async () => {
+  it('renders reschedule requests and approves one through the modal', async () => {
     coachBookingApi.getPendingRequests.mockResolvedValue({ data: { items: [] } })
     coachBookingApi.getRescheduleRequests.mockResolvedValue({
       data: {
@@ -40,6 +39,7 @@ describe('CoachBookingManagementPage', () => {
             requestedSessionDate: '2026-03-02',
             requestedTimeSlotId: 2,
             requestedSlot: { slotIndex: 2 },
+            reason: 'Need to attend an exam',
             weeklyAvailable: true,
             hasConflict: false,
           },
@@ -52,7 +52,11 @@ describe('CoachBookingManagementPage', () => {
     render(<CoachBookingManagementPage />)
 
     expect(await screen.findByText(/Reschedule Requests/i)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Approve/i }))
+    expect(screen.getByText(/Need to attend an exam/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Approve$/i }))
+
+    expect(screen.getByText(/Approve this reschedule request/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Approve request/i }))
 
     await waitFor(() => {
       expect(coachBookingApi.approveRescheduleRequest).toHaveBeenCalledWith(99)
@@ -68,37 +72,35 @@ describe('CoachBookingManagementPage', () => {
     expect(await screen.findByText(/Cannot load booking requests/i)).toBeInTheDocument()
   })
 
-  it('does not call approve when confirm is cancelled', async () => {
-    globalThis.confirm.mockReturnValue(false)
-    coachBookingApi.getPendingRequests.mockResolvedValue({ data: { items: [] } })
-    coachBookingApi.getRescheduleRequests.mockResolvedValue({
+  it('requires a deny reason for booking requests', async () => {
+    coachBookingApi.getPendingRequests.mockResolvedValue({
       data: {
         items: [
           {
-            ptSessionId: 77,
+            ptRequestId: 25,
             customerName: 'Customer Minh',
             customerEmail: 'customer@gymcore.local',
-            currentSessionDate: '2026-03-01',
-            currentTimeSlotId: 1,
-            currentSlot: { slotIndex: 1 },
-            requestedSessionDate: '2026-03-04',
-            requestedTimeSlotId: 2,
-            requestedSlot: { slotIndex: 2 },
-            weeklyAvailable: true,
-            hasConflict: false,
+            startDate: '2026-03-10',
+            endDate: '2026-04-10',
+            status: 'PENDING',
+            createdAt: '2026-03-01T10:00:00Z',
           },
         ],
       },
     })
+    coachBookingApi.getRescheduleRequests.mockResolvedValue({ data: { items: [] } })
 
     const user = userEvent.setup()
     render(<CoachBookingManagementPage />)
 
-    await user.click(await screen.findByRole('button', { name: /Approve/i }))
-    expect(coachBookingApi.approveRescheduleRequest).not.toHaveBeenCalled()
+    await user.click(await screen.findByRole('button', { name: /^Deny$/i }))
+    await user.click(screen.getByRole('button', { name: /Confirm denial/i }))
+
+    expect(await screen.findByText(/Deny reason is required/i)).toBeInTheDocument()
+    expect(coachBookingApi.actionRequest).not.toHaveBeenCalled()
   })
 
-  it('denies a reschedule request', async () => {
+  it('denies a reschedule request with a coach reason', async () => {
     coachBookingApi.getPendingRequests.mockResolvedValue({ data: { items: [] } })
     coachBookingApi.getRescheduleRequests.mockResolvedValue({
       data: {
@@ -124,9 +126,14 @@ describe('CoachBookingManagementPage', () => {
     const user = userEvent.setup()
     render(<CoachBookingManagementPage />)
 
-    await user.click(await screen.findByRole('button', { name: /Deny/i }))
+    await user.click(await screen.findByRole('button', { name: /^Deny$/i }))
+    await user.type(screen.getByLabelText(/Reason for denial/i), 'I already have another student in that slot')
+    await user.click(screen.getByRole('button', { name: /Confirm denial/i }))
+
     await waitFor(() => {
-      expect(coachBookingApi.denyRescheduleRequest).toHaveBeenCalledWith(88)
+      expect(coachBookingApi.denyRescheduleRequest).toHaveBeenCalledWith(88, {
+        reason: 'I already have another student in that slot',
+      })
     })
   })
 })

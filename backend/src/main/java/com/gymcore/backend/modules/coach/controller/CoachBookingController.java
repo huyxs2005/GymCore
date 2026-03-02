@@ -206,6 +206,16 @@ public class CoachBookingController {
                         Map.of("sessionId", sessionId))));
     }
 
+    @PatchMapping("/coach/pt-sessions/{sessionId}/cancel")
+    public ApiResponse<Map<String, Object>> cancelCoachSession(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @PathVariable Integer sessionId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("PT session cancelled successfully",
+                coachBookingService.execute("coach-cancel-session", withAuth(authorizationHeader,
+                        Map.of("sessionId", sessionId, "body", payload != null ? payload : Map.of()))));
+    }
+
     @PostMapping("/coach/pt-sessions/{sessionId}/complete")
     public ApiResponse<Map<String, Object>> completeSession(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,

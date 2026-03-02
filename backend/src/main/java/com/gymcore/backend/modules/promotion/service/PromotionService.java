@@ -1,5 +1,6 @@
 package com.gymcore.backend.modules.promotion.service;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.ReportService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import java.util.List;
@@ -15,12 +16,14 @@ public class PromotionService {
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
     private final ReportService reportService;
+    private final UserNotificationService notificationService;
 
     public PromotionService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
-            ReportService reportService) {
+            ReportService reportService, UserNotificationService notificationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.reportService = reportService;
+        this.notificationService = notificationService;
     }
 
     public Map<String, Object> execute(String action, String auth, Map<String, Object> payload) {
@@ -38,8 +41,10 @@ public class PromotionService {
             case "customer-claim-coupon" -> customerClaimCoupon(auth, payload);
             case "customer-get-my-claims" -> customerGetMyClaims(auth);
             case "customer-apply-coupon" -> customerApplyCoupon(auth, payload);
-            case "customer-get-notifications" -> customerGetNotifications(auth);
+            case "customer-get-notifications" -> customerGetNotifications(auth, payload);
             case "customer-mark-notification-read" -> customerMarkRead(auth, payload);
+            case "customer-mark-notification-unread" -> customerMarkUnread(auth, payload);
+            case "customer-mark-all-notifications-read" -> customerMarkAllRead(auth);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown action: " + action);
         };
     }
@@ -154,6 +159,18 @@ public class PromotionService {
                 payload.get("endAt"),
                 requireBit(payload.getOrDefault("isActive", 1)),
                 admin.userId());
+        Integer postId = jdbcTemplate.queryForObject("SELECT TOP (1) PromotionPostID FROM dbo.PromotionPosts ORDER BY PromotionPostID DESC",
+                Integer.class);
+        if (postId != null && requireBit(payload.getOrDefault("isActive", 1)) == 1) {
+            String title = String.valueOf(payload.getOrDefault("title", "New promotion"));
+            notificationService.notifyAllCustomers(
+                    "PROMOTION_POST_PUBLISHED",
+                    "New promotion available",
+                    title + " is now live. Open Promotions to claim it before it expires.",
+                    "/customer/promotions",
+                    postId,
+                    "PROMOTION_POST_" + postId);
+        }
         return Map.of("success", true);
     }
 
@@ -254,6 +271,15 @@ public class PromotionService {
                 VALUES (?, ?, ?)
                 """, user.userId(), promotionId, sourcePostId);
 
+        notificationService.notifyUser(
+                user.userId(),
+                "COUPON_CLAIMED",
+                "Coupon added to your wallet",
+                "Your promotion claim was saved successfully. You can use it at checkout before it expires.",
+                "/customer/promotions",
+                promotionId,
+                "COUPON_CLAIM_" + promotionId);
+
         return Map.of("success", true, "message", "Coupon added to your wallet!");
     }
 
@@ -336,20 +362,23 @@ public class PromotionService {
         return response;
     }
 
-    private Map<String, Object> customerGetNotifications(String auth) {
-        CurrentUserService.UserInfo user = currentUserService.requireUser(auth);
-        String sql = "SELECT * FROM dbo.Notifications WHERE UserID = ? ORDER BY CreatedAt DESC";
-        List<Map<String, Object>> list = jdbcTemplate.queryForList(sql, user.userId());
-        long unreadCount = list.stream().filter(n -> !(boolean) n.getOrDefault("IsRead", false)).count();
-        return Map.of("notifications", list, "unreadCount", unreadCount);
+    private Map<String, Object> customerGetNotifications(String auth, Map<String, Object> payload) {
+        boolean unreadOnly = payload != null && Boolean.TRUE.equals(payload.get("unreadOnly"));
+        return notificationService.getCurrentUserNotifications(auth, unreadOnly);
     }
 
     private Map<String, Object> customerMarkRead(String auth, Map<String, Object> payload) {
-        CurrentUserService.UserInfo user = currentUserService.requireUser(auth);
         int notificationId = requireInt(payload.get("notificationId"), "Notification ID is required.");
-        jdbcTemplate.update("UPDATE dbo.Notifications SET IsRead = 1 WHERE NotificationID = ? AND UserID = ?",
-                notificationId, user.userId());
-        return Map.of("success", true);
+        return notificationService.markNotificationReadState(auth, notificationId, true);
+    }
+
+    private Map<String, Object> customerMarkUnread(String auth, Map<String, Object> payload) {
+        int notificationId = requireInt(payload.get("notificationId"), "Notification ID is required.");
+        return notificationService.markNotificationReadState(auth, notificationId, false);
+    }
+
+    private Map<String, Object> customerMarkAllRead(String auth) {
+        return notificationService.markAllNotificationsRead(auth);
     }
 
     private int requireInt(Object value, String message) {

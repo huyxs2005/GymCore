@@ -17,6 +17,12 @@
 - [x] Block duplicate PT booking attempts when customer already has a pending PT request or an active PT arrangement.
   - `backend/src/main/java/com/gymcore/backend/modules/coach/service/CoachBookingService.java`
   - `frontend/src/pages/customer/CustomerCoachBookingPage.jsx`
+- [x] Add notification center and PT/event alerts.
+  - header bell dropdown with recent alerts
+  - dedicated notifications page
+  - profile dropdown entry
+  - payment success / promotion / coupon / PT workflow notifications
+  - PT cancellation counterpart notifications
 - [x] Fix frontend tests after shared header changes (missing QueryClient context).
   - `frontend/src/routes/AppRouter.test.jsx`
   - `frontend/src/pages/reception/ReceptionCheckinPage.test.jsx`

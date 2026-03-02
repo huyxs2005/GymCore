@@ -101,6 +101,10 @@ Customer
 - Save Coupon Code (claim to wallet)
 - Apply Saved Coupon at checkout (Order OR Membership)
 - View Notifications (badge count)
+- Open notification bell dropdown
+- View full Notifications page
+- Mark Notification Read / Unread
+- Mark All Notifications Read
 
 Admin
 - Create Coupon Code (product discount, membership discount, membership extra months, or membership discount + extra months)
@@ -217,20 +221,37 @@ I4. Coach booking and PT scheduling rules
 - Coach cannot be double-booked on same SessionDate + TimeSlotID for SCHEDULED/COMPLETED sessions.
 - Coach deny action requires DenyReason.
 - Customer can cancel only own future SCHEDULED sessions.
+- Customer cancellation flow uses an in-app confirmation modal and may include a typed cancellation reason visible to coach.
+- PT cancellation notifications:
+  - if customer cancels a PT session, the assigned coach is notified,
+  - if coach cancels a PT session, the customer is notified.
 - Customer reschedule constraints:
   - only own SCHEDULED session can be requested for reschedule,
   - only one pending reschedule request per session at a time,
   - original session date cannot be in the past,
   - requested date cannot be in the past,
   - requested slot must be in coach weekly availability and have no conflict.
+- Customer reschedule flow uses an in-app modal and may include an optional reason visible to coach.
 - Coach reschedule review constraints:
   - approve/deny only when session is SCHEDULED and has pending reschedule metadata,
   - approval revalidates requested date/slot availability and no-conflict before applying.
+- Coach cancellation flow uses an in-app confirmation modal and may include a typed cancellation reason visible to customer.
+- Coach deny / reschedule-review actions use in-app modal flows instead of browser confirm/prompt.
+- PT reason visibility rules:
+  - coach can see customer cancellation reasons on cancelled sessions,
+  - coach can see customer reschedule reasons in reschedule review,
+  - customer can see coach cancellation reasons on cancelled PT sessions,
+  - customer can see denied-request reasons in PT schedule views.
 - Coach feedback constraints:
   - one feedback per PT session,
   - rating must be between 1 and 5.
 - Match results are separated into fully matched and partially matched coach lists.
 - Customer must resolve unmatched selected slots before confirming a booking request in match review UI.
+- Coach and customer weekly slot summaries use weekday drill-down summaries (one selected weekday at a time) instead of expanded all-day chip walls.
+- Coach booked-session monthly calendar uses status-colored signals:
+  - scheduled / active dates use green,
+  - cancelled-only dates use red,
+  - selected date highlight uses a separate blue ring so selection does not conflict with status color.
 
 I5. Check-in and personal health rules
 - Reception check-in supports 2 flows:
@@ -327,6 +348,25 @@ I7. Promotions, coupon wallet, and claim usage rules
 
 I8. Notification and anti-spam rules
 - Notification row has read/unread state (`IsRead`).
+- Notification center is exposed in two places:
+  - header bell dropdown (recent alerts),
+  - dedicated `/notifications` page (full list).
+- Notification center supports:
+  - unread badge count,
+  - unread-only filter,
+  - mark single notification read,
+  - mark single notification unread,
+  - mark all notifications read.
+- Notifications are generated for key successful actions and workflow events, including:
+  - membership payment success,
+  - product order payment success,
+  - coupon claimed successfully,
+  - new promotion post published to customers,
+  - PT booking request created,
+  - PT request approved / denied,
+  - PT session cancelled by customer or coach,
+  - PT reschedule request submitted,
+  - PT reschedule request approved / denied.
 - Notification dedupe index prevents duplicate same-type notifications per `(UserID, NotificationType, RefId, ExtraKey)` when RefId is set.
 - Daily job also cancels future SCHEDULED PT sessions for customers with no ACTIVE membership and sends cancellation notification.
 

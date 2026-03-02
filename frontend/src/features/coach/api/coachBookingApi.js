@@ -66,6 +66,9 @@ export const coachBookingApi = {
   deleteSession(sessionId) {
     return apiClient.delete(`/v1/coach/pt-sessions/${sessionId}`).then((response) => response.data)
   },
+  cancelCoachSession(sessionId, body) {
+    return apiClient.patch(`/v1/coach/pt-sessions/${sessionId}/cancel`, body || {}).then((response) => response.data)
+  },
   completeSession(sessionId) {
     return apiClient.post(`/v1/coach/pt-sessions/${sessionId}/complete`).then((response) => response.data)
   },

@@ -134,4 +134,32 @@ describe('AppShell cart button', () => {
     expect(scrollSpy).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
     scrollSpy.mockRestore()
   })
+
+  it('shows full customer navigation on the landing page and removes the old workspace shortcut', () => {
+    renderShell('/')
+
+    const headerNav = screen.getAllByRole('navigation')[0]
+    expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Check-in & Health$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Coach Booking$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Promotions$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Workout\/Food\/AI$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Open Customer/i })).not.toBeInTheDocument()
+  })
+
+  it('shows customer role navigation on shared profile and notifications pages', () => {
+    const { unmount } = renderShell('/profile')
+
+    let headerNav = screen.getAllByRole('navigation')[0]
+    expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Coach Booking$/i })).toBeInTheDocument()
+
+    unmount()
+
+    renderShell('/notifications')
+    headerNav = screen.getAllByRole('navigation')[0]
+    expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
+  })
 })

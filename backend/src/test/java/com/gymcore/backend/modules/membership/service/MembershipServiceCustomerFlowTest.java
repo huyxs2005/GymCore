@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.AuthService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.checkin.service.CheckinHealthService;
@@ -43,6 +44,7 @@ class MembershipServiceCustomerFlowTest {
     private CurrentUserService currentUserService;
     private PayOsService payOsService;
     private AuthService authService;
+    private UserNotificationService notificationService;
     private MembershipService membershipService;
     private CheckinHealthService checkinHealthService;
 
@@ -52,7 +54,8 @@ class MembershipServiceCustomerFlowTest {
         currentUserService = Mockito.mock(CurrentUserService.class);
         payOsService = Mockito.mock(PayOsService.class);
         authService = Mockito.mock(AuthService.class);
-        membershipService = new MembershipService(jdbcTemplate, currentUserService, payOsService);
+        notificationService = Mockito.mock(UserNotificationService.class);
+        membershipService = new MembershipService(jdbcTemplate, currentUserService, payOsService, notificationService);
         checkinHealthService = new CheckinHealthService(jdbcTemplate, authService);
     }
 

@@ -1,5 +1,6 @@
 package com.gymcore.backend.modules.product.service;
 
+import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService.UserInfo;
 import java.math.BigDecimal;
@@ -23,12 +24,14 @@ public class ProductSalesService {
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
     private final PayOsService payOsService;
+    private final UserNotificationService notificationService;
 
     public ProductSalesService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
-            PayOsService payOsService) {
+            PayOsService payOsService, UserNotificationService notificationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.payOsService = payOsService;
+        this.notificationService = notificationService;
     }
 
     public Map<String, Object> execute(String action, String authorizationHeader, Map<String, Object> payload) {
@@ -515,6 +518,7 @@ public class ProductSalesService {
 
         try {
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
+            notifyOrderPaymentSuccess(paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to confirm payment from return URL.", exception);
@@ -540,6 +544,32 @@ public class ProductSalesService {
                     UpdatedAt = SYSDATETIME()
                 WHERE OrderID = ? AND Status = 'PENDING'
                 """, orderId);
+    }
+
+    private void notifyOrderPaymentSuccess(int paymentId) {
+        jdbcTemplate.query("""
+                SELECT TOP (1)
+                    o.CustomerID,
+                    o.OrderID,
+                    p.Amount
+                FROM dbo.Payments p
+                JOIN dbo.Orders o ON o.OrderID = p.OrderID
+                WHERE p.PaymentID = ?
+                """, rs -> {
+            int customerId = rs.getInt("CustomerID");
+            int orderId = rs.getInt("OrderID");
+            BigDecimal amount = rs.getBigDecimal("Amount");
+            String message = "Your product order #" + orderId + " payment was confirmed"
+                    + (amount == null ? "." : " for " + amount.stripTrailingZeros().toPlainString() + " VND.");
+            notificationService.notifyUser(
+                    customerId,
+                    "ORDER_PAYMENT_SUCCESS",
+                    "Order payment successful",
+                    message,
+                    "/customer/shop",
+                    orderId,
+                    "ORDER_PAYMENT_SUCCESS_" + paymentId);
+        }, paymentId);
     }
 
     // ADMIN
