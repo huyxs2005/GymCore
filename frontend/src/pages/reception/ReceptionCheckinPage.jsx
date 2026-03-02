@@ -282,7 +282,7 @@ function ReceptionCheckinPage() {
       links={receptionNav}
     >
       <section className="space-y-5">
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="gc-card">
           <h2 className="text-lg font-semibold text-slate-900">QR Check-in (Camera)</h2>
           <p className="mt-1 text-sm text-slate-600">
             Open camera, point at customer QR, and check-in happens automatically.
@@ -326,7 +326,7 @@ function ReceptionCheckinPage() {
           {cameraError ? <p className="mt-3 text-sm text-amber-700">{cameraError}</p> : null}
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="gc-card">
           <h2 className="text-lg font-semibold text-slate-900">Manual Check-in (Search + Select)</h2>
           <p className="mt-1 text-sm text-slate-600">Search by customer full name or phone, then choose and check in.</p>
 
@@ -442,7 +442,7 @@ function ReceptionCheckinPage() {
           </div>
         ) : null}
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="gc-card">
           <h2 className="text-lg font-semibold text-slate-900">Recent check-ins</h2>
           {loadingHistory ? (
             <p className="mt-3 text-sm text-slate-500">Loading history...</p>

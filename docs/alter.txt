@@ -1,0 +1,522 @@
+/*
+GymCore - Clean Alter Script (from feature/coupon review)
+
+Purpose:
+- Keep main schema/seed files as source of truth.
+- Apply only safe, idempotent additions from coupon-related SQL changes.
+- Avoid destructive changes that removed existing constraints/logic in main.
+
+Recommended run order:
+1) docs/GymCore.txt
+2) docs/alter.txt
+3) docs/InsertValues.txt
+4) docs/InsertTestingValues.txt (optional)
+*/
+
+USE GymCore;
+GO
+
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+GO
+
+--- =========================================================
+--- Section 1: Orders - add payment method field (idempotent)
+--- =========================================================
+IF OBJECT_ID('dbo.Orders', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Orders was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Orders', 'PaymentMethod') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD PaymentMethod NVARCHAR(50) NULL;
+END;
+GO
+
+--- =========================================================
+--- Section 1b: Orders/Payments payment method normalization
+--- Business rule: only PAYOS or CASH
+--- =========================================================
+IF OBJECT_ID('dbo.Payments', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Payments was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Payments', 'PaymentMethod') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments ADD PaymentMethod NVARCHAR(50) NULL;
+END;
+GO
+
+/* Normalize existing Orders.PaymentMethod text */
+UPDATE dbo.Orders
+SET PaymentMethod = UPPER(LTRIM(RTRIM(PaymentMethod)))
+WHERE PaymentMethod IS NOT NULL;
+GO
+
+UPDATE dbo.Orders
+SET PaymentMethod = N'PAYOS'
+WHERE PaymentMethod IN (N'PAY_OS', N'PAY OS', N'PAY-OS', N'ONLINE', N'ONLINE_PAYOS', N'PAYOS_VN');
+GO
+
+UPDATE dbo.Orders
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IN (N'COD', N'OFFLINE', N'COUNTER', N'RECEPTION');
+GO
+
+/* Backfill missing Orders.PaymentMethod:
+   if linked payment has PayOS evidence => PAYOS, else CASH */
+UPDATE o
+SET o.PaymentMethod = CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM dbo.Payments p
+        WHERE p.OrderID = o.OrderID
+          AND (p.PayOS_PaymentLinkId IS NOT NULL OR p.PayOS_Status IS NOT NULL)
+    ) THEN N'PAYOS'
+    ELSE N'CASH'
+END
+FROM dbo.Orders o
+WHERE o.PaymentMethod IS NULL OR LTRIM(RTRIM(o.PaymentMethod)) = N'';
+GO
+
+/* Coerce any non-supported legacy values */
+UPDATE dbo.Orders
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod NOT IN (N'PAYOS', N'CASH');
+GO
+
+/* Ensure no NULL before switching to NOT NULL */
+UPDATE dbo.Orders
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IS NULL;
+GO
+
+/* Make required for future data quality */
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.Orders')
+      AND name = 'PaymentMethod'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE dbo.Orders
+    ALTER COLUMN PaymentMethod NVARCHAR(50) NOT NULL;
+END;
+GO
+
+/* Add Orders default once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.default_constraints dc
+    JOIN sys.columns c
+      ON c.object_id = dc.parent_object_id
+     AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.Orders')
+      AND c.name = 'PaymentMethod'
+)
+BEGIN
+    ALTER TABLE dbo.Orders
+    ADD CONSTRAINT DF_Orders_PaymentMethod DEFAULT N'PAYOS' FOR PaymentMethod;
+END;
+GO
+
+/* Add Orders check once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Orders_PaymentMethod'
+      AND parent_object_id = OBJECT_ID('dbo.Orders')
+)
+BEGIN
+    ALTER TABLE dbo.Orders
+    ADD CONSTRAINT CK_Orders_PaymentMethod CHECK (PaymentMethod IN (N'PAYOS', N'CASH'));
+END;
+GO
+
+/* Normalize existing Payments.PaymentMethod text */
+UPDATE dbo.Payments
+SET PaymentMethod = UPPER(LTRIM(RTRIM(PaymentMethod)))
+WHERE PaymentMethod IS NOT NULL;
+GO
+
+UPDATE dbo.Payments
+SET PaymentMethod = N'PAYOS'
+WHERE PaymentMethod IN (N'PAY_OS', N'PAY OS', N'PAY-OS', N'ONLINE', N'ONLINE_PAYOS', N'PAYOS_VN');
+GO
+
+UPDATE dbo.Payments
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IN (N'COD', N'OFFLINE', N'COUNTER', N'RECEPTION');
+GO
+
+/* Backfill missing Payments.PaymentMethod:
+   if payment has PayOS evidence => PAYOS
+   else if order method exists => order method
+   else => CASH */
+UPDATE p
+SET p.PaymentMethod = CASE
+    WHEN p.PayOS_PaymentLinkId IS NOT NULL OR p.PayOS_Status IS NOT NULL THEN N'PAYOS'
+    WHEN o.PaymentMethod IN (N'PAYOS', N'CASH') THEN o.PaymentMethod
+    ELSE N'CASH'
+END
+FROM dbo.Payments p
+LEFT JOIN dbo.Orders o ON o.OrderID = p.OrderID
+WHERE p.PaymentMethod IS NULL OR LTRIM(RTRIM(p.PaymentMethod)) = N'';
+GO
+
+/* Coerce any non-supported legacy values */
+UPDATE dbo.Payments
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod NOT IN (N'PAYOS', N'CASH');
+GO
+
+/* Ensure no NULL before switching to NOT NULL */
+UPDATE dbo.Payments
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IS NULL;
+GO
+
+/* Make required for future data quality */
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.Payments')
+      AND name = 'PaymentMethod'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ALTER COLUMN PaymentMethod NVARCHAR(50) NOT NULL;
+END;
+GO
+
+/* Add Payments default once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.default_constraints dc
+    JOIN sys.columns c
+      ON c.object_id = dc.parent_object_id
+     AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.Payments')
+      AND c.name = 'PaymentMethod'
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ADD CONSTRAINT DF_Payments_PaymentMethod DEFAULT N'PAYOS' FOR PaymentMethod;
+END;
+GO
+
+/* Add Payments check once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Payments_PaymentMethod'
+      AND parent_object_id = OBJECT_ID('dbo.Payments')
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ADD CONSTRAINT CK_Payments_PaymentMethod CHECK (PaymentMethod IN (N'PAYOS', N'CASH'));
+END;
+GO
+
+--- =========================================================
+--- Section 2: Promotions - ensure BonusDurationDays exists
+--- =========================================================
+IF OBJECT_ID('dbo.Promotions', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Promotions was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Promotions', 'BonusDurationDays') IS NULL
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD BonusDurationDays INT NOT NULL
+        CONSTRAINT DF_Promotions_BonusDurationDays DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_BonusDurationDays'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_BonusDurationDays CHECK (BonusDurationDays >= 0);
+END;
+GO
+
+--- =========================================================
+--- Section 3: Coach availability compatibility migration
+--- =========================================================
+IF OBJECT_ID('dbo.CoachWeeklyAvailability', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.CoachWeeklyAvailability was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.CoachWeeklyAvailability', 'IsAvailable') IS NULL
+BEGIN
+    ALTER TABLE dbo.CoachWeeklyAvailability
+    ADD IsAvailable BIT NOT NULL
+        CONSTRAINT DF_CoachWeeklyAvailability_IsAvailable DEFAULT 1;
+END;
+GO
+
+--- =========================================================
+--- Section 3b: PT request deny reason compatibility migration
+--- =========================================================
+IF OBJECT_ID('dbo.PTRecurringRequests', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.PTRecurringRequests was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.PTRecurringRequests', 'DenyReason') IS NULL
+BEGIN
+    ALTER TABLE dbo.PTRecurringRequests
+    ADD DenyReason NVARCHAR(500) NULL;
+END;
+GO
+
+--- =========================================================
+--- Section 3c: Membership plan coach-booking strictness
+--- =========================================================
+IF OBJECT_ID('dbo.MembershipPlans', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.MembershipPlans was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+/* Normalize legacy plan rows to match business rule */
+UPDATE dbo.MembershipPlans
+SET AllowsCoachBooking = CASE
+    WHEN PlanType = N'GYM_PLUS_COACH' THEN 1
+    ELSE 0
+END
+WHERE (PlanType = N'GYM_PLUS_COACH' AND AllowsCoachBooking <> 1)
+   OR (PlanType IN (N'GYM_ONLY', N'DAY_PASS') AND AllowsCoachBooking <> 0);
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_MembershipPlans_CoachBookingByType'
+      AND parent_object_id = OBJECT_ID('dbo.MembershipPlans')
+)
+BEGIN
+    ALTER TABLE dbo.MembershipPlans
+    ADD CONSTRAINT CK_MembershipPlans_CoachBookingByType CHECK (
+        (PlanType = 'GYM_PLUS_COACH' AND AllowsCoachBooking = 1)
+        OR (PlanType IN ('GYM_ONLY','DAY_PASS') AND AllowsCoachBooking = 0)
+    );
+END;
+GO
+
+--- =========================================================
+--- Section 3d: Day pass membership date enforcement
+--- =========================================================
+IF OBJECT_ID('dbo.CustomerMemberships', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.CustomerMemberships was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+/* Backfill inconsistent legacy day-pass rows */
+UPDATE cm
+SET EndDate = cm.StartDate
+FROM dbo.CustomerMemberships cm
+JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+WHERE mp.PlanType = N'DAY_PASS'
+  AND cm.StartDate <> cm.EndDate;
+GO
+
+CREATE OR ALTER TRIGGER dbo.TRG_CustomerMemberships_ValidateDayPassDate
+ON dbo.CustomerMemberships
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted cm
+        JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+        WHERE mp.PlanType = 'DAY_PASS'
+          AND cm.StartDate <> cm.EndDate
+    )
+    BEGIN
+        RAISERROR('DAY_PASS membership must have StartDate = EndDate.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+--- =========================================================
+--- Section 3e: Auto-seed 7x8 availability for new coaches
+--- =========================================================
+IF OBJECT_ID('dbo.Coaches', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Coaches was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.TimeSlots', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.TimeSlots was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+GO
+
+CREATE OR ALTER TRIGGER dbo.TRG_Coaches_SeedDefaultAvailability
+ON dbo.Coaches
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.CoachWeeklyAvailability (CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    SELECT i.CoachID, d.DayOfWeek, ts.TimeSlotID, CAST(1 AS BIT)
+    FROM inserted i
+    CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6),(7)) AS d(DayOfWeek)
+    CROSS JOIN dbo.TimeSlots ts
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CoachWeeklyAvailability cwa
+        WHERE cwa.CoachID = i.CoachID
+          AND cwa.DayOfWeek = d.DayOfWeek
+          AND cwa.TimeSlotID = ts.TimeSlotID
+    );
+END;
+GO
+
+--- =========================================================
+--- Section 4: Payment confirmation procedures for PayOS flow
+--- =========================================================
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
+    @PaymentID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @OrderID INT;
+    DECLARE @CustomerMembershipID INT;
+    DECLARE @MembershipCustomerID INT;
+    DECLARE @MembershipCurrentStatus NVARCHAR(20);
+    DECLARE @ClaimID INT;
+
+    SELECT
+        @OrderID = p.OrderID,
+        @CustomerMembershipID = p.CustomerMembershipID,
+        @ClaimID = p.ClaimID
+    FROM dbo.Payments p
+    WHERE p.PaymentID = @PaymentID;
+
+    IF @CustomerMembershipID IS NOT NULL
+    BEGIN
+        SELECT
+            @MembershipCustomerID = m.CustomerID,
+            @MembershipCurrentStatus = m.Status
+        FROM dbo.CustomerMemberships m
+        WHERE m.CustomerMembershipID = @CustomerMembershipID;
+    END;
+
+    UPDATE dbo.Payments
+    SET Status = 'SUCCESS',
+        PaidAt = COALESCE(PaidAt, SYSDATETIME()),
+        PayOS_Status = 'SUCCESS',
+        WebhookVerifiedAt = COALESCE(WebhookVerifiedAt, SYSDATETIME())
+    WHERE PaymentID = @PaymentID
+      AND Status = 'PENDING';
+
+    IF @@ROWCOUNT = 0
+        RETURN;
+
+    IF @OrderID IS NOT NULL
+    BEGIN
+        UPDATE dbo.Orders
+        SET Status = 'PAID',
+            UpdatedAt = SYSDATETIME()
+        WHERE OrderID = @OrderID
+              AND Status = 'PENDING';
+    END;
+
+    IF @ClaimID IS NOT NULL
+    BEGIN
+        UPDATE dbo.UserPromotionClaims
+        SET UsedAt = COALESCE(UsedAt, SYSDATETIME()),
+            UsedPaymentID = COALESCE(UsedPaymentID, @PaymentID),
+            UsedOnOrderID = COALESCE(UsedOnOrderID, @OrderID)
+        WHERE ClaimID = @ClaimID
+          AND UsedAt IS NULL;
+    END;
+
+    IF @CustomerMembershipID IS NOT NULL
+       AND @MembershipCurrentStatus = 'PENDING'
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM dbo.CustomerMemberships m
+            WHERE m.CustomerID = @MembershipCustomerID
+              AND m.Status = 'ACTIVE'
+              AND m.CustomerMembershipID <> @CustomerMembershipID
+        )
+        BEGIN
+            UPDATE dbo.CustomerMemberships
+            SET Status = 'SCHEDULED',
+                UpdatedAt = SYSDATETIME()
+            WHERE CustomerMembershipID = @CustomerMembershipID
+              AND Status = 'PENDING';
+        END
+        ELSE
+        BEGIN
+            UPDATE dbo.CustomerMemberships
+            SET Status = 'ACTIVE',
+                UpdatedAt = SYSDATETIME()
+            WHERE CustomerMembershipID = @CustomerMembershipID
+              AND Status = 'PENDING';
+        END;
+    END;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccessByPayOSLinkId
+    @PayOSPaymentLinkId NVARCHAR(80)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @PaymentID INT;
+
+    SELECT TOP (1) @PaymentID = p.PaymentID
+    FROM dbo.Payments p
+    WHERE p.PayOS_PaymentLinkId = @PayOSPaymentLinkId
+    ORDER BY p.PaymentID DESC;
+
+    IF @PaymentID IS NULL
+        RETURN;
+
+    EXEC dbo.sp_ConfirmPaymentSuccess @PaymentID;
+END;
+GO
+
+--- =========================================================
+--- Section 5: Seed data moved out of alter script
+--- =========================================================
+--- Coupon and product seed/test records are maintained in:
+--- - docs/InsertValues.txt
+--- - docs/InsertTestingValues.txt

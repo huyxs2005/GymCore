@@ -2,14 +2,19 @@ import { Link } from 'react-router-dom'
 
 function NotFoundPage() {
   return (
-    <section className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 text-center">
-      <h1 className="text-4xl font-bold text-slate-900">404</h1>
-      <p className="mt-2 text-sm text-slate-600">Trang ban tim khong ton tai.</p>
+    <section className="mx-auto flex min-h-[70vh] max-w-2xl flex-col items-center justify-center px-6 py-20 text-center">
+      <div className="mb-8">
+        <h1 className="text-9xl font-black text-gym-dark-100 tracking-tighter absolute -z-10 opacity-50 select-none">404</h1>
+        <h2 className="text-5xl font-black text-gym-dark-900 tracking-tight mt-12 relative">Lost in the Gym?</h2>
+      </div>
+      <p className="text-gym-dark-400 font-bold text-lg mb-10 max-w-md">
+        The page you're looking for doesn't exist or has been moved to another level.
+      </p>
       <Link
         to="/"
-        className="mt-6 rounded-lg bg-gym-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
+        className="btn-primary px-10 py-4 text-lg"
       >
-        Quay ve trang chu
+        Back to Transformation
       </Link>
     </section>
   )

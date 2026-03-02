@@ -55,25 +55,42 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - Unique filtered indexes enforce max one `ACTIVE` and one `SCHEDULED` per customer.
     - Daily job `sp_RunDailyMembershipJobs` activates due `SCHEDULED` memberships.
   - Promotions support `BonusDurationDays` (for coupon discount + extra days at the same time).
-  - Added AI-related structured tables:
-    - `FitnessGoals`, `CustomerGoals`
-    - `MealCategories`, `Meals`, `MealCategoryMap`
-    - `FoodGoalMap`, `MealGoalMap`, `WorkoutGoalMap`
-    - `Allergens`, `CustomerAllergies`, `FoodAllergenMap`, `MealAllergenMap`
-- Foods are kept; Meals were added (both exist).
-- Allergy handling direction: strict block in recommendation logic (do not parse recipe free text).
+  - Membership plan strictness:
+    - Only `GYM_PLUS_COACH` can have `AllowsCoachBooking = 1`.
+    - `GYM_ONLY` and `DAY_PASS` must have `AllowsCoachBooking = 0`.
+  - Day pass membership validity enforcement:
+    - `DAY_PASS` memberships must satisfy `StartDate = EndDate`.
+  - Coach/PT booking tables include:
+    - `TimeSlots` (8 fixed slots/day)
+    - `CoachWeeklyAvailability` with `IsAvailable`
+    - `PTRecurringRequests` with `DenyReason`
+    - `PTRequestSlots`, `PTSessions`, `PTSessionNotes`
+  - PT booking rule is strict:
+    - `PTRecurringRequests.CustomerMembershipID` is `NOT NULL`
+    - customer must have active Gym+Coach membership for booking flow.
+  - New coach availability defaulting:
+    - New rows in `Coaches` auto-seed `CoachWeeklyAvailability` for all 7 days x 8 slots.
+  - Check-in/PT integrity is trigger-enforced (active membership checks, coach-booking eligibility, date coverage).
 
 ## 7) Seed data status
-- `docs/InsertValues.txt` = required baseline seed (roles/users/profiles/time slots/plans/goals/allergens), idempotent.
+- `docs/InsertValues.txt` = required baseline seed (roles/users/profiles/time slots/plans/goals), idempotent.
 - `docs/InsertTestingValues.txt` = optional example/testing seed (cart/orders/promotions/PT/check-in and more), idempotent.
   - Seeds multiple membership durations (day pass / 1m / 6m / 12m / 24m for gym-only and gym+coach).
   - Seeds one queued `SCHEDULED` membership sample for membership-switch testing.
   - Seeds promotion `SUMMERPLUS30` (5% + 30 bonus days) example.
+  - Seeds coach weekly availability rows for testing flow.
+  - Seeded plan/product demo prices were reduced to low values for easier local testing (1k/2k/3k scale and incremental tiers).
 - Seeded login passwords:
   - Admin: `Admin123456!`
   - Receptionist: `Reception123456!`
   - Coach: `Coach123456!`
   - Customer: `Customer123456!`
+
+## 7.1) Official DB run order (current)
+1. `docs/GymCore.txt`
+2. `docs/alter.txt`
+3. `docs/InsertValues.txt`
+4. `docs/InsertTestingValues.txt` (optional)
 
 ## 8) Env file convention for teammates
 - Real local env files are gitignored.
@@ -84,7 +101,9 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 
 ## 9) Content/AI API scaffolding
 - `ContentController` includes placeholder endpoints for:
-  - meals/categories/goals/allergens
+  - workouts/categories
+  - foods/categories
+  - goals
   - AI recommendations
 - Current implementation is barebones placeholder responses; business logic still to implement.
 
@@ -92,6 +111,10 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Backend tests run with Maven wrapper.
 - Frontend tests run with Vitest (`npm run test:run`).
 - Recent state after major changes was green on both sides.
+
+## 10.1) Latest verified test run (Feb 27, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`110` tests).
+- Frontend: `npm run test -- --run` -> passed (`14` files, `38` tests).
 
 ## 11) Working principle reminders
 - Keep secrets out of git.
@@ -131,3 +154,115 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - No token copy button.
 - Reception screen:
   - No manual token paste fallback input.
+
+## 16) Coach booking/training support (current implementation)
+- Customer flow:
+  - Must set desired recurring weekly day+slot first.
+  - Then preview coach matching by date range and desired slots.
+  - Results separated into:
+    - `Fully Match` (all desired slots available).
+    - `Partial Match` (some overlap, e.g. already booked in selected range).
+  - Customer sends booking request; coach approves/denies later.
+  - Customer can cancel session.
+  - Customer reschedule is request-based (coach approves/denies).
+  - Customer can submit coach feedback (rating + comment) for completed sessions.
+- Coach flow:
+  - Update weekly availability.
+  - Review booking requests (`PENDING`) and approve/deny.
+  - Deny requires reason.
+  - Review reschedule requests and approve/deny.
+  - View own schedule, customer list/profile/history, update progress, notes, and feedback.
+- Admin flow:
+  - View coaches, coach students, and coach/customer feedback views through coach-management endpoints.
+
+## 17) Layout/UI architecture memory
+- App now uses one shared global shell header/footer; duplicate page headers were removed.
+- `WorkspaceScaffold` is content wrapper only (no duplicate top nav/user bar).
+
+## 18) README onboarding updates (Feb 28, 2026)
+- Root `README.md` now documents the exact DB execution order for local setup:
+  1. `docs/GymCore.txt`
+  2. `docs/alter.txt`
+  3. `docs/InsertValues.txt`
+  4. `docs/InsertTestingValues.txt` (optional)
+- Root `README.md` now explicitly tells teammates where to change SQL Server auth:
+  - `backend/src/main/resources/application.properties`
+  - `spring.datasource.username`
+  - `spring.datasource.password`
+  - `spring.datasource.url`
+- `frontend/README.md` was replaced with project-specific notes:
+  - points to `../README.md` for full setup
+  - references backend datasource config location for SQL credentials.
+
+## 19) Membership/Payment policy alignment (Mar 1, 2026)
+- `docs/Usecase functions.txt` and DB docs are aligned on payment channels:
+  - Membership checkout channel is PayOS redirect.
+  - System payment methods tracked for audit are `PAYOS` and `CASH`.
+  - Product flow remains online checkout + in-store pickup, with no shipping.
+- `docs/alter.txt` now includes idempotent compatibility migration blocks for:
+  - strict membership coach-booking constraint (`CK_MembershipPlans_CoachBookingByType`)
+  - day-pass date enforcement trigger (`TRG_CustomerMemberships_ValidateDayPassDate`)
+  - new-coach full-week availability seeding trigger (`TRG_Coaches_SeedDefaultAvailability`)
+- DB rerun order remains unchanged:
+  1. `docs/GymCore.txt`
+  2. `docs/alter.txt`
+  3. `docs/InsertValues.txt`
+  4. `docs/InsertTestingValues.txt` (optional)
+
+## 20) Latest verified test run (Mar 1, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`124` tests, `0` failures, `0` errors).
+- Frontend: `npm run test:run` -> passed (`18` files, `46` tests).
+- Added regression coverage:
+  - `frontend/src/components/frame/AppShell.test.jsx`
+  - Verifies customer cart header button behavior:
+    - shown on `/customer/shop`, click dispatches `gymcore:toggle-cart`
+    - hidden outside shop routes.
+
+## 21) Customer check-in health UI update (Mar 1, 2026)
+- `frontend/src/pages/customer/CustomerCheckinHealthPage.jsx` now includes a circular BMI meter (car-speedometer style):
+  - segmented color ring:
+    - low BMI = gray
+    - optimal BMI = green
+    - high BMI = red
+  - needle rotates based on current BMI value
+  - center shows BMI number and current level label.
+
+## 22) Coach booking UX update (Mar 1, 2026)
+- `frontend/src/pages/customer/CustomerCoachBookingPage.jsx`:
+  - "Set Desired PT Schedule" is compacted into a button-first flow.
+  - Clicking opens a planner modal with:
+    - date range controls
+    - month calendar
+    - per-date slot picking panel
+    - removable selected date-slot chips.
+  - Coach match display remains split into:
+    - `Fully Match`
+    - `Partial Match`
+  - Coach review modal uses transparent match indicators for readability:
+    - matched rows: green tinted (`.../10`)
+    - unmatched rows: red tinted (`.../10`)
+  - Booking confirm is blocked until all unmatched slots are resolved.
+
+## 23) Customer shop/cart UX update (Mar 1, 2026)
+- `frontend/src/components/frame/AppShell.jsx`:
+  - customer cart icon added to header and shown only on `/customer/shop`
+  - positioned between notifications and profile menu
+  - badge shows cart item count
+  - supports pulse animation event (`gymcore:cart-pulse`).
+- `frontend/src/pages/customer/CustomerShopPage.jsx`:
+  - replaced side checkout panel with cart drawer flow.
+  - add-to-cart "fly to cart" animation is implemented.
+  - product cards/detail include quantity `+/-` controls.
+  - two actions on products:
+    - `Add` / `Add to cart`
+    - `Buy now` (opens cart + checkout confirm immediately, no extra cart-icon click needed).
+  - cart drawer includes:
+    - items, quantity update/remove
+    - subtotal and coupon preview area
+    - checkout action and order history.
+
+## 24) Shared footer refinement (Mar 1, 2026)
+- `frontend/src/components/frame/AppShell.jsx` footer refreshed to a more professional layout:
+  - 3-column structure (brand, contact, quick links)
+  - gradient background and cleaner spacing/typography
+  - concise operational info and pickup note in footer bottom row.

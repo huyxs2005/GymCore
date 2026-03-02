@@ -151,137 +151,151 @@ function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <h1 className="text-2xl font-bold text-slate-900">My Profile</h1>
-      <p className="mt-2 text-sm text-slate-600">Starter page for view/edit profile use-case.</p>
+    <div className="mx-auto max-w-5xl px-6 py-20">
+      <div className="mb-12">
+        <h1 className="text-4xl font-black text-gym-dark-900 tracking-tight mb-2">My Profile</h1>
+        <p className="text-gym-dark-400 font-bold">Manage your account settings and preferences</p>
+      </div>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        {profileQuery.isLoading && <p className="text-sm text-slate-600">Loading profile...</p>}
-        {profileQuery.isError && <p className="text-sm text-rose-700">Failed to load profile.</p>}
-        {viewUser ? (
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <div className="sm:w-56">
-              <div className="flex items-center gap-4 sm:flex-col sm:items-start">
-                {avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt="Avatar"
-                    className="h-20 w-20 rounded-full border border-slate-200 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="grid h-20 w-20 place-items-center rounded-full bg-slate-900 text-xl font-bold text-white">
-                    {(viewUser?.fullName || viewUser?.email || 'U').slice(0, 1).toUpperCase()}
-                  </div>
-                )}
-                <div>
-                  <p className="text-base font-semibold text-slate-900">{viewUser?.fullName}</p>
-                  <p className="text-sm text-slate-600">{viewUser?.email}</p>
-                  <p className="mt-1 text-xs text-slate-500">Role: {viewUser?.role}</p>
+      <div className="grid gap-10 lg:grid-cols-3">
+        {/* Left Column: Avatar & Quick Actions */}
+        <aside className="lg:col-span-1 space-y-6">
+          <section className="gc-card p-8 flex flex-col items-center text-center">
+            <div className="relative group mb-6">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt="Avatar"
+                  className="h-40 w-40 rounded-full border-4 border-white shadow-xl object-cover ring-2 ring-gym-500/20"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="grid h-40 w-40 place-items-center rounded-full bg-gym-dark-900 text-5xl font-black text-white shadow-xl ring-2 ring-gym-500/20">
+                  {(viewUser?.fullName || viewUser?.email || 'U').slice(0, 1).toUpperCase()}
                 </div>
-              </div>
-
-              <div className="mt-3">
-                <Link
-                  to="/auth/change-password"
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Change password
-                </Link>
-              </div>
-
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-slate-700">Change profile photo</label>
+              )}
+              <label className="absolute bottom-2 right-2 h-10 w-10 bg-gym-500 text-white rounded-full flex items-center justify-center cursor-pointer hover:bg-gym-600 transition-colors shadow-lg border-2 border-white">
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   disabled={isUploading}
                   onChange={handleAvatarChange}
-                  className="mt-2 block w-full text-sm"
+                  className="hidden"
                 />
-                {uploadError ? <p className="mt-2 text-sm text-rose-700">{uploadError}</p> : null}
-                {isUploading ? <p className="mt-2 text-xs text-slate-500">Uploading...</p> : null}
-              </div>
+                <span className="text-xl">+</span>
+              </label>
             </div>
 
-            <div className="flex-1">
-              <form onSubmit={handleSaveProfile} className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm sm:col-span-2">
-                  <span className="mb-1 block font-medium text-slate-700">Full name</span>
-                  <input
-                    value={form.fullName}
-                    onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                    required
-                  />
-                </label>
+            <h2 className="text-2xl font-black text-gym-dark-900 break-all">{viewUser?.fullName}</h2>
+            <p className="text-gym-dark-400 font-bold mb-4">{viewUser?.email}</p>
+            <span className="inline-block px-4 py-1 bg-gym-50 text-gym-500 rounded-full text-xs font-black uppercase tracking-widest border border-gym-100 mb-6">
+              {viewUser?.role}
+            </span>
 
-                <label className={`block text-sm ${canEditDemographics ? '' : 'sm:col-span-2'}`.trim()}>
-                  <span className="mb-1 block font-medium text-slate-700">Phone</span>
-                  <input
-                    value={form.phone}
-                    onChange={(e) =>
-                      setForm((s) => ({
-                        ...s,
-                        phone: sanitizePhoneInput(e.target.value),
-                      }))
-                    }
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    maxLength={16}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                  {phoneError ? <p className="mt-1 text-xs text-rose-700">{phoneError}</p> : null}
-                </label>
+            <div className="w-full pt-6 border-t border-gym-dark-50">
+              <Link
+                to="/auth/change-password"
+                className="btn-outline-white w-full py-3"
+              >
+                Change Password
+              </Link>
+            </div>
 
-                {canEditDemographics ? (
-                  <>
-                    <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-slate-700">Date of birth</span>
-                      <input
-                        type="date"
-                        value={form.dateOfBirth}
-                        onChange={(e) => setForm((s) => ({ ...s, dateOfBirth: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      />
-                    </label>
+            {uploadError && <p className="mt-4 text-sm font-bold text-red-600 bg-red-50 p-3 rounded-xl w-full">{uploadError}</p>}
+            {isUploading && <p className="mt-4 text-xs font-black text-gym-500 animate-pulse">Uploading new avatar...</p>}
+          </section>
+        </aside>
 
-                    <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-slate-700">Gender</span>
-                      <select
-                        value={form.gender}
-                        onChange={(e) => setForm((s) => ({ ...s, gender: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      >
-                        <option value="">Select</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </label>
-                  </>
-                ) : null}
+        {/* Right Column: Profile Form */}
+        <main className="lg:col-span-2">
+          <section className="gc-card p-10">
+            <h3 className="text-xl font-black text-gym-dark-900 mb-8 border-b border-gym-dark-50 pb-4">Personal Information</h3>
 
-                <div className="sm:col-span-2">
-                  {saveError ? <p className="text-sm text-rose-700">{saveError}</p> : null}
-                  {saveSuccess ? <p className="text-sm text-gym-700">{saveSuccess}</p> : null}
+            {profileQuery.isLoading ? (
+              <div className="py-12 text-center">
+                <p className="text-gym-dark-400 font-bold animate-pulse">Loading profile data...</p>
+              </div>
+            ) : profileQuery.isError ? (
+              <div className="py-12 text-center text-red-600 bg-red-50 rounded-2xl border border-red-100">
+                <p className="font-bold">Failed to load profile settings.</p>
+              </div>
+            ) : viewUser ? (
+              <form onSubmit={handleSaveProfile} className="space-y-8">
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">Full Name</span>
+                    <input
+                      value={form.fullName}
+                      onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))}
+                      className="gc-input"
+                      placeholder="Your full name"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">Phone Number</span>
+                    <input
+                      value={form.phone}
+                      onChange={(e) =>
+                        setForm((s) => ({
+                          ...s,
+                          phone: sanitizePhoneInput(e.target.value),
+                        }))
+                      }
+                      type="tel"
+                      className="gc-input"
+                      placeholder="+84..."
+                    />
+                    {phoneError && <p className="text-xs font-bold text-red-600">{phoneError}</p>}
+                  </div>
+
+                  {canEditDemographics && (
+                    <>
+                      <div className="space-y-2">
+                        <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">Date of Birth</span>
+                        <input
+                          type="date"
+                          value={form.dateOfBirth}
+                          onChange={(e) => setForm((s) => ({ ...s, dateOfBirth: e.target.value }))}
+                          className="gc-input"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">Gender</span>
+                        <select
+                          value={form.gender}
+                          onChange={(e) => setForm((s) => ({ ...s, gender: e.target.value }))}
+                          className="gc-input"
+                        >
+                          <option value="">Select Gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                <div className="sm:col-span-2">
+                <div className="pt-6 border-t border-gym-dark-50">
+                  {saveError && <p className="mb-4 text-sm font-bold text-red-600 bg-red-50 p-4 rounded-xl border border-red-100">{saveError}</p>}
+                  {saveSuccess && <p className="mb-4 text-sm font-bold text-emerald-700 bg-emerald-50 p-4 rounded-xl border border-emerald-100">{saveSuccess}</p>}
+
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="rounded-lg bg-gym-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="btn-primary px-10 py-4"
                   >
-                    {isSaving ? 'Saving...' : 'Save changes'}
+                    {isSaving ? 'Saving Changes...' : 'Save Profile Settings'}
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        ) : null}
-      </section>
+            ) : null}
+          </section>
+        </main>
+      </div>
 
       <AvatarCropDialog
         open={cropOpen}

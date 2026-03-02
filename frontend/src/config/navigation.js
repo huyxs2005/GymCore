@@ -9,6 +9,7 @@ export const customerNav = [
 
 export const coachNav = [
   { to: '/coach/schedule', label: 'Schedule' },
+  { to: '/coach/booking-requests', label: 'Booking Requests' },
   { to: '/coach/customers', label: 'Customers' },
 ]
 
@@ -21,7 +22,7 @@ export const adminNav = [
   { to: '/admin/dashboard', label: 'Dashboard' },
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/memberships', label: 'Memberships' },
-  { to: '/admin/coach-insights', label: 'Coach Insights' },
+  { to: '/admin/coach-management', label: 'Coach Management' },
   { to: '/admin/products', label: 'Products' },
   { to: '/admin/promotions', label: 'Promotions' },
   { to: '/admin/reports', label: 'Reports' },

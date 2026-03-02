@@ -16,4 +16,20 @@ export const adminPromotionApi = {
   updatePost(postId, payload) {
     return apiClient.put(`/v1/admin/promotions/posts/${postId}`, payload).then((response) => response.data)
   },
+  deletePost(postId) {
+    return apiClient.delete(`/v1/admin/promotions/posts/${postId}`).then((response) => response.data)
+  },
+  deleteCoupon(promotionId) {
+    return apiClient.delete(`/v1/admin/promotions/coupons/${promotionId}`).then((response) => response.data)
+  },
+  getPosts() {
+    return apiClient.get('/v1/admin/promotions/posts').then((response) => response.data)
+  },
+  getRevenueReport() {
+    return apiClient.get('/v1/admin/promotions/revenue-report').then((response) => response.data)
+  },
+  exportRevenuePdf() {
+    return apiClient.get('/v1/admin/promotions/revenue-report/pdf', { responseType: 'blob' })
+      .then((response) => response.data)
+  },
 }

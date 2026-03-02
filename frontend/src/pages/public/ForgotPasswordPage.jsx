@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { authApi } from '../../features/auth/api/authApi'
+import { Check } from 'lucide-react'
 
 function ForgotPasswordPage() {
   const navigate = useNavigate()
@@ -87,53 +88,59 @@ function ForgotPasswordPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <h1 className="text-2xl font-bold text-slate-900">Forgot password</h1>
-      <p className="mt-2 text-sm text-slate-600">Request OTP, then confirm OTP and set your new password.</p>
+    <div className="mx-auto max-w-xl px-6 py-24">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-black text-gym-dark-900 tracking-tight mb-4">Reset Password</h1>
+        <p className="text-gym-dark-400 font-bold text-lg">We'll help you get back into your account</p>
+      </div>
 
       {step === 'request' ? (
-        <form onSubmit={handleRequestOtp} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Email</span>
+        <form onSubmit={handleRequestOtp} className="space-y-6 gc-card p-10">
+          <div className="space-y-2">
+            <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">Email Address</span>
             <input
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
+              placeholder="name@example.com"
               required
             />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+          </div>
+          {errorMessage ? <p className="text-sm font-bold text-red-600 bg-red-50 p-4 rounded-xl border border-red-100">{errorMessage}</p> : null}
+          {message ? <p className="text-sm font-bold text-emerald-700 bg-emerald-50 p-4 rounded-xl border border-emerald-100">{message}</p> : null}
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="btn-primary w-full py-4 text-lg"
           >
-            {isSubmitting ? 'Sending OTP...' : 'Send OTP'}
+            {isSubmitting ? 'Sending OTP...' : 'Send Reset OTP'}
           </button>
         </form>
       ) : null}
 
       {step === 'verify' ? (
-        <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-600">Enter the 6-digit OTP sent to {email}.</p>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">OTP</span>
+        <form onSubmit={handleVerifyOtp} className="space-y-6 gc-card p-10">
+          <div className="text-center">
+            <p className="text-gym-dark-400 font-bold mb-6 text-sm">Enter the 6-digit OTP sent to <span className="text-gym-dark-900">{email}</span></p>
+          </div>
+          <div className="space-y-2">
+            <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">OTP Code</span>
             <input
               value={otp}
               onChange={(event) => setOtp(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input text-center text-3xl tracking-[0.5em] font-black"
               maxLength={6}
+              placeholder="000000"
               required
             />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+          </div>
+          {errorMessage ? <p className="text-sm font-bold text-red-600 bg-red-50 p-4 rounded-xl border border-red-100">{errorMessage}</p> : null}
+          {message ? <p className="text-sm font-bold text-emerald-700 bg-emerald-50 p-4 rounded-xl border border-emerald-100">{message}</p> : null}
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="btn-primary w-full py-4 text-lg"
           >
             {isSubmitting ? 'Verifying...' : 'Verify OTP'}
           </button>
@@ -141,17 +148,29 @@ function ForgotPasswordPage() {
             type="button"
             onClick={handleResendOtp}
             disabled={cooldownSeconds > 0 || isResending}
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full py-3 rounded-xl font-black text-gym-dark-400 hover:text-gym-dark-900 transition-colors disabled:opacity-50"
           >
-            {cooldownSeconds > 0 ? `Resend OTP (${cooldownSeconds}s)` : 'Resend OTP'}
+            {cooldownSeconds > 0 ? `Resend OTP in ${cooldownSeconds}s` : 'Resend OTP'}
           </button>
         </form>
       ) : null}
 
       {step === 'done' ? (
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</div>
+        <div className="gc-card p-10 text-center space-y-4">
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Check size={32} strokeWidth={3} />
+          </div>
+          <p className="text-emerald-800 font-bold">{message}</p>
+        </div>
       ) : null}
+
+      <div className="mt-10 text-center">
+        <Link to="/auth/login" className="text-gym-dark-400 font-black hover:text-gym-500 transition-colors">
+          Return to Sign In
+        </Link>
+      </div>
     </div>
+
   )
 }
 

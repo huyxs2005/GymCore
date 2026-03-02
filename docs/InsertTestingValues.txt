@@ -3,8 +3,9 @@ Optional example/testing seed data.
 
 Recommended run order:
 1) docs/GymCore.txt
-2) docs/InsertValues.txt          -- must-have baseline
-3) docs/InsertTestingValues.txt   -- extra sample/test records
+2) docs/alter.txt                 -- merged coupon/payos alterations
+3) docs/InsertValues.txt          -- must-have baseline
+4) docs/InsertTestingValues.txt   -- extra sample/test records
 
 Notes:
 - This file is idempotent (uses NOT EXISTS / MERGE), safe to re-run for local testing.
@@ -42,6 +43,7 @@ BEGIN TRY
     DECLARE @ProdCreatine INT;
     DECLARE @ProdWhey INT;
     DECLARE @PromoID INT;
+    DECLARE @PromoSummerID INT;
     DECLARE @PostID INT;
     DECLARE @ClaimID INT;
     DECLARE @OrderID INT;
@@ -165,15 +167,15 @@ BEGIN TRY
     INSERT INTO dbo.MembershipPlans (PlanName, PlanType, Price, DurationDays, AllowsCoachBooking, UpdatedBy)
     SELECT v.PlanName, v.PlanType, v.Price, v.DurationDays, v.AllowsCoachBooking, @AdminID
     FROM (VALUES
-        (N'Day Pass',                N'DAY_PASS',       CAST(80000    AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
-        (N'Gym Only - 1 Month',      N'GYM_ONLY',       CAST(500000   AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
-        (N'Gym Only - 6 Months',     N'GYM_ONLY',       CAST(2700000  AS DECIMAL(12,2)), 180, CAST(0 AS BIT)),
-        (N'Gym Only - 12 Months',    N'GYM_ONLY',       CAST(5000000  AS DECIMAL(12,2)), 365, CAST(0 AS BIT)),
-        (N'Gym Only - 24 Months',    N'GYM_ONLY',       CAST(9200000  AS DECIMAL(12,2)), 730, CAST(0 AS BIT)),
-        (N'Gym + Coach - 1 Month',   N'GYM_PLUS_COACH', CAST(1200000  AS DECIMAL(12,2)),  30, CAST(1 AS BIT)),
-        (N'Gym + Coach - 6 Months',  N'GYM_PLUS_COACH', CAST(5000000  AS DECIMAL(12,2)), 180, CAST(1 AS BIT)),
-        (N'Gym + Coach - 12 Months', N'GYM_PLUS_COACH', CAST(9500000  AS DECIMAL(12,2)), 365, CAST(1 AS BIT)),
-        (N'Gym + Coach - 24 Months', N'GYM_PLUS_COACH', CAST(18000000 AS DECIMAL(12,2)), 730, CAST(1 AS BIT))
+        (N'Day Pass',                N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym Only - 1 Month',      N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Gym Only - 6 Months',     N'GYM_ONLY',       CAST(3000 AS DECIMAL(12,2)), 180, CAST(0 AS BIT)),
+        (N'Gym Only - 12 Months',    N'GYM_ONLY',       CAST(4000 AS DECIMAL(12,2)), 365, CAST(0 AS BIT)),
+        (N'Gym Only - 24 Months',    N'GYM_ONLY',       CAST(5000 AS DECIMAL(12,2)), 730, CAST(0 AS BIT)),
+        (N'Gym + Coach - 1 Month',   N'GYM_PLUS_COACH', CAST(3000 AS DECIMAL(12,2)),  30, CAST(1 AS BIT)),
+        (N'Gym + Coach - 6 Months',  N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT)),
+        (N'Gym + Coach - 12 Months', N'GYM_PLUS_COACH', CAST(6000 AS DECIMAL(12,2)), 365, CAST(1 AS BIT)),
+        (N'Gym + Coach - 24 Months', N'GYM_PLUS_COACH', CAST(7500 AS DECIMAL(12,2)), 730, CAST(1 AS BIT))
     ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
     WHERE NOT EXISTS (
         SELECT 1
@@ -182,6 +184,28 @@ BEGIN TRY
           AND mp.PlanType = v.PlanType
           AND mp.DurationDays = v.DurationDays
     );
+
+    /* Keep membership plan prices synchronized on re-run */
+    UPDATE mp
+    SET mp.Price = v.Price,
+        mp.AllowsCoachBooking = v.AllowsCoachBooking,
+        mp.UpdatedAt = SYSDATETIME(),
+        mp.UpdatedBy = @AdminID
+    FROM dbo.MembershipPlans mp
+    JOIN (VALUES
+        (N'Day Pass',                N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym Only - 1 Month',      N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Gym Only - 6 Months',     N'GYM_ONLY',       CAST(3000 AS DECIMAL(12,2)), 180, CAST(0 AS BIT)),
+        (N'Gym Only - 12 Months',    N'GYM_ONLY',       CAST(4000 AS DECIMAL(12,2)), 365, CAST(0 AS BIT)),
+        (N'Gym Only - 24 Months',    N'GYM_ONLY',       CAST(5000 AS DECIMAL(12,2)), 730, CAST(0 AS BIT)),
+        (N'Gym + Coach - 1 Month',   N'GYM_PLUS_COACH', CAST(3000 AS DECIMAL(12,2)),  30, CAST(1 AS BIT)),
+        (N'Gym + Coach - 6 Months',  N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT)),
+        (N'Gym + Coach - 12 Months', N'GYM_PLUS_COACH', CAST(6000 AS DECIMAL(12,2)), 365, CAST(1 AS BIT)),
+        (N'Gym + Coach - 24 Months', N'GYM_PLUS_COACH', CAST(7500 AS DECIMAL(12,2)), 730, CAST(1 AS BIT))
+    ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
+      ON mp.PlanName = v.PlanName
+     AND mp.PlanType = v.PlanType
+     AND mp.DurationDays = v.DurationDays;
 
     SELECT TOP (1) @PlanGymCoach = MembershipPlanID
     FROM dbo.MembershipPlans
@@ -333,63 +357,7 @@ BEGIN TRY
     DECLARE @GoalGainMuscle INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'GAIN_MUSCLE');
     DECLARE @GoalMaintain INT = (SELECT GoalID FROM dbo.FitnessGoals WHERE GoalCode = N'MAINTAIN');
 
-    /* Meal categories */
-    INSERT INTO dbo.MealCategories (CategoryName, Description)
-    SELECT v.CategoryName, v.Description
-    FROM (VALUES
-        (N'Breakfast', N'Morning meals'),
-        (N'Lunch', N'Midday meals'),
-        (N'Dinner', N'Evening meals')
-    ) AS v(CategoryName, Description)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.MealCategories mc WHERE mc.CategoryName = v.CategoryName
-    );
-
-    /* Meals */
-    INSERT INTO dbo.Meals (MealName, ImageUrl, Description, Recipe, Calories, Protein, Carbs, Fat, UpdatedBy)
-    SELECT v.MealName, v.ImageUrl, v.Description, v.Recipe, v.Calories, v.Protein, v.Carbs, v.Fat, @AdminID
-    FROM (VALUES
-        (
-            N'Chicken Salad Bowl',
-            NULL,
-            N'High-protein salad bowl.',
-            N'1) Grill chicken breast. 2) Mix greens + tomatoes. 3) Add chicken + olive oil + salt/pepper.',
-            420,
-            CAST(45.00 AS DECIMAL(6,2)),
-            CAST(18.00 AS DECIMAL(6,2)),
-            CAST(18.00 AS DECIMAL(6,2))
-        ),
-        (
-            N'Oatmeal with Banana',
-            NULL,
-            N'Quick breakfast with complex carbs.',
-            N'1) Cook oats with water. 2) Add sliced banana. 3) Add cinnamon to taste.',
-            350,
-            CAST(10.00 AS DECIMAL(6,2)),
-            CAST(62.00 AS DECIMAL(6,2)),
-            CAST(6.00 AS DECIMAL(6,2))
-        )
-    ) AS v(MealName, ImageUrl, Description, Recipe, Calories, Protein, Carbs, Fat)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.Meals m WHERE m.MealName = v.MealName
-    );
-
-    DECLARE @MealChickenSalad INT = (SELECT MealID FROM dbo.Meals WHERE MealName = N'Chicken Salad Bowl');
-    DECLARE @MealOatmealBanana INT = (SELECT MealID FROM dbo.Meals WHERE MealName = N'Oatmeal with Banana');
-
-    /* Meal categories map */
-    INSERT INTO dbo.MealCategoryMap (MealID, MealCategoryID)
-    SELECT m.MealID, c.MealCategoryID
-    FROM dbo.Meals m
-    JOIN dbo.MealCategories c
-      ON (m.MealName = N'Chicken Salad Bowl' AND c.CategoryName = N'Lunch')
-      OR (m.MealName = N'Oatmeal with Banana' AND c.CategoryName = N'Breakfast')
-    WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.MealCategoryMap mm
-        WHERE mm.MealID = m.MealID AND mm.MealCategoryID = c.MealCategoryID
-    );
-
-    /* Goal mappings (foods + meals) */
+    /* Goal mappings (foods only) */
     IF @GoalLoseFat IS NOT NULL AND @GoalGainMuscle IS NOT NULL AND @GoalMaintain IS NOT NULL
     BEGIN
         INSERT INTO dbo.FoodGoalMap (FoodID, GoalID)
@@ -405,44 +373,81 @@ BEGIN TRY
                 SELECT 1 FROM dbo.FoodGoalMap fg
                 WHERE fg.FoodID = f.FoodID AND fg.GoalID = g.GoalID
             );
-
-        INSERT INTO dbo.MealGoalMap (MealID, GoalID)
-        SELECT m.MealID, g.GoalID
-        FROM dbo.Meals m
-        JOIN dbo.FitnessGoals g ON 1=1
-        WHERE
-            (
-                (m.MealName = N'Chicken Salad Bowl' AND g.GoalCode IN (N'LOSE_FAT', N'GAIN_MUSCLE'))
-                OR (m.MealName = N'Oatmeal with Banana' AND g.GoalCode IN (N'GAIN_MUSCLE', N'MAINTAIN'))
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM dbo.MealGoalMap mg
-                WHERE mg.MealID = m.MealID AND mg.GoalID = g.GoalID
-            );
     END;
-
-    /* Allergens (structured - used to block items in AI recommendations) */
-    INSERT INTO dbo.Allergens (AllergenCode, AllergenName, Description, UpdatedBy)
-    SELECT v.AllergenCode, v.AllergenName, v.Description, @AdminID
-    FROM (VALUES
-        (N'MILK', N'Milk', N'Dairy products'),
-        (N'EGG', N'Egg', N'Egg and egg products'),
-        (N'PEANUT', N'Peanut', N'Peanuts and peanut products')
-    ) AS v(AllergenCode, AllergenName, Description)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.Allergens a WHERE a.AllergenCode = v.AllergenCode
-    );
 
     /* Products */
     INSERT INTO dbo.Products (ProductName, Description, Price, ImageUrl, UpdatedBy)
     SELECT v.ProductName, v.Description, v.Price, NULL, @AdminID
     FROM (VALUES
-        (N'Creatine Monohydrate', N'Performance supplement', CAST(350000 AS DECIMAL(12,2))),
-        (N'Whey Protein',         N'Protein powder',         CAST(900000 AS DECIMAL(12,2)))
+        (N'Creatine Monohydrate', N'Performance supplement', CAST(1000 AS DECIMAL(12,2))),
+        (N'Whey Protein',         N'Protein powder',         CAST(2000 AS DECIMAL(12,2)))
     ) AS v(ProductName, Description, Price)
     WHERE NOT EXISTS (
         SELECT 1 FROM dbo.Products p WHERE p.ProductName = v.ProductName
     );
+
+    /* Products (extended catalog from coupon branch, idempotent) */
+    INSERT INTO dbo.Products (ProductName, Description, Price, ImageUrl, UpdatedBy)
+    SELECT v.ProductName, v.Description, v.Price, v.ImageUrl, @AdminID
+    FROM (VALUES
+        (N'Whey Protein Isolate - Vanilla', N'100% pure whey protein isolate. 25g protein per serving. Low carb and low fat.', CAST(2600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Whey Protein Concentrate - Chocolate', N'Premium whey concentrate. 24g protein per serving with rich chocolate flavor.', CAST(2100 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Whey Protein Blend - Strawberry', N'Whey blend (isolate + concentrate). 23g protein per serving.', CAST(2200 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
+        (N'Hydrolyzed Whey Protein - Unflavored', N'Fast-absorbing hydrolyzed whey. 26g protein per serving.', CAST(2800 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
+        (N'Creatine Monohydrate - Micronized', N'Pure micronized creatine monohydrate. 5g per serving.', CAST(1100 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Creatine HCL - Ultra Pure', N'Creatine HCL with improved solubility and absorption.', CAST(1300 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
+        (N'Creatine Ethyl Ester', N'Creatine ethyl ester formula supporting ATP production.', CAST(1250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
+        (N'Buffered Creatine - Kre-Alkalyn', N'pH-buffered creatine with reduced side effects.', CAST(1400 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
+        (N'Mass Gainer - Chocolate Supreme', N'High-calorie gainer with protein and complex carbs.', CAST(2300 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Lean Mass Gainer - Vanilla', N'Lean mass formula with balanced calories and protein.', CAST(2200 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Serious Mass - Banana', N'Mass building formula with vitamins and minerals.', CAST(2400 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Weight Gainer Pro - Cookies & Cream', N'Weight gainer with smooth texture and easy digestion.', CAST(2250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
+        (N'Pre-Workout Extreme - Fruit Punch', N'High-stimulant pre-workout with caffeine and pump support.', CAST(1700 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
+        (N'Pre-Workout Pump - Blue Raspberry', N'Stim-free pump formula for evening workouts.', CAST(1600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
+        (N'Pre-Workout Focus - Green Apple', N'Balanced pre-workout for energy and focus.', CAST(1650 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
+        (N'BCAA 2:1:1 - Watermelon', N'BCAA formula supporting recovery and reducing fatigue.', CAST(1500 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
+        (N'BCAA + Electrolytes - Lemon Lime', N'Intra-workout hydration with BCAAs and electrolytes.', CAST(1550 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'BCAA Energy - Mixed Berry', N'BCAA + caffeine blend for energy during workouts.', CAST(1600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Multi-Vitamin for Men - Daily Pack', N'Complete multivitamin formula for active men.', CAST(1150 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Multi-Vitamin for Athletes - Tablets', N'High-potency multivitamin for training support.', CAST(1250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500')
+    ) AS v(ProductName, Description, Price, ImageUrl)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.Products p
+        WHERE p.ProductName = v.ProductName
+    );
+
+    /* Keep product prices synchronized on re-run */
+    UPDATE p
+    SET p.Price = v.Price,
+        p.UpdatedAt = SYSDATETIME(),
+        p.UpdatedBy = @AdminID
+    FROM dbo.Products p
+    JOIN (VALUES
+        (N'Creatine Monohydrate', CAST(1000 AS DECIMAL(12,2))),
+        (N'Whey Protein', CAST(2000 AS DECIMAL(12,2))),
+        (N'Whey Protein Isolate - Vanilla', CAST(2600 AS DECIMAL(12,2))),
+        (N'Whey Protein Concentrate - Chocolate', CAST(2100 AS DECIMAL(12,2))),
+        (N'Whey Protein Blend - Strawberry', CAST(2200 AS DECIMAL(12,2))),
+        (N'Hydrolyzed Whey Protein - Unflavored', CAST(2800 AS DECIMAL(12,2))),
+        (N'Creatine Monohydrate - Micronized', CAST(1100 AS DECIMAL(12,2))),
+        (N'Creatine HCL - Ultra Pure', CAST(1300 AS DECIMAL(12,2))),
+        (N'Creatine Ethyl Ester', CAST(1250 AS DECIMAL(12,2))),
+        (N'Buffered Creatine - Kre-Alkalyn', CAST(1400 AS DECIMAL(12,2))),
+        (N'Mass Gainer - Chocolate Supreme', CAST(2300 AS DECIMAL(12,2))),
+        (N'Lean Mass Gainer - Vanilla', CAST(2200 AS DECIMAL(12,2))),
+        (N'Serious Mass - Banana', CAST(2400 AS DECIMAL(12,2))),
+        (N'Weight Gainer Pro - Cookies & Cream', CAST(2250 AS DECIMAL(12,2))),
+        (N'Pre-Workout Extreme - Fruit Punch', CAST(1700 AS DECIMAL(12,2))),
+        (N'Pre-Workout Pump - Blue Raspberry', CAST(1600 AS DECIMAL(12,2))),
+        (N'Pre-Workout Focus - Green Apple', CAST(1650 AS DECIMAL(12,2))),
+        (N'BCAA 2:1:1 - Watermelon', CAST(1500 AS DECIMAL(12,2))),
+        (N'BCAA + Electrolytes - Lemon Lime', CAST(1550 AS DECIMAL(12,2))),
+        (N'BCAA Energy - Mixed Berry', CAST(1600 AS DECIMAL(12,2))),
+        (N'Multi-Vitamin for Men - Daily Pack', CAST(1150 AS DECIMAL(12,2))),
+        (N'Multi-Vitamin for Athletes - Tablets', CAST(1250 AS DECIMAL(12,2)))
+    ) AS v(ProductName, Price)
+      ON p.ProductName = v.ProductName;
 
     /* Cart */
     IF NOT EXISTS (SELECT 1 FROM dbo.Carts WHERE CustomerID = @CustomerID)
@@ -507,6 +512,7 @@ BEGIN TRY
     END;
 
     SELECT @PromoID = PromotionID FROM dbo.Promotions WHERE PromoCode = N'WELCOME10';
+    SELECT @PromoSummerID = PromotionID FROM dbo.Promotions WHERE PromoCode = N'SUMMERPLUS30';
 
     IF @PromoID IS NULL
     BEGIN
@@ -526,6 +532,27 @@ BEGIN TRY
             N'Claim WELCOME10 and use at checkout.',
             NULL,
             @PromoID,
+            DATEADD(DAY, -1, SYSDATETIME()),
+            DATEADD(DAY, 30, SYSDATETIME()),
+            1,
+            @AdminID
+        );
+    END;
+
+    IF @PromoSummerID IS NOT NULL
+       AND NOT EXISTS (
+            SELECT 1
+            FROM dbo.PromotionPosts
+            WHERE PromotionID = @PromoSummerID
+              AND Title = N'Summer Plus Promo'
+       )
+    BEGIN
+        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
+        VALUES (
+            N'Summer Plus Promo',
+            N'Claim SUMMERPLUS30: 5% off and +30 membership days.',
+            NULL,
+            @PromoSummerID,
             DATEADD(DAY, -1, SYSDATETIME()),
             DATEADD(DAY, 30, SYSDATETIME()),
             1,
@@ -573,15 +600,23 @@ BEGIN TRY
     IF @OrderID IS NULL
     BEGIN
         INSERT INTO dbo.Orders (CustomerID, ClaimID, Subtotal, DiscountApplied, TotalAmount, Status)
-        VALUES (@CustomerID, @ClaimID, 1250000, 125000, 1125000, 'PENDING');
+        VALUES (@CustomerID, @ClaimID, 3000, 300, 2700, 'PENDING');
 
         SET @OrderID = SCOPE_IDENTITY();
     END;
 
+    /* Keep seeded pending order totals synchronized on re-run */
+    UPDATE dbo.Orders
+    SET Subtotal = 3000,
+        DiscountApplied = 300,
+        TotalAmount = 2700
+    WHERE OrderID = @OrderID
+      AND Status = 'PENDING';
+
     MERGE dbo.OrderItems AS tgt
     USING (VALUES
-        (@OrderID, @ProdCreatine, 1, CAST(350000 AS DECIMAL(12,2))),
-        (@OrderID, @ProdWhey,     1, CAST(900000 AS DECIMAL(12,2)))
+        (@OrderID, @ProdCreatine, 1, CAST(1000 AS DECIMAL(12,2))),
+        (@OrderID, @ProdWhey,     1, CAST(2000 AS DECIMAL(12,2)))
     ) AS src(OrderID, ProductID, Quantity, UnitPrice)
     ON tgt.OrderID = src.OrderID AND tgt.ProductID = src.ProductID
     WHEN MATCHED THEN
@@ -603,10 +638,18 @@ BEGIN TRY
             PayOS_PaymentLinkId, PayOS_CheckoutUrl, PayOS_Status
         )
         VALUES (
-            1125000, 0, 1125000, 'PENDING', @OrderID,
+            2700, 0, 2700, 'PENDING', @OrderID,
             @PayOSLinkId, N'https://payos.vn/checkout/example', N'PENDING'
         );
     END;
+
+    /* Keep seeded pending payment amount synchronized on re-run */
+    UPDATE dbo.Payments
+    SET OriginalAmount = 2700,
+        DiscountAmount = 0,
+        Amount = 2700
+    WHERE OrderID = @OrderID
+      AND Status = 'PENDING';
 
     /* Health: enter height/weight, history trigger updates current */
     IF NOT EXISTS (

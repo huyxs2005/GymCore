@@ -1,132 +1,325 @@
+1) GymCore scope
 
-1) (GymCore scope)
-A. Account & Authentication
+A. Account and Authentication
 Guest
-•	Register
-•	Login (Email/Password)
-•	Login via Google
+- Register
+- Login (Email/Password)
+- Login via Google
+
 Authenticated User (Admin/Coach/Receptionist/Customer)
-•	Logout
-•	Forgot Password
-•	Change Password 
-•	View Profile
-•	Edit Profile
+- Logout
+- Forgot Password
+- Change Password
+- View Profile
+- Edit Profile
+
 ________________________________________
-B. Customer & User Management
+B. Customer and User Management
 Receptionist
-•	Search Customer
-•	View Customer’s Membership Plan
+- Search Customer
+- View Customer membership plan
+
 Admin
-•	Create Staff Account (Admin/Coach/Receptionist)
-•	Lock Account
-•	Unlock Account
+- Create Staff Account (Admin/Coach/Receptionist)
+- Lock Account
+- Unlock Account
+
 ________________________________________
-C. Membership & Payment (PayOS redirect)
+C. Membership and Payment (PayOS redirect)
 Customer
-•	View Membership Plan List
-•	View Membership Plan Detail
-•	Purchase Membership Plan (PayOS)
-•	View Current Membership Status
+- View Membership Plan List
+- View Membership Plan Detail
+- Purchase Membership Plan (PayOS redirect)
+- View Current Membership Status
+
 Admin
-•	Create Membership Plan
-•	Update Membership Plan
-Business rules
-•	3 types: Gym Only, Day Pass (unlimited check-ins that day), Gym + Coach
-•	Only ONE ACTIVE membership at a time
-•	Renew: extend current membership from its EndDate (no downtime, PT keeps going)
-•	Upgrade: apply immediately (old ends today, new starts today), full price
-•	Day pass is active until midnight (StartDate = EndDate)
+- Create Membership Plan
+- Update Membership Plan
+
 ________________________________________
-D. Check-in & Personal Health
+D. Check-in and Personal Health
 Customer
-•	Show Check-in QR Code
-•	View Check-in History
-•	Enter Height/Weight (system calculates BMI) 
-•	View Personal Health (current height/weight/BMI stays until updated + history)
-•	View Coach Notes
+- Show Check-in QR Code
+- View Check-in History
+- Enter Height/Weight (system calculates BMI)
+- View Personal Health (current height/weight/BMI stays until updated + history)
+- View Coach Notes
+
 Receptionist
-•	Scan Check-in QR Code
-•	Check Membership Validity
+- Scan Check-in QR Code
+- Check Membership Validity
+
 ________________________________________
-E. Coach Booking & Training Support
+E. Coach Booking and Training Support
 Customer
-•	Set Desired PT Schedule (weekly recurring day+slot)
-•	Match Coach (full match list + partial match list)
-•	View Coach List
-•	View Coach Details
-•	View Coach Schedule
-•	Request Booking Coach (recurring)
-•	View PT Schedule
-•	Cancel / Reschedule Coach Session
-•	Feedback Coach (rating + comment)
+- Set Desired PT Schedule (weekly recurring day+slot)
+- Match Coach (full match list + partial match list)
+- View Coach List
+- View Coach Details
+- View Coach Schedule
+- Request Booking Coach (recurring)
+- View PT Schedule
+- Cancel / Reschedule Coach Session
+- Feedback Coach (rating + comment)
+
 Coach
-•	Update Available Slots (weekly availability)
-•	View Coach Schedule
-•	View Customer List
-•	View Customer Profile
-•	View Training History
-•	Update Training Progress
-•	Update Notes
-•	View Customer Feedback
-•	View Average Rating
+- Update Available Slots (weekly availability)
+- View Coach Schedule
+- View Customer List
+- View Customer Profile
+- View Training History
+- Update Training Progress
+- Update Notes
+- View Customer Feedback
+- View Average Rating
+
 Admin
-•	View Coach’s Students
-•	View Customer Feedback
+- View Coach Students
+- View Customer Feedback
+
 ________________________________________
-F. Products Sales & Payment
+F. Product Sales and Payment
 Customer
-•	View Product List
-•	View Product Detail
-•	Add to Cart
-•	Update Cart (qty/remove)
-•	Checkout Order (PayOS)
-•	View Purchase History
-•	Write Product Review (only if purchased)
+- View Product List
+- View Product Detail
+- Add to Cart
+- Update Cart (qty/remove)
+- Checkout Order on website (PayOS redirect)
+- Pick up purchased products in person at the gym/front desk (no shipping delivery)
+- View Purchase History
+- Write Product Review (only if purchased)
+
 Admin
-•	Add Product
-•	Update Product
-•	View Product Reviews
+- Add Product
+- Update Product
+- View Product Reviews
+
 ________________________________________
 G. Promotions, Coupons, Notifications, Revenue
 Customer
-•	View Promotion
-•	Save Coupon Code (Claim to wallet)
-•	Apply Saved Coupon at checkout (Order OR Membership)
-•	View Notifications (badge count)
-Admin
-•	Create Coupon Code
-•	Update Coupon Code
-•	Create Promotion Post
-•	Update Promotion Post
-•	View Revenue Report
-•	Export reports to PDF (backend feature)
-Coupon rule
-•	Must claim first, then apply at payment
-•	One-time per customer per coupon (one claim, one use)
-Notifications rule
-•	Membership expiry countdown notifications: 7 → 1 days left (daily job)
-•	If membership expires and not renewed: cancel PT schedules (daily job) + notify
-________________________________________
-H. Workout, Food, Meal Info Pages + AI Assistant
-Customer
-•	View Workout Categories
-•	View Workout Detail
-•	View Food Categories
-•	View Food Detail
-•	View Meal Categories
-•	View Meal Detail
-•	Set Fitness Goals (multi-select)
-•	Set Allergies (multi-select)
-Admin
-•	CRUD Fitness Goals
-•	CRUD Meal Categories
-•	CRUD Meals
-•	CRUD Allergens
-•	Map Goals ↔ Workouts/Foods/Meals
-•	Map Allergens ↔ Foods/Meals
-AI Assistant
-•	Recommend workouts + foods + meals based on saved goals
-•	Exclude foods/meals that match customer allergies (strict block)
-•	Show which goal(s) each recommendation fits
-•	Assist PT booking using the same matching rules
+- View Promotion
+- Save Coupon Code (claim to wallet)
+- Apply Saved Coupon at checkout (Order OR Membership)
+- View Notifications (badge count)
 
+Admin
+- Create Coupon Code (discount and/or bonus duration days)
+- Update Coupon Code (discount and/or bonus duration days)
+- Create Promotion Post
+- Update Promotion Post
+- View Revenue Report
+- Export reports to PDF (backend feature)
+
+________________________________________
+H. Workout and Food Info Pages plus AI Assistant
+Customer
+- View Workout Categories
+- View Workout Detail
+- View Food Categories
+- View Food Detail
+- Set Fitness Goals (multi-select)
+
+Admin
+- CRUD Fitness Goals
+- Map Goals <-> Workouts/Foods
+
+AI Assistant
+- Recommend workouts + foods based on saved goals
+- Show which goal(s) each recommendation fits
+- Assist PT booking using the same matching rules
+
+________________________________________
+I. Consolidated Business Rules (App + DB)
+
+I1. Auth, identity, and account policy
+- Login channels:
+  - Email/password is supported.
+  - Google login is supported for CUSTOMER, COACH, RECEPTIONIST.
+  - ADMIN login is email/password only.
+- Passwords are stored hashed (bcrypt).
+- Password policy (enforced in auth service for register/change/reset):
+  - minimum 8 characters,
+  - at least 1 uppercase letter,
+  - at least 1 number,
+  - at least 1 special character.
+- OTP policy:
+  - OTP expires after 2 minutes.
+  - Resend cooldown is 5 seconds.
+  - Resending invalidates previous OTP.
+- Forgot-password policy:
+  - Step 1: request + verify OTP at `/auth/forgot-password`.
+  - Step 2: reset password at `/auth/forgot-password/reset`.
+- Login gating policy:
+  - Account must be active (`IsActive = 1`) and not locked (`IsLocked = 0`).
+  - Email/password login requires verified email.
+  - Email/password login is rejected when account has no password hash (Google-only account).
+- User data integrity:
+  - `Users.AvatarSource` must be NULL, GOOGLE, or CUSTOM.
+  - `Users.Phone` cannot be blank and must contain digits when provided.
+  - Phone normalization accepts optional leading `+`, strips common separators, and enforces 8..15 digits after normalization.
+  - VN phone normalization is enforced for uniqueness (`+84...` and `0...` treated as same normalized number).
+  - QR code token is unique and immutable after creation (`TRG_Users_BlockQrChange`).
+
+I2. Authorization and profile visibility policy
+- Route guards require authenticated session and correct role namespace.
+- Unauthorized route access redirects to `/`.
+- API auth header must use `Bearer <token>` format.
+- Expired/invalid access token or missing user is treated as unauthorized.
+- DOB/Gender fields are visible/editable for CUSTOMER and COACH only.
+- DOB/Gender fields are hidden for ADMIN and RECEPTIONIST.
+- QR entry in account menu is CUSTOMER-only.
+- Customer QR dialog does not expose token copy/paste actions.
+
+I3. Membership plan and membership lifecycle rules
+- Membership plan types are strictly: GYM_ONLY, DAY_PASS, GYM_PLUS_COACH.
+- Only GYM_PLUS_COACH can have `AllowsCoachBooking = 1`.
+- GYM_ONLY and DAY_PASS must have `AllowsCoachBooking = 0`.
+- DAY_PASS plan must have `DurationDays = 1`.
+- DAY_PASS membership rows must satisfy `StartDate = EndDate` (`TRG_CustomerMemberships_ValidateDayPassDate`).
+- DAY_PASS allows unlimited check-ins on that day (still requires ACTIVE status and date-valid membership).
+- Membership statuses are: PENDING, SCHEDULED, ACTIVE, EXPIRED, CANCELLED.
+- Membership date integrity: `EndDate >= StartDate`.
+- Only one ACTIVE membership per customer at a time (unique filtered index).
+- Only one SCHEDULED membership per customer at a time (unique filtered index).
+- Renew policy: extend from current EndDate (no downtime).
+- Upgrade policy: apply immediately (old ends today, new starts today), full price.
+- Membership checkout mode constraints:
+  - PURCHASE requires no ACTIVE and no SCHEDULED membership.
+  - RENEW requires ACTIVE membership and no SCHEDULED membership.
+  - UPGRADE requires ACTIVE membership and no SCHEDULED membership.
+- Membership checkout rejects inactive plans (`MembershipPlans.IsActive = 0`).
+- Pending membership checkout reuse window is 5 minutes; stale/mismatched pending checkout is cancelled (both Payment and CustomerMembership rows).
+- Payment success must not force a queued membership to ACTIVE if another ACTIVE exists.
+- Daily membership job (`sp_RunDailyMembershipJobs`) rules:
+  - Send countdown notifications for ACTIVE memberships with 7..1 days left.
+  - Move ACTIVE memberships to EXPIRED when `EndDate < today`.
+  - Activate due SCHEDULED memberships only when customer has no ACTIVE membership.
+
+I4. Coach booking and PT scheduling rules
+- Time slots are fixed to 8 slots/day (`SlotIndex` 1..8, `EndTime > StartTime`).
+- Weekly availability uses DayOfWeek 1..7 with default `IsAvailable = 1`.
+- New coach rows auto-seed full 7x8 weekly availability (`TRG_Coaches_SeedDefaultAvailability`).
+- PT recurring request statuses: PENDING, APPROVED, DENIED, CANCELLED.
+- PT request must use a membership that:
+  - belongs to the same customer,
+  - is ACTIVE,
+  - allows coach booking,
+  - covers requested StartDate..EndDate (`TRG_PTRecurringRequests_ValidateMembership`).
+- PT request must reference `CustomerMembershipID` (not nullable in DB).
+- One customer can have only one APPROVED recurring PT request at a time.
+- PTSession statuses: SCHEDULED, COMPLETED, CANCELLED.
+- Coach cannot be double-booked on same SessionDate + TimeSlotID for SCHEDULED/COMPLETED sessions.
+- Coach deny action requires DenyReason.
+- Customer can cancel only own future SCHEDULED sessions.
+- Customer reschedule constraints:
+  - only own SCHEDULED session can be requested for reschedule,
+  - only one pending reschedule request per session at a time,
+  - original session date cannot be in the past,
+  - requested date cannot be in the past,
+  - requested slot must be in coach weekly availability and have no conflict.
+- Coach reschedule review constraints:
+  - approve/deny only when session is SCHEDULED and has pending reschedule metadata,
+  - approval revalidates requested date/slot availability and no-conflict before applying.
+- Coach feedback constraints:
+  - one feedback per PT session,
+  - rating must be between 1 and 5.
+- Match results are separated into fully matched and partially matched coach lists.
+- Customer must resolve unmatched selected slots before confirming a booking request in match review UI.
+
+I5. Check-in and personal health rules
+- Reception check-in supports 2 flows:
+  - QR scan
+  - Manual search/select by phone/fullName.
+- QR scan is one-shot per success; reception then starts next scan explicitly.
+- No manual QR token paste fallback is exposed on reception check-in screen.
+- Reception check-in timestamps are displayed in VN-friendly `dd/mm/yy HH:mm` format.
+- Check-in is blocked unless membership is:
+  - linked to the same customer,
+  - ACTIVE,
+  - valid for the check-in date (`TRG_CheckIns_ValidateMembershipActive`).
+- Health data rules:
+  - Height and weight must be > 0.
+  - BMI is computed from height/weight (persisted computed column).
+  - Inserting health history upserts current health snapshot (`TRG_CustomerHealthHistory_UpsertCurrent`).
+
+I6. Product sales, cart, order, payment rules
+- Product purchase flow is online checkout + in-store pickup only.
+- Shipping/delivery is out of scope.
+- Cart item quantity must be > 0.
+- Checkout is blocked when cart is empty.
+- Order statuses: PENDING, PAID, CANCELLED.
+- Order money integrity: Subtotal, DiscountApplied, TotalAmount are non-negative and DiscountApplied <= Subtotal.
+- Product review rules:
+  - Rating must be 1..5.
+  - One review per customer per product.
+  - Review allowed only when customer has a PAID order containing that product (`TRG_ProductReviews_RequirePurchase`).
+- Payment statuses: PENDING, SUCCESS, FAILED, CANCELLED.
+- Each payment must target exactly one domain:
+  - Order OR CustomerMembership (not both).
+- Payment money integrity:
+  - non-negative amounts,
+  - DiscountAmount <= OriginalAmount,
+  - Amount = OriginalAmount - DiscountAmount.
+- Only one PENDING payment per order.
+- Only one PENDING payment per membership.
+- Payment method audit values are strictly PAYOS or CASH on Orders and Payments (defaults and checks applied in `alter.txt`).
+- API checkout currently accepts PAYOS only (membership and product checkout services normalize/reject non-PAYOS values).
+- Membership checkout channel is PayOS redirect.
+- Product checkout rejects coupons with `BonusDurationDays > 0` (membership-only coupon).
+- Membership webhook requires valid PayOS signature (missing/invalid signature is rejected).
+- Payment success procedure (`sp_ConfirmPaymentSuccess`) behavior:
+  - payment moves PENDING -> SUCCESS,
+  - linked order moves PENDING -> PAID,
+  - linked claim is marked used,
+  - membership PENDING -> ACTIVE if no other ACTIVE exists, else -> SCHEDULED.
+
+I7. Promotions, coupon wallet, and claim usage rules
+- Promotion validity:
+  - `ValidTo > ValidFrom`.
+  - DiscountPercent and DiscountAmount cannot both be set at same time.
+  - DiscountPercent must be 0..100 when present.
+  - DiscountAmount must be >= 0 when present.
+  - BonusDurationDays must be >= 0.
+- PromotionPost validity: `EndAt > StartAt`.
+- Claim-first policy:
+  - Customer must claim coupon before apply/checkout.
+- One claim per user per promotion.
+- Coupon apply target is restricted to ORDER or MEMBERSHIP (default ORDER).
+- For ORDER target, coupon with `BonusDurationDays > 0` is rejected as membership-only.
+- Coupon definition must include at least one benefit: percent discount OR amount discount OR bonus duration days.
+- Claim usage shape integrity:
+  - unused claim has no used fields,
+  - used claim must have UsedAt + UsedPaymentID,
+  - used target must be exactly one of Order or Membership.
+- Claim source validity (`TRG_UserPromotionClaims_Validate`):
+  - source post must belong to same promotion,
+  - source post and promotion must be active and inside valid windows.
+- Order claim validation (`TRG_Orders_ValidateClaim`):
+  - claim user must match order customer,
+  - claim must be unused,
+  - promotion must still be active/valid.
+- Payment claim validation (`TRG_Payments_ValidateClaim`):
+  - claim user must match payment target customer,
+  - claim must be unused,
+  - promotion must still be active/valid.
+- Coupon can provide discount and/or bonus duration days for membership flow.
+
+I8. Notification and anti-spam rules
+- Notification row has read/unread state (`IsRead`).
+- Notification dedupe index prevents duplicate same-type notifications per `(UserID, NotificationType, RefId, ExtraKey)` when RefId is set.
+- Daily job also cancels future SCHEDULED PT sessions for customers with no ACTIVE membership and sends cancellation notification.
+
+I9. Workout/Food/Goal modeling rules
+- Goal code is unique and used for AI filtering.
+- Customer goals are many-to-many and multi-select.
+- Workout/Food to Goal mapping is many-to-many.
+- Food calories (when provided) must be non-negative.
+
+I10. Operational SQL run rules (current project standard)
+- Official DB execution order:
+  1) docs/GymCore.txt
+  2) docs/alter.txt
+  3) docs/InsertValues.txt
+  4) docs/InsertTestingValues.txt (optional)
+- `InsertValues.txt` and `InsertTestingValues.txt` are idempotent seed scripts.
+- `alter.txt` is idempotent compatibility migration script and must not be skipped.

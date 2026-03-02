@@ -123,13 +123,29 @@ BEGIN TRY
         SELECT 1 FROM dbo.TimeSlots ts WHERE ts.SlotIndex = v.SlotIndex
     );
 
+    /* Default coach weekly availability: all 8 slots for every day (Mon..Sun) */
+    INSERT INTO dbo.CoachWeeklyAvailability (CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    SELECT c.CoachID, d.DayOfWeek, ts.TimeSlotID, CAST(1 AS BIT)
+    FROM dbo.Coaches c
+    CROSS JOIN (VALUES
+        (1), (2), (3), (4), (5), (6), (7)
+    ) AS d(DayOfWeek)
+    CROSS JOIN dbo.TimeSlots ts
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CoachWeeklyAvailability cwa
+        WHERE cwa.CoachID = c.CoachID
+          AND cwa.DayOfWeek = d.DayOfWeek
+          AND cwa.TimeSlotID = ts.TimeSlotID
+    );
+
     /* Membership plans (must-have) */
     INSERT INTO dbo.MembershipPlans (PlanName, PlanType, Price, DurationDays, AllowsCoachBooking, UpdatedBy)
     SELECT v.PlanName, v.PlanType, v.Price, v.DurationDays, v.AllowsCoachBooking, @AdminID
     FROM (VALUES
-        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(500000  AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
-        (N'Day Pass',               N'DAY_PASS',       CAST(80000   AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
-        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(5000000 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
+        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Day Pass',               N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
     ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
     WHERE NOT EXISTS (
         SELECT 1
@@ -139,7 +155,23 @@ BEGIN TRY
           AND mp.DurationDays = v.DurationDays
     );
 
-    /* Baseline goals/allergens for AI module setup */
+    /* Keep baseline plan prices synchronized on re-run */
+    UPDATE mp
+    SET mp.Price = v.Price,
+        mp.AllowsCoachBooking = v.AllowsCoachBooking,
+        mp.UpdatedAt = SYSDATETIME(),
+        mp.UpdatedBy = @AdminID
+    FROM dbo.MembershipPlans mp
+    JOIN (VALUES
+        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Day Pass',               N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
+    ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
+      ON mp.PlanName = v.PlanName
+     AND mp.PlanType = v.PlanType
+     AND mp.DurationDays = v.DurationDays;
+
+    /* Baseline goals for AI module setup */
     INSERT INTO dbo.FitnessGoals (GoalCode, GoalName, Description)
     SELECT v.GoalCode, v.GoalName, v.Description
     FROM (VALUES
@@ -149,17 +181,6 @@ BEGIN TRY
     ) AS v(GoalCode, GoalName, Description)
     WHERE NOT EXISTS (
         SELECT 1 FROM dbo.FitnessGoals g WHERE g.GoalCode = v.GoalCode
-    );
-
-    INSERT INTO dbo.Allergens (AllergenCode, AllergenName, Description, UpdatedBy)
-    SELECT v.AllergenCode, v.AllergenName, v.Description, @AdminID
-    FROM (VALUES
-        (N'MILK', N'Milk', N'Dairy products'),
-        (N'EGG', N'Egg', N'Egg and egg products'),
-        (N'PEANUT', N'Peanut', N'Peanuts and peanut products')
-    ) AS v(AllergenCode, AllergenName, Description)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.Allergens a WHERE a.AllergenCode = v.AllergenCode
     );
 
     COMMIT TRAN;
@@ -173,6 +194,7 @@ END CATCH;
 /*
 Run order:
 1) docs/GymCore.txt
-2) docs/InsertValues.txt            -- required baseline data
-3) docs/InsertTestingValues.txt     -- optional example/testing data
+2) docs/alter.txt                   -- merged coupon/payos alterations
+3) docs/InsertValues.txt            -- required baseline data
+4) docs/InsertTestingValues.txt     -- optional example/testing data
 */

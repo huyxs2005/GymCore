@@ -1,6 +1,7 @@
 package com.gymcore.backend.modules.checkin.service;
 
 import com.gymcore.backend.modules.auth.service.AuthService;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -32,11 +33,142 @@ public class CheckinHealthService {
 
     public Map<String, Object> execute(String action, Object payload) {
         return switch (action) {
+            case "customer-get-qr" -> customerGetQr(asMap(payload));
+            case "customer-get-checkin-history" -> customerGetCheckinHistory(asMap(payload));
+            case "customer-get-health-current" -> customerGetHealthCurrent(asMap(payload));
+            case "customer-get-health-history" -> customerGetHealthHistory(asMap(payload));
+            case "customer-get-coach-notes" -> customerGetCoachNotes(asMap(payload));
+            case "customer-create-health-record" -> customerCreateHealthRecord(asMap(payload));
             case "reception-scan-checkin" -> receptionScanCheckin(asMap(payload));
             case "reception-validate-membership" -> receptionValidateMembership(asMap(payload));
             case "reception-get-checkin-history" -> receptionGetCheckinHistory(asMap(payload));
             default -> todo(action, payload);
         };
+    }
+
+    private Map<String, Object> customerGetQr(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        Map<String, Object> data = jdbcTemplate.queryForObject("""
+                SELECT QrCodeToken, QrIssuedAt FROM dbo.Users WHERE UserID = ?
+                """, (rs, rowNum) -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("qrCodeToken", rs.getString("QrCodeToken"));
+            m.put("qrIssuedAt", timestampToIso(rs.getTimestamp("QrIssuedAt")));
+            return m;
+        }, customer.userId());
+        return data;
+    }
+
+    private Map<String, Object> customerGetCheckinHistory(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                SELECT TOP (50)
+                    ci.CheckInID,
+                    ci.CheckInTime,
+                    mp.PlanName,
+                    mp.PlanType,
+                    r.FullName AS CheckedByName
+                FROM dbo.CheckIns ci
+                JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = ci.CustomerMembershipID
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                LEFT JOIN dbo.Users r ON r.UserID = ci.CheckedByUserID
+                WHERE ci.CustomerID = ?
+                ORDER BY ci.CheckInTime DESC, ci.CheckInID DESC
+                """, (rs, rowNum) -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("checkInId", rs.getInt("CheckInID"));
+            map.put("checkInTime", timestampToIso(rs.getTimestamp("CheckInTime")));
+            map.put("planName", rs.getString("PlanName"));
+            map.put("planType", rs.getString("PlanType"));
+            map.put("checkedByName", rs.getString("CheckedByName"));
+            return map;
+        }, customer.userId());
+        return Map.of("items", items);
+    }
+
+    private Map<String, Object> customerGetHealthCurrent(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT HeightCm, WeightKg, BMI, UpdatedAt
+                    FROM dbo.CustomerHealthCurrent
+                    WHERE CustomerID = ?
+                    """, (rs, rowNum) -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("heightCm", rs.getBigDecimal("HeightCm"));
+                m.put("weightKg", rs.getBigDecimal("WeightKg"));
+                m.put("bmi", rs.getBigDecimal("BMI"));
+                m.put("updatedAt", timestampToIso(rs.getTimestamp("UpdatedAt")));
+                return m;
+            }, customer.userId());
+        } catch (EmptyResultDataAccessException e) {
+            return Map.of();
+        }
+    }
+
+    private Map<String, Object> customerGetHealthHistory(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                SELECT TOP (100)
+                    HeightCm, WeightKg, BMI, RecordedAt
+                FROM dbo.CustomerHealthHistory
+                WHERE CustomerID = ?
+                ORDER BY RecordedAt DESC
+                """, (rs, rowNum) -> Map.of(
+                "heightCm", rs.getBigDecimal("HeightCm"),
+                "weightKg", rs.getBigDecimal("WeightKg"),
+                "bmi", rs.getBigDecimal("BMI"),
+                "recordedAt", timestampToIso(rs.getTimestamp("RecordedAt"))), customer.userId());
+        return Map.of("items", items);
+    }
+
+    private Map<String, Object> customerGetCoachNotes(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                SELECT TOP (50)
+                    n.PTSessionNoteID,
+                    n.NoteContent,
+                    n.CreatedAt,
+                    s.SessionDate,
+                    u.FullName AS CoachName
+                FROM dbo.PTSessionNotes n
+                JOIN dbo.PTSessions s ON s.PTSessionID = n.PTSessionID
+                JOIN dbo.Users u ON u.UserID = s.CoachID
+                WHERE s.CustomerID = ?
+                ORDER BY n.CreatedAt DESC
+                """, (rs, rowNum) -> Map.of(
+                "noteId", rs.getInt("PTSessionNoteID"),
+                "noteContent", rs.getString("NoteContent"),
+                "createdAt", timestampToIso(rs.getTimestamp("CreatedAt")),
+                "sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()),
+                "coachName", rs.getString("CoachName")), customer.userId());
+        return Map.of("items", items);
+    }
+
+    private Map<String, Object> customerCreateHealthRecord(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        Double height = parseDouble(payload.get("heightCm"));
+        Double weight = parseDouble(payload.get("weightKg"));
+
+        if (height == null || height <= 0 || weight == null || weight <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid height or weight.");
+        }
+
+        jdbcTemplate.update("""
+                INSERT INTO dbo.CustomerHealthHistory (CustomerID, HeightCm, WeightKg)
+                VALUES (?, ?, ?)
+                """, customer.userId(), height, weight);
+
+        return customerGetHealthCurrent(payload);
+    }
+
+    private AuthService.AuthContext requireCustomer(Map<String, Object> payload) {
+        String authorizationHeader = asText(payload.get("authorizationHeader"));
+        AuthService.AuthContext context = authService.requireAuthContext(authorizationHeader);
+        if (!"CUSTOMER".equalsIgnoreCase(context.role())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only customer can perform this action.");
+        }
+        return context;
     }
 
     private Map<String, Object> receptionScanCheckin(Map<String, Object> payload) {
@@ -65,7 +197,8 @@ public class CheckinHealthService {
                     VALUES (?, ?, ?)
                     """, customer.customerId(), validity.customerMembershipId(), receptionist.userId());
         } catch (DataAccessException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in failed. Membership is not valid for check-in.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Check-in failed. Membership is not valid for check-in.");
         }
 
         Map<String, Object> latest = jdbcTemplate.queryForObject("""
@@ -75,10 +208,13 @@ public class CheckinHealthService {
                 FROM dbo.CheckIns ci
                 WHERE ci.CustomerID = ? AND ci.CustomerMembershipID = ? AND ci.CheckedByUserID = ?
                 ORDER BY ci.CheckInID DESC
-                """, (rs, rowNum) -> Map.of(
-                        "checkInId", rs.getInt("CheckInID"),
-                        "checkInTime", timestampToIso(rs.getTimestamp("CheckInTime"))
-                ), customer.customerId(), validity.customerMembershipId(), receptionist.userId());
+                """, (rs, rowNum) -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("checkInId", rs.getInt("CheckInID"));
+            m.put("checkInTime", timestampToIso(rs.getTimestamp("CheckInTime")));
+            return m;
+        }, customer.customerId(),
+                validity.customerMembershipId(), receptionist.userId());
 
         Map<String, Object> customerMap = new LinkedHashMap<>();
         customerMap.put("customerId", customer.customerId());
@@ -100,8 +236,7 @@ public class CheckinHealthService {
         data.put("membership", membershipMap);
         data.put("checkedBy", Map.of(
                 "userId", receptionist.userId(),
-                "fullName", receptionist.fullName()
-        ));
+                "fullName", receptionist.fullName()));
 
         return data;
     }
@@ -134,8 +269,7 @@ public class CheckinHealthService {
                     "planType", validity.planType() == null ? "" : validity.planType(),
                     "status", validity.status(),
                     "startDate", validity.startDate() == null ? "" : validity.startDate(),
-                    "endDate", validity.endDate() == null ? "" : validity.endDate()
-            ));
+                    "endDate", validity.endDate() == null ? "" : validity.endDate()));
         } else {
             data.put("membership", Map.of());
         }
@@ -200,8 +334,7 @@ public class CheckinHealthService {
                     active.planName(),
                     active.planType(),
                     dateToString(active.startDate()),
-                    dateToString(active.endDate())
-            );
+                    dateToString(active.endDate()));
         }
 
         List<MembershipSnapshot> scheduledRows = jdbcTemplate.query("""
@@ -219,7 +352,8 @@ public class CheckinHealthService {
                 """, membershipSnapshotRowMapper(), customerId);
         if (!scheduledRows.isEmpty()) {
             MembershipSnapshot scheduled = scheduledRows.get(0);
-            String reason = "Membership not active yet. It is scheduled to start on " + dateToString(scheduled.startDate()) + ".";
+            String reason = "Membership not active yet. It is scheduled to start on "
+                    + dateToString(scheduled.startDate()) + ".";
             return new MembershipValidity(
                     false,
                     reason,
@@ -228,8 +362,7 @@ public class CheckinHealthService {
                     scheduled.planName(),
                     scheduled.planType(),
                     dateToString(scheduled.startDate()),
-                    dateToString(scheduled.endDate())
-            );
+                    dateToString(scheduled.endDate()));
         }
 
         List<MembershipSnapshot> expiredRows = jdbcTemplate.query("""
@@ -256,8 +389,7 @@ public class CheckinHealthService {
                     expired.planName(),
                     expired.planType(),
                     dateToString(expired.startDate()),
-                    dateToString(expired.endDate())
-            );
+                    dateToString(expired.endDate()));
         }
 
         List<MembershipSnapshot> pendingRows = jdbcTemplate.query("""
@@ -283,11 +415,11 @@ public class CheckinHealthService {
                     pending.planName(),
                     pending.planType(),
                     dateToString(pending.startDate()),
-                    dateToString(pending.endDate())
-            );
+                    dateToString(pending.endDate()));
         }
 
-        return new MembershipValidity(false, "Customer does not have a valid membership.", null, null, null, null, null, null);
+        return new MembershipValidity(false, "Customer does not have a valid membership.", null, null, null, null, null,
+                null);
     }
 
     private CustomerLookup requireCustomerById(int customerId) {
@@ -329,8 +461,7 @@ public class CheckinHealthService {
                 rs.getInt("UserID"),
                 rs.getString("FullName"),
                 rs.getString("Email"),
-                rs.getString("Phone")
-        );
+                rs.getString("Phone"));
     }
 
     private RowMapper<MembershipSnapshot> membershipSnapshotRowMapper() {
@@ -340,8 +471,7 @@ public class CheckinHealthService {
                 toLocalDate(rs, "StartDate"),
                 toLocalDate(rs, "EndDate"),
                 rs.getString("PlanName"),
-                rs.getString("PlanType")
-        );
+                rs.getString("PlanType"));
     }
 
     private RowMapper<Map<String, Object>> checkinHistoryRowMapper() {
@@ -420,6 +550,27 @@ public class CheckinHealthService {
         }
     }
 
+    private Double parseDouble(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Double d) {
+            return d;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            String text = String.valueOf(value).trim();
+            if (text.isEmpty()) {
+                return null;
+            }
+            return Double.parseDouble(text);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
     private record CustomerLookup(int customerId, String fullName, String email, String phone) {
     }
 
@@ -429,8 +580,7 @@ public class CheckinHealthService {
             LocalDate startDate,
             LocalDate endDate,
             String planName,
-            String planType
-    ) {
+            String planType) {
     }
 
     private record MembershipValidity(
@@ -441,7 +591,6 @@ public class CheckinHealthService {
             String planName,
             String planType,
             String startDate,
-            String endDate
-    ) {
+            String endDate) {
     }
 }

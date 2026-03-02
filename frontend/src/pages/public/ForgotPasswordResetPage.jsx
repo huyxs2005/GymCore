@@ -46,53 +46,59 @@ function ForgotPasswordResetPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <h1 className="text-2xl font-bold text-slate-900">Reset password</h1>
-      <p className="mt-2 text-sm text-slate-600">Enter your new password.</p>
+    <div className="mx-auto max-w-xl px-6 py-24">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-black text-gym-dark-900 tracking-tight mb-4">Set New Password</h1>
+        <p className="text-gym-dark-400 font-bold text-lg">Choose a strong password to secure your account</p>
+      </div>
 
       {!canReset ? (
-        <div className="mt-6 space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-700">
-            Please verify your OTP first.
+        <div className="gc-card p-10 text-center space-y-6">
+          <p className="text-gym-dark-400 font-bold">
+            Please verify your OTP first before resetting your password.
           </p>
           <Link
             to="/auth/forgot-password"
-            className="inline-flex items-center justify-center rounded-lg bg-gym-500 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700"
+            className="btn-primary inline-block"
           >
-            Back to forgot password
+            Back to Verification
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleResetPassword} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-600">Resetting password for {email}</p>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">New password</span>
+        <form onSubmit={handleResetPassword} className="space-y-6 gc-card p-10">
+          <div className="text-center">
+            <p className="text-gym-dark-400 font-bold mb-6 text-sm">Resetting password for <span className="text-gym-dark-900">{email}</span></p>
+          </div>
+          <div className="space-y-2">
+            <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">New Password</span>
             <input
               type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
+              placeholder="••••••••"
               required
             />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Confirm password</span>
+          </div>
+          <div className="space-y-2">
+            <span className="text-sm font-black uppercase tracking-widest text-gym-dark-400">Confirm New Password</span>
             <input
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="gc-input"
+              placeholder="••••••••"
               required
             />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+          </div>
+          {errorMessage ? <p className="text-sm font-bold text-red-600 bg-red-50 p-4 rounded-xl border border-red-100">{errorMessage}</p> : null}
+          {message ? <p className="text-sm font-bold text-emerald-700 bg-emerald-50 p-4 rounded-xl border border-emerald-100">{message}</p> : null}
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="btn-primary w-full py-4 text-lg"
           >
-            {isSubmitting ? 'Resetting...' : 'Reset password'}
+            {isSubmitting ? 'Resetting...' : 'Update Password'}
           </button>
         </form>
       )}
