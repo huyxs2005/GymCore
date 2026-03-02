@@ -21,19 +21,21 @@ function toNonNegativeInt(value) {
 }
 
 function formatCouponBenefit(coupon) {
-  const bonusDays = Number(coupon?.BonusDurationDays || 0)
+  const bonusMonths = Number(coupon?.BonusDurationMonths || 0)
   const discountPercent = toOptionalNumber(coupon?.DiscountPercent)
   const discountAmount = toOptionalNumber(coupon?.DiscountAmount)
+  const applyTarget = String(coupon?.ApplyTarget || 'ORDER').toUpperCase()
   const parts = []
   if (discountPercent != null && discountPercent > 0) {
     parts.push(`${discountPercent}% off`)
   } else if (discountAmount != null && discountAmount > 0) {
     parts.push(`${discountAmount.toLocaleString()} VND off`)
   }
-  if (bonusDays > 0) {
-    parts.push(`+${bonusDays} membership day${bonusDays > 1 ? 's' : ''}`)
+  if (bonusMonths > 0) {
+    parts.push(`+${bonusMonths} membership month${bonusMonths > 1 ? 's' : ''}`)
   }
-  return parts.length > 0 ? parts.join(' + ') : 'No benefit configured'
+  const benefit = parts.length > 0 ? parts.join(' + ') : 'No benefit configured'
+  return `${applyTarget}: ${benefit}`
 }
 
 const AdminPromotionsPage = () => {
@@ -345,9 +347,10 @@ const AdminPromotionsPage = () => {
                 const raw = Object.fromEntries(formData);
                 const payload = {
                   ...raw,
+                  applyTarget: raw.applyTarget,
                   discountPercent: toOptionalNumber(raw.discountPercent),
                   discountAmount: toOptionalNumber(raw.discountAmount),
-                  bonusDurationDays: toNonNegativeInt(raw.bonusDurationDays),
+                  bonusDurationMonths: toNonNegativeInt(raw.bonusDurationMonths),
                   isActive: raw.isActive === 'on' ? 1 : 0
                 }
                 if (editingItem) {
@@ -357,42 +360,57 @@ const AdminPromotionsPage = () => {
                 }
               }}>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon Code</label>
-                  <input name="promoCode" defaultValue={editingItem?.PromoCode} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 focus:ring-2 focus:ring-gym-200 outline-none transition-all font-mono" placeholder="WELCOME10" />
+                  <label htmlFor="coupon-promo-code" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon Code</label>
+                  <input id="coupon-promo-code" name="promoCode" defaultValue={editingItem?.PromoCode} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 focus:ring-2 focus:ring-gym-200 outline-none transition-all font-mono" placeholder="WELCOME10" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Description</label>
-                  <input name="description" defaultValue={editingItem?.Description} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" placeholder="10% off for first order" />
+                  <label htmlFor="coupon-description" className="text-xs font-bold text-slate-500 uppercase">Description</label>
+                  <input id="coupon-description" name="description" defaultValue={editingItem?.Description} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" placeholder="10% off for first order" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Discount (%)</label>
-                    <input name="discountPercent" type="number" step="0.01" defaultValue={editingItem?.DiscountPercent} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                    <label htmlFor="coupon-apply-target" className="text-xs font-bold text-slate-500 uppercase">Apply Target</label>
+                    <select
+                      id="coupon-apply-target"
+                      name="applyTarget"
+                      defaultValue={editingItem?.ApplyTarget || 'ORDER'}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all bg-white"
+                    >
+                      <option value="ORDER">Product order</option>
+                      <option value="MEMBERSHIP">Membership</option>
+                    </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Discount (VND)</label>
-                    <input name="discountAmount" type="number" defaultValue={editingItem?.DiscountAmount} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                    <label htmlFor="coupon-discount-percent" className="text-xs font-bold text-slate-500 uppercase">Discount (%)</label>
+                    <input id="coupon-discount-percent" name="discountPercent" type="number" step="0.01" defaultValue={editingItem?.DiscountPercent} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Bonus Membership Days</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label htmlFor="coupon-discount-amount" className="text-xs font-bold text-slate-500 uppercase">Discount (VND)</label>
+                    <input id="coupon-discount-amount" name="discountAmount" type="number" defaultValue={editingItem?.DiscountAmount} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                  <label htmlFor="coupon-bonus-months" className="text-xs font-bold text-slate-500 uppercase">Bonus Membership Months</label>
                   <input
-                    name="bonusDurationDays"
+                    id="coupon-bonus-months"
+                    name="bonusDurationMonths"
                     type="number"
                     min="0"
-                    defaultValue={editingItem?.BonusDurationDays ?? 0}
+                    defaultValue={editingItem?.BonusDurationMonths ?? 0}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all"
                     placeholder="0"
                   />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid From</label>
-                    <input name="validFrom" type="date" defaultValue={editingItem?.ValidFrom?.split('T')[0]} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                    <label htmlFor="coupon-valid-from" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid From</label>
+                    <input id="coupon-valid-from" name="validFrom" type="date" defaultValue={editingItem?.ValidFrom?.split('T')[0]} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid To</label>
-                    <input name="validTo" type="date" defaultValue={editingItem?.ValidTo?.split('T')[0]} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                    <label htmlFor="coupon-valid-to" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid To</label>
+                    <input id="coupon-valid-to" name="validTo" type="date" defaultValue={editingItem?.ValidTo?.split('T')[0]} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
                   </div>
                 </div>
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">

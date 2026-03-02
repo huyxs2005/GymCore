@@ -14,13 +14,13 @@ describe('AccountMenu', () => {
     act(() => clearSession())
   })
 
-  it('shows QR code item only for CUSTOMER', async () => {
+  it('shows customer-only account actions only for CUSTOMER', async () => {
     const user = userEvent.setup()
     act(() => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Trần Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         role: 'CUSTOMER',
         avatarUrl: '',
@@ -34,12 +34,13 @@ describe('AccountMenu', () => {
       </MemoryRouter>,
     )
 
-    const toggle = screen.getByRole('button', { name: /Trần Minh Huy/i })
+    const toggle = screen.getByRole('button', { name: /Alex Carter/i })
     await act(async () => {
       await user.click(toggle)
     })
 
     expect(screen.getByText('View profile')).toBeInTheDocument()
+    expect(screen.getByText('Current membership')).toBeInTheDocument()
     expect(screen.getByText('QR code')).toBeInTheDocument()
     expect(screen.getByText('Logout')).toBeInTheDocument()
 
@@ -62,6 +63,7 @@ describe('AccountMenu', () => {
     })
 
     expect(screen.getByText('View profile')).toBeInTheDocument()
+    expect(screen.queryByText('Current membership')).toBeNull()
     expect(screen.queryByText('QR code')).toBeNull()
     expect(screen.getByText('Logout')).toBeInTheDocument()
   })

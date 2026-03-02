@@ -70,19 +70,21 @@ public class PromotionService {
         currentUserService.requireAdmin(auth);
         java.math.BigDecimal discountPercent = requireDecimal(payload.get("discountPercent"));
         java.math.BigDecimal discountAmount = requireDecimal(payload.get("discountAmount"));
-        int bonusDurationDays = requireNonNegativeInt(payload.get("bonusDurationDays"));
-        validateCouponBenefit(discountPercent, discountAmount, bonusDurationDays);
+        String applyTarget = normalizeApplyTarget(payload.get("applyTarget"));
+        int bonusDurationMonths = requireNonNegativeInt(payload.get("bonusDurationMonths"));
+        validateCouponBenefit(discountPercent, discountAmount, bonusDurationMonths, applyTarget);
 
         jdbcTemplate.update(
                 """
-                        INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, BonusDurationDays, ValidFrom, ValidTo, IsActive)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, ApplyTarget, BonusDurationMonths, ValidFrom, ValidTo, IsActive)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 payload.get("promoCode"),
                 payload.get("description"),
                 discountPercent,
                 discountAmount,
-                bonusDurationDays,
+                applyTarget,
+                bonusDurationMonths,
                 payload.get("validFrom"),
                 payload.get("validTo"),
                 requireBit(payload.getOrDefault("isActive", 1)));
@@ -96,20 +98,22 @@ public class PromotionService {
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
         java.math.BigDecimal discountPercent = requireDecimal(body.get("discountPercent"));
         java.math.BigDecimal discountAmount = requireDecimal(body.get("discountAmount"));
-        int bonusDurationDays = requireNonNegativeInt(body.get("bonusDurationDays"));
-        validateCouponBenefit(discountPercent, discountAmount, bonusDurationDays);
+        String applyTarget = normalizeApplyTarget(body.get("applyTarget"));
+        int bonusDurationMonths = requireNonNegativeInt(body.get("bonusDurationMonths"));
+        validateCouponBenefit(discountPercent, discountAmount, bonusDurationMonths, applyTarget);
 
         jdbcTemplate.update(
                 """
                         UPDATE dbo.Promotions
-                        SET PromoCode = ?, Description = ?, DiscountPercent = ?, DiscountAmount = ?, BonusDurationDays = ?, ValidFrom = ?, ValidTo = ?, IsActive = ?
+                        SET PromoCode = ?, Description = ?, DiscountPercent = ?, DiscountAmount = ?, ApplyTarget = ?, BonusDurationMonths = ?, ValidFrom = ?, ValidTo = ?, IsActive = ?
                         WHERE PromotionID = ?
                         """,
                 body.get("promoCode"),
                 body.get("description"),
                 discountPercent,
                 discountAmount,
-                bonusDurationDays,
+                applyTarget,
+                bonusDurationMonths,
                 body.get("validFrom"),
                 body.get("validTo"),
                 requireBit(body.getOrDefault("isActive", 1)),
@@ -189,7 +193,7 @@ public class PromotionService {
 
         if (user != null) {
             sql = """
-                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.BonusDurationDays,
+                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.ApplyTarget, r.BonusDurationMonths,
                            CASE WHEN c.ClaimID IS NOT NULL THEN 1 ELSE 0 END as IsClaimed
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
@@ -202,7 +206,7 @@ public class PromotionService {
             posts = jdbcTemplate.queryForList(sql, user.userId());
         } else {
             sql = """
-                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.BonusDurationDays,
+                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.ApplyTarget, r.BonusDurationMonths,
                            0 as IsClaimed
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
@@ -256,7 +260,7 @@ public class PromotionService {
     private Map<String, Object> customerGetMyClaims(String auth) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
         String sql = """
-                SELECT c.*, p.PromoCode, p.Description, p.DiscountPercent, p.DiscountAmount, p.BonusDurationDays
+                SELECT c.*, p.PromoCode, p.Description, p.DiscountPercent, p.DiscountAmount, p.ApplyTarget, p.BonusDurationMonths
                 FROM dbo.UserPromotionClaims c
                 JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                 WHERE c.UserID = ? AND c.UsedAt IS NULL
@@ -278,7 +282,8 @@ public class PromotionService {
                     p.PromoCode,
                     p.DiscountPercent,
                     p.DiscountAmount,
-                    p.BonusDurationDays,
+                    p.ApplyTarget,
+                    p.BonusDurationMonths,
                     p.ValidFrom,
                     p.ValidTo
                 FROM dbo.UserPromotionClaims c
@@ -297,10 +302,15 @@ public class PromotionService {
         Map<String, Object> claim = claims.get(0);
         java.math.BigDecimal discountPercent = requireDecimal(claim.get("DiscountPercent"));
         java.math.BigDecimal discountAmount = requireDecimal(claim.get("DiscountAmount"));
-        int bonusDurationDays = requireNonNegativeInt(claim.get("BonusDurationDays"));
-        if ("ORDER".equals(target) && bonusDurationDays > 0) {
+        String applyTarget = normalizeApplyTarget(claim.get("ApplyTarget"));
+        int bonusDurationMonths = requireNonNegativeInt(claim.get("BonusDurationMonths"));
+        if (!applyTarget.equals(target)) {
+            if ("MEMBERSHIP".equals(applyTarget)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This coupon applies to membership purchases only.");
+            }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "This coupon applies to membership purchases only.");
+                    "This coupon applies to product orders only.");
         }
 
         java.math.BigDecimal estimatedDiscount = java.math.BigDecimal.ZERO;
@@ -315,13 +325,14 @@ public class PromotionService {
         response.put("claimId", claim.get("ClaimID"));
         response.put("promoCode", claim.get("PromoCode"));
         response.put("target", target);
+        response.put("applyTarget", applyTarget);
         response.put("discountPercent", discountPercent);
         response.put("discountAmount", discountAmount);
-        response.put("bonusDurationDays", bonusDurationDays);
+        response.put("bonusDurationMonths", bonusDurationMonths);
         response.put("estimatedDiscount", estimatedDiscount);
         response.put("estimatedFinalAmount", estimatedFinalAmount);
         response.put("currency", "VND");
-        response.put("membershipOnly", bonusDurationDays > 0);
+        response.put("membershipOnly", "MEMBERSHIP".equals(applyTarget));
         return response;
     }
 
@@ -395,23 +406,27 @@ public class PromotionService {
                 parsed = Integer.parseInt(String.valueOf(value).trim());
             }
             if (parsed < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bonus duration cannot be negative.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bonus duration months cannot be negative.");
             }
             return parsed;
         } catch (NumberFormatException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bonus duration must be an integer.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bonus duration months must be an integer.");
         }
     }
 
     private void validateCouponBenefit(java.math.BigDecimal discountPercent, java.math.BigDecimal discountAmount,
-            int bonusDurationDays) {
+            int bonusDurationMonths, String applyTarget) {
         if (discountPercent != null && discountAmount != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Only one discount type is allowed (percent or amount).");
         }
-        if (discountPercent == null && discountAmount == null && bonusDurationDays == 0) {
+        if (discountPercent == null && discountAmount == null && bonusDurationMonths == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Coupon must include discount or bonus duration.");
+        }
+        if ("ORDER".equals(applyTarget) && bonusDurationMonths > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Product coupons cannot include bonus membership months.");
         }
     }
 

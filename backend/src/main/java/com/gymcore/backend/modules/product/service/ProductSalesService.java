@@ -335,7 +335,7 @@ public class ProductSalesService {
         String promoCode = asNullableString(payload.get("promoCode"));
         if (promoCode != null && !promoCode.isBlank()) {
             List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
-                    SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount, p.BonusDurationDays
+                    SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount, p.ApplyTarget, p.BonusDurationMonths
                     FROM dbo.UserPromotionClaims c
                     JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                     WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
@@ -351,8 +351,8 @@ public class ProductSalesService {
             claimId = (Integer) claim.get("ClaimID");
             BigDecimal pct = optionalDecimal(claim.get("DiscountPercent"), "Invalid percent");
             BigDecimal amt = optionalDecimal(claim.get("DiscountAmount"), "Invalid amount");
-            Integer bonusDurationDays = tryParsePositiveInt(claim.get("BonusDurationDays"));
-            if (bonusDurationDays != null && bonusDurationDays > 0) {
+            String applyTarget = upperText(claim.get("ApplyTarget"));
+            if (!"ORDER".equals(applyTarget)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "This coupon applies to membership purchases only.");
             }
@@ -745,7 +745,7 @@ public class ProductSalesService {
 
     private Integer resolvePaymentIdFromReturnPayload(Map<String, Object> payload) {
         Object rawPaymentId = firstNonNull(payload.get("paymentId"), payload.get("orderCode"));
-        Integer parsed = tryParsePositiveInt(rawPaymentId);
+        Integer parsed = payOsService.resolvePaymentIdFromPayOsOrderCode(rawPaymentId);
         if (parsed != null) {
             return parsed;
         }
@@ -765,23 +765,6 @@ public class ProductSalesService {
                     ORDER BY PaymentID DESC
                     """, Integer.class, paymentLinkId);
         } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
-            return null;
-        }
-    }
-
-    private Integer tryParsePositiveInt(Object value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            int parsed;
-            if (value instanceof Number number) {
-                parsed = number.intValue();
-            } else {
-                parsed = Integer.parseInt(String.valueOf(value).trim());
-            }
-            return parsed > 0 ? parsed : null;
-        } catch (NumberFormatException exception) {
             return null;
         }
     }

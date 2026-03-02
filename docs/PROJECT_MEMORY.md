@@ -55,6 +55,10 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - Unique filtered indexes enforce max one `ACTIVE` and one `SCHEDULED` per customer.
     - Daily job `sp_RunDailyMembershipJobs` activates due `SCHEDULED` memberships.
   - Promotions support `BonusDurationDays` (for coupon discount + extra days at the same time).
+  - Promotions now include explicit `ApplyTarget` in DB docs/migrations:
+    - `ORDER` for product checkout coupons
+    - `MEMBERSHIP` for membership checkout coupons
+    - membership-target coupons may still include discount-only or discount + bonus days
   - Membership plan strictness:
     - Only `GYM_PLUS_COACH` can have `AllowsCoachBooking = 1`.
     - `GYM_ONLY` and `DAY_PASS` must have `AllowsCoachBooking = 0`.
@@ -159,6 +163,10 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Customer flow:
   - Must set desired recurring weekly day+slot first.
   - Then preview coach matching by date range and desired slots.
+  - Customer cannot start a new PT booking flow if:
+    - a PT request is already `PENDING`, or
+    - an approved/current PT arrangement still has future scheduled sessions.
+  - This is blocked in both backend validation and frontend UI.
   - Results separated into:
     - `Fully Match` (all desired slots available).
     - `Partial Match` (some overlap, e.g. already booked in selected range).
@@ -217,6 +225,26 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - Verifies customer cart header button behavior:
     - shown on `/customer/shop`, click dispatches `gymcore:toggle-cart`
     - hidden outside shop routes.
+
+## 25) PT duplicate-booking guard (Mar 2, 2026)
+- `backend/src/main/java/com/gymcore/backend/modules/coach/service/CoachBookingService.java` now blocks:
+  - `customer-match-coaches`
+  - `customer-create-booking-request`
+  when customer already has:
+  - a `PENDING` PT request, or
+  - an `APPROVED` PT arrangement whose end date is still current.
+- `frontend/src/pages/customer/CustomerCoachBookingPage.jsx` now preloads PT schedule state and shows a blocking modal before:
+  - `Open Schedule Planner`
+  - `Preview Matches`
+- The blocking modal routes customer into `My PT Schedule` so they review the current PT state instead of starting another request.
+- Regression coverage added:
+  - `frontend/src/pages/customer/CustomerCoachBookingPage.test.jsx`
+  - `backend/src/test/java/com/gymcore/backend/modules/coach/service/CoachBookingServiceTest.java`
+
+## 26) Latest verified test run (Mar 2, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`144` tests, `0` failures, `0` errors).
+- Frontend: `npm run test:run` -> passed (`24` files, `65` tests).
+- Frontend lint: `npm run lint` -> passed.
 
 ## 21) Customer check-in health UI update (Mar 1, 2026)
 - `frontend/src/pages/customer/CustomerCheckinHealthPage.jsx` now includes a circular BMI meter (car-speedometer style):

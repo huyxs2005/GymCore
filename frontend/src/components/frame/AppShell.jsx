@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, Clock3, Dumbbell, MapPin, Phone, ShoppingCart } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import AuthHeaderActions from '../common/AuthHeaderActions'
@@ -33,7 +33,7 @@ function roleHomeCta(role) {
   }
 }
 
-function CustomerShopCartButton({ visible }) {
+function CustomerShopCartButton({ visible, onOpenCart }) {
   const [pulse, setPulse] = useState(false)
   const { data } = useQuery({
     queryKey: ['cart'],
@@ -64,7 +64,7 @@ function CustomerShopCartButton({ visible }) {
       id="customer-cart-button"
       type="button"
       aria-label="Open cart"
-      onClick={() => window.dispatchEvent(new Event('gymcore:toggle-cart'))}
+      onClick={onOpenCart}
       className={`relative rounded-full p-2 text-slate-600 transition hover:bg-slate-100 focus:outline-none ${pulse ? 'scale-110' : 'scale-100'}`}
     >
       <ShoppingCart size={20} />
@@ -79,6 +79,7 @@ function CustomerShopCartButton({ visible }) {
 
 function AppShell({ children }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const { isAuthenticated, user } = useSession()
   const workspaceLinks = getWorkspaceLinks(pathname)
   const showWorkspaceNav = workspaceLinks.length > 0
@@ -86,13 +87,29 @@ function AppShell({ children }) {
   const roleDestination = roleLandingPath(userRole)
   const roleLabel = roleHomeCta(userRole)
   const showRoleShortcut = isAuthenticated && !showWorkspaceNav && roleDestination !== '/' && roleLabel
-  const showShopCartButton = isAuthenticated && userRole === 'CUSTOMER' && pathname.startsWith('/customer/shop')
+  const showShopCartButton = isAuthenticated && userRole === 'CUSTOMER'
+
+  function jumpToTop() {
+    window.scrollTo(0, 0)
+  }
+
+  function smoothScrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function handleRouteClick(targetPath) {
+    if (pathname === targetPath) {
+      smoothScrollToTop()
+      return
+    }
+    jumpToTop()
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link to="/" className="inline-flex items-center gap-2 text-slate-900">
+          <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-2 text-slate-900">
             <span className="rounded-md bg-gym-500 p-1.5 text-white">
               <Dumbbell size={16} />
             </span>
@@ -103,6 +120,7 @@ function AppShell({ children }) {
             {showRoleShortcut && (
               <Link
                 to={roleDestination}
+                onClick={() => handleRouteClick(roleDestination)}
                 className="hidden rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
               >
                 Open {roleLabel}
@@ -114,6 +132,7 @@ function AppShell({ children }) {
                   <NavLink
                     key={link.to}
                     to={link.to}
+                    onClick={() => handleRouteClick(link.to)}
                     className={({ isActive }) =>
                       isActive
                         ? 'rounded-md bg-gym-100 px-2 py-1 text-gym-900'
@@ -126,7 +145,17 @@ function AppShell({ children }) {
               </nav>
             )}
             {isAuthenticated && <NotificationDropdown />}
-            <CustomerShopCartButton visible={showShopCartButton} />
+            <CustomerShopCartButton
+              visible={showShopCartButton}
+              onOpenCart={() => {
+                if (pathname.startsWith('/customer/shop')) {
+                  window.dispatchEvent(new Event('gymcore:toggle-cart'))
+                  return
+                }
+                jumpToTop()
+                navigate('/customer/shop?openCart=1')
+              }}
+            />
             <AuthHeaderActions />
           </div>
         </div>
@@ -137,6 +166,7 @@ function AppShell({ children }) {
                 <NavLink
                   key={link.to}
                   to={link.to}
+                  onClick={() => handleRouteClick(link.to)}
                   className={({ isActive }) =>
                     isActive
                       ? 'rounded-md bg-gym-100 px-2 py-1 text-gym-900'
@@ -170,15 +200,17 @@ function AppShell({ children }) {
 
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</h3>
-              <div className="space-y-2 text-sm text-slate-600">
-                <p className="inline-flex items-center gap-2">
-                  <Clock3 size={14} className="text-gym-600" />
-                  <span>Open daily: {gymPublicInfo.openingHours}</span>
-                </p>
-                <a href={`tel:${gymPublicInfo.hotline}`} className="inline-flex items-center gap-2 transition hover:text-slate-900">
-                  <Phone size={14} className="text-gym-600" />
-                  <span>{gymPublicInfo.hotline}</span>
-                </a>
+              <div className="space-y-2.5 text-sm text-slate-600">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  <p className="inline-flex items-center gap-2">
+                    <Clock3 size={14} className="text-gym-600" />
+                    <span>Open daily: {gymPublicInfo.openingHours}</span>
+                  </p>
+                  <a href={`tel:${gymPublicInfo.hotline}`} className="inline-flex items-center gap-2 transition hover:text-slate-900">
+                    <Phone size={14} className="text-gym-600" />
+                    <span>{gymPublicInfo.hotline}</span>
+                  </a>
+                </div>
                 <a href={gymPublicInfo.mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-start gap-2 transition hover:text-slate-900">
                   <MapPin size={14} className="mt-0.5 text-gym-600" />
                   <span className="leading-relaxed">{gymPublicInfo.address}</span>
@@ -189,13 +221,13 @@ function AppShell({ children }) {
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick Links</h3>
               <div className="flex flex-col gap-2 text-sm text-slate-600">
-                <Link to="/" className="inline-flex items-center gap-1 transition hover:text-slate-900">
+                <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-1 transition hover:text-slate-900">
                   Home
                 </Link>
-                <Link to="/customer/membership" className="inline-flex items-center gap-1 transition hover:text-slate-900">
+                <Link to="/customer/membership" onClick={() => handleRouteClick('/customer/membership')} className="inline-flex items-center gap-1 transition hover:text-slate-900">
                   Membership
                 </Link>
-                <Link to="/customer/shop" className="inline-flex items-center gap-1 transition hover:text-slate-900">
+                <Link to="/customer/shop" onClick={() => handleRouteClick('/customer/shop')} className="inline-flex items-center gap-1 transition hover:text-slate-900">
                   Product Shop
                 </Link>
                 <a

@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
+import { membershipApi } from '../../features/membership/api/membershipApi'
 
 const DAYS = [
-  { id: 1, label: 'Mon' },
-  { id: 2, label: 'Tue' },
-  { id: 3, label: 'Wed' },
-  { id: 4, label: 'Thu' },
-  { id: 5, label: 'Fri' },
-  { id: 6, label: 'Sat' },
-  { id: 7, label: 'Sun' },
+  { id: 1, label: 'Monday', shortLabel: 'Mon' },
+  { id: 2, label: 'Tuesday', shortLabel: 'Tue' },
+  { id: 3, label: 'Wednesday', shortLabel: 'Wed' },
+  { id: 4, label: 'Thursday', shortLabel: 'Thu' },
+  { id: 5, label: 'Friday', shortLabel: 'Fri' },
+  { id: 6, label: 'Saturday', shortLabel: 'Sat' },
+  { id: 7, label: 'Sunday', shortLabel: 'Sun' },
 ]
 
 function formatDateValue(date) {
@@ -23,61 +26,134 @@ function formatDateValue(date) {
 
 function parseDateValue(value) {
   if (!value) return null
-  const [year, month, day] = value.split('-').map(Number)
+  const [year, month, day] = String(value).split('-').map(Number)
   if (!year || !month || !day) return null
   return new Date(year, month - 1, day)
 }
 
-function addDays(value, amount) {
-  const parsed = parseDateValue(value)
-  if (!parsed) return value
-  parsed.setDate(parsed.getDate() + amount)
-  return formatDateValue(parsed)
+function addDays(date, amount) {
+  const nextDate = new Date(date)
+  nextDate.setDate(nextDate.getDate() + amount)
+  return nextDate
 }
 
-function toDayOfWeek(value) {
-  const parsed = parseDateValue(value)
-  if (!parsed) return null
-  const day = parsed.getDay()
-  return day === 0 ? 7 : day
+function getNextMondayOnOrAfter(date) {
+  const currentDay = date.getDay()
+  const daysUntilMonday = (8 - (currentDay === 0 ? 7 : currentDay)) % 7
+  return addDays(date, daysUntilMonday)
 }
 
-function buildCalendarWeeks(monthCursor) {
+function getMinimumBookingStartDate(baseDate = new Date()) {
+  return getNextMondayOnOrAfter(addDays(baseDate, 7))
+}
+
+function getDayMeta(dayOfWeek) {
+  return DAYS.find((day) => day.id === dayOfWeek) || null
+}
+
+function buildMonthGrid(monthCursor) {
   const monthStart = parseDateValue(monthCursor)
   if (!monthStart) return []
-  monthStart.setDate(1)
-  const weekdayIndex = (monthStart.getDay() + 6) % 7
-  const gridStart = new Date(monthStart)
-  gridStart.setDate(monthStart.getDate() - weekdayIndex)
+  const first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
+  const startOffset = (first.getDay() + 6) % 7
+  const gridStart = addDays(first, -startOffset)
 
-  const weeks = []
-  for (let week = 0; week < 6; week += 1) {
-    const row = []
-    for (let day = 0; day < 7; day += 1) {
-      const current = new Date(gridStart)
-      current.setDate(gridStart.getDate() + (week * 7 + day))
-      row.push({
-        date: formatDateValue(current),
-        isCurrentMonth: current.getMonth() === monthStart.getMonth(),
-      })
+  return Array.from({ length: 35 }, (_, index) => {
+    const current = addDays(gridStart, index)
+    return {
+      value: formatDateValue(current),
+      dayNumber: current.getDate(),
+      isCurrentMonth: current.getMonth() === first.getMonth(),
     }
-    weeks.push(row)
-  }
-  return weeks
+  })
 }
 
 function shiftMonth(monthCursor, delta) {
-  const base = parseDateValue(monthCursor)
-  if (!base) return monthCursor
-  base.setDate(1)
-  base.setMonth(base.getMonth() + delta)
-  return formatDateValue(base)
+  const current = parseDateValue(monthCursor)
+  if (!current) return monthCursor
+  return formatDateValue(new Date(current.getFullYear(), current.getMonth() + delta, 1))
 }
 
-function toMonthTitle(monthCursor) {
-  const base = parseDateValue(monthCursor)
-  if (!base) return ''
-  return base.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+function formatHumanDate(value) {
+  const parsed = parseDateValue(value)
+  if (!parsed) return 'Select date'
+  return parsed.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function buildCoachBookingMembershipGate(response) {
+  const payload = response?.data ?? response ?? {}
+  const membership = payload?.membership ?? {}
+  const plan = membership?.plan ?? {}
+  const status = String(membership?.status || '').toUpperCase()
+  const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
+  const eligible = status === 'ACTIVE' && allowsCoachBooking
+
+  let reason = payload?.reason || ''
+  if (!eligible) {
+    if (!membership || Object.keys(membership).length === 0) {
+      reason = 'You need an active Gym + Coach membership before you can book a coach.'
+    } else if (status !== 'ACTIVE') {
+      reason = 'Your membership is not active yet. Coach booking becomes available only when your Gym + Coach plan is active.'
+    } else if (!allowsCoachBooking) {
+      reason = 'Your current membership does not include coach booking. Upgrade to a Gym + Coach plan to continue.'
+    }
+  }
+
+  return {
+    eligible,
+    membership,
+    reason,
+  }
+}
+
+function buildPtBookingGate(schedule) {
+  const pendingRequests = Array.isArray(schedule?.pendingRequests) ? schedule.pendingRequests : []
+  const items = Array.isArray(schedule?.items) ? schedule.items : []
+  const todayValue = formatDateValue(new Date())
+
+  if (pendingRequests.length > 0) {
+    return {
+      loaded: true,
+      blocked: true,
+      type: 'PENDING',
+      reason: 'You already have a PT request pending coach approval. Please wait for the coach response before booking again.',
+      pendingRequest: pendingRequests[0],
+      activeSession: null,
+    }
+  }
+
+  const futureSessions = items
+    .filter((item) => String(item.status || '').toUpperCase() === 'SCHEDULED' && item.sessionDate && item.sessionDate >= todayValue)
+    .sort((left, right) => {
+      if (left.sessionDate !== right.sessionDate) {
+        return String(left.sessionDate).localeCompare(String(right.sessionDate))
+      }
+      return Number(left.timeSlotId || 0) - Number(right.timeSlotId || 0)
+    })
+
+  if (futureSessions.length > 0) {
+    return {
+      loaded: true,
+      blocked: true,
+      type: 'ACTIVE',
+      reason: 'You already have an active PT schedule. You cannot book another coach until your current PT arrangement ends.',
+      pendingRequest: null,
+      activeSession: futureSessions[0],
+    }
+  }
+
+  return {
+    loaded: true,
+    blocked: false,
+    type: '',
+    reason: '',
+    pendingRequest: null,
+    activeSession: null,
+  }
 }
 
 function CustomerCoachBookingPage() {
@@ -88,13 +164,15 @@ function CustomerCoachBookingPage() {
   const [message, setMessage] = useState('')
 
   const [form, setForm] = useState({
-    startDate: '',
     endDate: '',
   })
-  const [requestedDateSlots, setRequestedDateSlots] = useState([])
+  const [requestedWeeklySlots, setRequestedWeeklySlots] = useState([])
   const [plannerModal, setPlannerModal] = useState({
     open: false,
-    focusDate: '',
+    focusDay: 1,
+  })
+  const [datePicker, setDatePicker] = useState({
+    field: '',
     monthCursor: '',
   })
   const [coachReviewModal, setCoachReviewModal] = useState({
@@ -106,6 +184,7 @@ function CustomerCoachBookingPage() {
     fullMatches: [],
     partialMatches: [],
   })
+  const [hasPreviewedMatches, setHasPreviewedMatches] = useState(false)
 
   const [scheduleData, setScheduleData] = useState({
     items: [],
@@ -127,9 +206,31 @@ function CustomerCoachBookingPage() {
     rating: 0,
     comment: '',
   })
+  const [membershipGate, setMembershipGate] = useState({
+    loading: true,
+    eligible: false,
+    membership: {},
+    reason: '',
+  })
+  const [membershipBlockedModal, setMembershipBlockedModal] = useState(false)
+  const [ptBookingGate, setPtBookingGate] = useState({
+    loaded: false,
+    blocked: false,
+    type: '',
+    reason: '',
+    pendingRequest: null,
+    activeSession: null,
+  })
+  const [ptBookingBlockedModal, setPtBookingBlockedModal] = useState(false)
+  const [scheduleMonthCursor, setScheduleMonthCursor] = useState('')
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState('')
+  const minimumBookingStartDate = useMemo(() => getMinimumBookingStartDate(new Date()), [])
+  const minimumBookingStartValue = useMemo(() => formatDateValue(minimumBookingStartDate), [minimumBookingStartDate])
 
   useEffect(() => {
     void loadTimeSlots()
+    void loadMembershipGate()
+    void loadMySchedule({ silent: true })
   }, [])
 
   useEffect(() => {
@@ -148,20 +249,37 @@ function CustomerCoachBookingPage() {
     }
   }
 
-  async function loadMySchedule() {
+  async function loadMySchedule(options = {}) {
+    const { silent = false } = options
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+      }
       const response = await coachBookingApi.getMySchedule()
       const payload = response?.data ?? response
-      setScheduleData({
+      const nextSchedule = {
         items: Array.isArray(payload?.items) ? payload.items : [],
         pendingRequests: Array.isArray(payload?.pendingRequests) ? payload.pendingRequests : [],
         deniedRequests: Array.isArray(payload?.deniedRequests) ? payload.deniedRequests : [],
-      })
+      }
+      setScheduleData(nextSchedule)
+      setPtBookingGate(buildPtBookingGate(nextSchedule))
     } catch (err) {
-      setError(err?.response?.data?.message || 'Cannot load your PT schedule')
+      setPtBookingGate({
+        loaded: true,
+        blocked: false,
+        type: '',
+        reason: '',
+        pendingRequest: null,
+        activeSession: null,
+      })
+      if (!silent) {
+        setError(err?.response?.data?.message || 'Cannot load your PT schedule')
+      }
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -173,109 +291,174 @@ function CustomerCoachBookingPage() {
     return map
   }, [timeSlots])
 
-  const weeklySlots = useMemo(() => {
-    const dedup = new Map()
-    requestedDateSlots.forEach((item) => {
-      const dayOfWeek = toDayOfWeek(item.date)
-      if (!dayOfWeek) return
-      const key = `${dayOfWeek}-${item.timeSlotId}`
-      if (!dedup.has(key)) {
-        dedup.set(key, { dayOfWeek, timeSlotId: item.timeSlotId })
-      }
-    })
-    return Array.from(dedup.values()).sort((a, b) => {
-      if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek
-      return a.timeSlotId - b.timeSlotId
-    })
-  }, [requestedDateSlots])
+  const weeklySlots = useMemo(
+    () =>
+      requestedWeeklySlots.slice().sort((a, b) => {
+        if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek
+        return a.timeSlotId - b.timeSlotId
+      }),
+    [requestedWeeklySlots],
+  )
 
-  const calendarWeeks = useMemo(() => buildCalendarWeeks(plannerModal.monthCursor), [plannerModal.monthCursor])
+  const selectedSlotsByDay = useMemo(() => {
+    const counts = new Map()
+    weeklySlots.forEach((item) => {
+      counts.set(item.dayOfWeek, (counts.get(item.dayOfWeek) || 0) + 1)
+    })
+    return counts
+  }, [weeklySlots])
 
   const coachReviewRows = useMemo(() => {
     if (!coachReviewModal.coach) return []
     const unavailable = Array.isArray(coachReviewModal.coach.unavailableSlots) ? coachReviewModal.coach.unavailableSlots : []
-    return requestedDateSlots
-      .slice()
-      .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlotId - b.timeSlotId)
-      .map((item) => {
-        const dayOfWeek = toDayOfWeek(item.date)
-        const blocked = unavailable.find((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === item.timeSlotId)
-        return {
-          ...item,
-          unavailable: Boolean(blocked),
-          reason: blocked?.reason || null,
-        }
-      })
-  }, [coachReviewModal.coach, requestedDateSlots])
+    return weeklySlots.map((item) => {
+      const blocked = unavailable.find((slot) => slot.dayOfWeek === item.dayOfWeek && slot.timeSlotId === item.timeSlotId)
+      return {
+        ...item,
+        dayLabel: getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`,
+        unavailable: Boolean(blocked),
+        reason: blocked?.reason || null,
+      }
+    }).sort((a, b) => {
+      if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek
+      return a.timeSlotId - b.timeSlotId
+    })
+  }, [coachReviewModal.coach, weeklySlots])
 
   const unresolvedReviewCount = useMemo(
     () => coachReviewRows.filter((item) => item.unavailable).length,
     [coachReviewRows],
   )
+  const datePickerDays = useMemo(() => buildMonthGrid(datePicker.monthCursor), [datePicker.monthCursor])
+  const currentMembershipPlan = membershipGate.membership?.plan ?? {}
+
+  function requireCoachBookingMembership() {
+    if (membershipGate.loading) {
+      setError('Checking your membership status. Please wait a moment.')
+      return false
+    }
+    if (!membershipGate.eligible) {
+      setMembershipBlockedModal(true)
+      return false
+    }
+    return true
+  }
+
+  function requireNoExistingPtBooking() {
+    if (!ptBookingGate.loaded) {
+      setError('Checking your current PT booking status. Please wait a moment.')
+      return false
+    }
+    if (!ptBookingGate.blocked) {
+      return true
+    }
+    setPtBookingBlockedModal(true)
+    return false
+  }
 
   function openPlannerModal() {
-    const today = formatDateValue(new Date())
-    const nextMonth = addDays(today, 30)
-    const startDate = form.startDate || today
-    const endDate = form.endDate || nextMonth
-
-    if (!form.startDate || !form.endDate) {
+    if (!requireCoachBookingMembership()) {
+      return
+    }
+    if (!requireNoExistingPtBooking()) {
+      return
+    }
+    if (!form.endDate) {
       setForm((prev) => ({
         ...prev,
-        startDate,
-        endDate,
+        endDate: formatDateValue(addDays(minimumBookingStartDate, 28)),
       }))
     }
 
     setPlannerModal({
       open: true,
-      focusDate: startDate,
-      monthCursor: `${startDate.slice(0, 7)}-01`,
+      focusDay: weeklySlots[0]?.dayOfWeek || 1,
     })
   }
 
-  function isDateInSelectedRange(dateValue) {
-    if (!form.startDate || !form.endDate) return false
-    return dateValue >= form.startDate && dateValue <= form.endDate
+  function closePlannerModal() {
+    closeDatePicker()
+    setPlannerModal({ open: false, focusDay: 1 })
+  }
+
+  function openDatePicker(field) {
+    const baseDate = parseDateValue(form[field]) || minimumBookingStartDate
+    setDatePicker({
+      field,
+      monthCursor: formatDateValue(new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)),
+    })
+  }
+
+  function closeDatePicker() {
+    setDatePicker({ field: '', monthCursor: '' })
   }
 
   function setPlannerRange(patch) {
+    setHasPreviewedMatches(false)
     setForm((prev) => {
       const next = { ...prev, ...patch }
-      if (next.startDate && next.endDate && next.startDate > next.endDate) {
-        return { ...next, endDate: next.startDate }
+      if (next.endDate && next.endDate < minimumBookingStartValue) {
+        return { ...next, endDate: minimumBookingStartValue }
       }
       return next
     })
   }
 
-  function selectCalendarDate(dateValue) {
-    if (!isDateInSelectedRange(dateValue)) return
-    setPlannerModal((prev) => ({ ...prev, focusDate: dateValue }))
+  function pickPlannerDate(field, value) {
+    setPlannerRange({ [field]: value })
+    closeDatePicker()
   }
 
-  function isDateSlotSelected(dateValue, timeSlotId) {
-    return requestedDateSlots.some((slot) => slot.date === dateValue && slot.timeSlotId === timeSlotId)
+  function selectPlannerDay(dayOfWeek) {
+    setPlannerModal((prev) => ({ ...prev, focusDay: dayOfWeek }))
   }
 
-  function toggleDateSlot(dateValue, timeSlotId) {
-    const exists = requestedDateSlots.some((slot) => slot.date === dateValue && slot.timeSlotId === timeSlotId)
+  function isWeeklySlotSelected(dayOfWeek, timeSlotId) {
+    return requestedWeeklySlots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
+  }
+
+  function toggleWeeklySlot(dayOfWeek, timeSlotId) {
+    setHasPreviewedMatches(false)
+    const exists = requestedWeeklySlots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
     if (exists) {
-      setRequestedDateSlots((prev) => prev.filter((slot) => !(slot.date === dateValue && slot.timeSlotId === timeSlotId)))
+      setRequestedWeeklySlots((prev) => prev.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)))
       return
     }
-    setRequestedDateSlots((prev) => [...prev, { date: dateValue, timeSlotId }])
+    setRequestedWeeklySlots((prev) => [...prev, { dayOfWeek, timeSlotId }])
   }
 
-  function removeRequestedDateSlot(dateValue, timeSlotId) {
-    setRequestedDateSlots((prev) => prev.filter((slot) => !(slot.date === dateValue && slot.timeSlotId === timeSlotId)))
+  function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
+    setHasPreviewedMatches(false)
+    setRequestedWeeklySlots((prev) => prev.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)))
   }
 
-  function formatSlotLabel(timeSlotId) {
+  const formatSlotLabel = useCallback((timeSlotId) => {
     const slot = timeSlotById.get(timeSlotId)
     if (!slot) return `Slot ${timeSlotId}`
     return `Slot ${slot.slotIndex} (${String(slot.startTime || '').slice(0, 5)}-${String(slot.endTime || '').slice(0, 5)})`
-  }
+  }, [timeSlotById])
+
+  const ptBookingGateSummary = useMemo(() => {
+    if (ptBookingGate.type === 'PENDING' && ptBookingGate.pendingRequest) {
+      return {
+        title: ptBookingGate.pendingRequest.coachName || 'Pending PT request',
+        detail: `Request window: ${ptBookingGate.pendingRequest.startDate || '-'} to ${ptBookingGate.pendingRequest.endDate || '-'}`,
+        badge: 'Pending approval',
+      }
+    }
+    if (ptBookingGate.type === 'ACTIVE' && ptBookingGate.activeSession) {
+      return {
+        title: ptBookingGate.activeSession.coachName || 'Active PT schedule',
+        detail: `Next session: ${ptBookingGate.activeSession.sessionDate || '-'} | ${formatSlotLabel(ptBookingGate.activeSession.timeSlotId)}`,
+        badge: 'Current PT active',
+      }
+    }
+    return {
+      title: 'No blocking PT request',
+      detail: 'You can open the planner and preview coach matches.',
+      badge: 'Available',
+    }
+  }, [ptBookingGate, formatSlotLabel])
 
   function getUnavailableReason(reason) {
     if (reason === 'BOOKED_IN_RANGE') return 'Already booked in selected date range'
@@ -283,8 +466,56 @@ function CustomerCoachBookingPage() {
     return 'Unavailable'
   }
 
+  function getSessionStatusAppearance(status) {
+    const normalized = String(status || '').toUpperCase()
+    if (normalized === 'SCHEDULED') {
+      return {
+        badge: 'bg-emerald-500/15 text-emerald-700',
+        card: 'border-emerald-200 bg-emerald-50/60',
+        dot: 'bg-emerald-500',
+      }
+    }
+    if (normalized === 'COMPLETED') {
+      return {
+        badge: 'bg-sky-500/15 text-sky-700',
+        card: 'border-sky-200 bg-sky-50/60',
+        dot: 'bg-sky-500',
+      }
+    }
+    if (normalized === 'CANCELLED') {
+      return {
+        badge: 'bg-red-500/15 text-red-700',
+        card: 'border-red-200 bg-red-50/50',
+        dot: 'bg-red-500',
+      }
+    }
+    return {
+      badge: 'bg-slate-100 text-slate-700',
+      card: 'border-slate-200 bg-white',
+      dot: 'bg-slate-400',
+    }
+  }
+
+  async function loadMembershipGate() {
+    try {
+      const response = await membershipApi.getCurrentMembership()
+      const nextState = buildCoachBookingMembershipGate(response)
+      setMembershipGate({
+        loading: false,
+        ...nextState,
+      })
+    } catch {
+      setMembershipGate({
+        loading: false,
+        eligible: false,
+        membership: {},
+        reason: 'Cannot verify your membership right now. Please try again or open the membership page first.',
+      })
+    }
+  }
+
   function openCoachReview(coach) {
-    if (!form.startDate || !form.endDate || requestedDateSlots.length === 0) {
+    if (!form.endDate || weeklySlots.length === 0) {
       setError('Please set desired schedule first.')
       return
     }
@@ -295,12 +526,18 @@ function CustomerCoachBookingPage() {
   }
 
   async function previewMatches() {
-    if (!form.startDate || !form.endDate || weeklySlots.length === 0) {
-      setError('Please set date range and pick at least one slot in planner.')
+    if (!requireCoachBookingMembership()) {
       return
     }
-    if (new Date(form.startDate) > new Date(form.endDate)) {
-      setError('Start date must be before or equal to end date.')
+    if (!requireNoExistingPtBooking()) {
+      return
+    }
+    if (!form.endDate || weeklySlots.length === 0) {
+      setError('Please set the booking end date and pick at least one recurring slot in the planner.')
+      return
+    }
+    if (form.endDate < minimumBookingStartValue) {
+      setError('The booking end date must be on or after the earliest possible coaching start date.')
       return
     }
 
@@ -308,7 +545,6 @@ function CustomerCoachBookingPage() {
       setLoading(true)
       setError('')
       const response = await coachBookingApi.matchCoaches({
-        startDate: form.startDate,
         endDate: form.endDate,
         slots: weeklySlots,
       })
@@ -317,6 +553,7 @@ function CustomerCoachBookingPage() {
         fullMatches: Array.isArray(payload?.fullMatches) ? payload.fullMatches : [],
         partialMatches: Array.isArray(payload?.partialMatches) ? payload.partialMatches : [],
       })
+      setHasPreviewedMatches(true)
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot preview coach matches')
     } finally {
@@ -324,8 +561,21 @@ function CustomerCoachBookingPage() {
     }
   }
 
+  async function savePlannerAndSearch() {
+    if (!form.endDate || weeklySlots.length === 0) {
+      setError('Please set the booking end date and pick at least one recurring slot in the planner.')
+      return
+    }
+
+    closePlannerModal()
+    await previewMatches()
+  }
+
   async function requestCoach(coachId) {
-    if (!form.startDate || !form.endDate || weeklySlots.length === 0) {
+    if (!requireNoExistingPtBooking()) {
+      return
+    }
+    if (!form.endDate || weeklySlots.length === 0) {
       setError('Please set desired schedule first.')
       return
     }
@@ -334,7 +584,6 @@ function CustomerCoachBookingPage() {
       setError('')
       await coachBookingApi.createRequest({
         coachId,
-        startDate: form.startDate,
         endDate: form.endDate,
         slots: weeklySlots,
       })
@@ -411,9 +660,46 @@ function CustomerCoachBookingPage() {
     () => scheduleData.items.filter((s) => String(s.status || '').toUpperCase() === 'COMPLETED'),
     [scheduleData.items],
   )
+  const sessionsByDate = useMemo(() => {
+    const grouped = new Map()
+    scheduleData.items.forEach((session) => {
+      const date = session.sessionDate
+      if (!date) return
+      const existing = grouped.get(date) || []
+      existing.push(session)
+      grouped.set(date, existing)
+    })
+    return grouped
+  }, [scheduleData.items])
+  const scheduleCalendarDays = useMemo(() => buildMonthGrid(scheduleMonthCursor), [scheduleMonthCursor])
+  const selectedScheduleItems = useMemo(
+    () => (selectedScheduleDate ? sessionsByDate.get(selectedScheduleDate) || [] : []),
+    [selectedScheduleDate, sessionsByDate],
+  )
+
+  useEffect(() => {
+    const firstSessionDate = scheduleData.items
+      .map((item) => item.sessionDate)
+      .filter(Boolean)
+      .sort()[0]
+
+    if (firstSessionDate) {
+      const firstDate = parseDateValue(firstSessionDate)
+      if (firstDate) {
+        const firstMonth = formatDateValue(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1))
+        setScheduleMonthCursor((prev) => prev || firstMonth)
+      }
+      setSelectedScheduleDate((prev) => prev || firstSessionDate)
+      return
+    }
+
+    const currentMonth = formatDateValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+    setScheduleMonthCursor((prev) => prev || currentMonth)
+    setSelectedScheduleDate('')
+  }, [scheduleData.items])
 
   return (
-    <WorkspaceScaffold title="Coach Booking" subtitle="Pick desired weekly slots first, then request matched coaches." links={customerNav}>
+    <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
         <div className="flex gap-2">
           <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold ${activeTab === 'match' ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Match Coaches</button>
@@ -434,7 +720,7 @@ function CustomerCoachBookingPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
-                  <p className="text-sm text-slate-600">Pick exact date slots in a calendar popup, then preview matched coaches.</p>
+                  <p className="text-sm text-slate-600">Pick recurring weekday slots in the planner, then preview matched coaches.</p>
                 </div>
                 <button
                   onClick={openPlannerModal}
@@ -446,27 +732,28 @@ function CustomerCoachBookingPage() {
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                  <span>Start: <strong className="text-slate-800">{form.startDate || '-'}</strong></span>
-                  <span>End: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
-                  <span>Selected date-slots: <strong className="text-slate-800">{requestedDateSlots.length}</strong></span>
-                  <span>Unique weekly slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
+                  <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
+                  <span>Repeat end date: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
+                  <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
+                  <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
                 </div>
-                {requestedDateSlots.length === 0 && (
+                <p className="text-sm text-slate-600">
+                  Coaches have up to 1 week to approve. After approval, sessions start on the next Monday.
+                </p>
+                {weeklySlots.length === 0 && (
                   <p className="text-sm text-slate-500">No slots selected yet.</p>
                 )}
-                {requestedDateSlots.length > 0 && (
+                {weeklySlots.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {requestedDateSlots
-                      .slice()
-                      .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlotId - b.timeSlotId)
+                    {weeklySlots
                       .slice(0, 10)
                       .map((item) => (
-                        <span key={`${item.date}-${item.timeSlotId}`} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700">
-                          {item.date} · {formatSlotLabel(item.timeSlotId)}
+                        <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700">
+                          {getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`} | {formatSlotLabel(item.timeSlotId)}
                         </span>
                       ))}
-                    {requestedDateSlots.length > 10 && (
-                      <span className="text-xs text-slate-500 self-center">+{requestedDateSlots.length - 10} more</span>
+                    {weeklySlots.length > 10 && (
+                      <span className="text-xs text-slate-500 self-center">+{weeklySlots.length - 10} more</span>
                     )}
                   </div>
                 )}
@@ -477,29 +764,31 @@ function CustomerCoachBookingPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
-                <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
-                <p className="text-sm text-emerald-700">Coaches whose requested slots are all available in your selected period.</p>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
-                  {matches.fullMatches.map((coach) => (
-                    <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
-                  ))}
+            {hasPreviewedMatches && (
+              <div className="space-y-4">
+                <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
+                  <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
+                  <p className="text-sm text-emerald-700">Coaches whose requested slots are all available through your selected booking end date.</p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
+                    {matches.fullMatches.map((coach) => (
+                      <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <h4 className="text-lg font-bold text-amber-800">Partial Match</h4>
-                <p className="text-sm text-amber-700">Coaches with overlap but some requested slots already occupied or unavailable.</p>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
-                  {matches.partialMatches.map((coach) => (
-                    <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
-                  ))}
+                <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
+                  <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
+                  <p className="text-sm text-red-700">Coaches with overlap but some requested slots already occupied or unavailable before your selected booking end date.</p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
+                    {matches.partialMatches.map((coach) => (
+                      <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -513,7 +802,9 @@ function CustomerCoachBookingPage() {
                 <div className="space-y-2">
                   {scheduleData.pendingRequests.map((r) => (
                     <div key={r.ptRequestId} className="bg-white rounded-xl border border-amber-200 px-3 py-2 text-sm">
-                      {r.coachName}: {r.startDate} to {r.endDate}
+                      <div className="font-semibold text-slate-800">{r.coachName}</div>
+                      <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
+                      <div className="text-xs text-amber-700">Sessions begin on the next Monday after coach approval.</div>
                     </div>
                   ))}
                 </div>
@@ -534,30 +825,131 @@ function CustomerCoachBookingPage() {
               </section>
             )}
 
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {scheduleData.items.map((s) => (
-                <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-slate-900">{s.coachName}</h4>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700">{s.status}</span>
+            {!loading && scheduleData.items.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-12 text-center text-sm text-slate-500">
+                No PT sessions yet.
+              </div>
+            ) : (
+              <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Monthly view</p>
+                      <h4 className="text-lg font-bold text-slate-900">Your coaching calendar</h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                      >
+                        Prev
+                      </button>
+                      <div className="min-w-32 text-center text-sm font-bold text-slate-800">
+                        {parseDateValue(scheduleMonthCursor)?.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-sm text-slate-600">{s.sessionDate} | Slot {s.slotIndex} | {String(s.startTime || '').slice(0, 5)} - {String(s.endTime || '').slice(0, 5)}</div>
-                  {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-700">Reschedule pending coach approval</div>}
-                  {s.reschedule?.status === 'DENIED' && <div className="text-xs text-red-700">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
-                  <div className="flex gap-2">
-                    {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
-                      <>
-                        <button onClick={() => cancelSession(s.ptSessionId)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
-                        <button onClick={() => setRescheduleModal({ open: true, session: s, sessionDate: '', timeSlotId: '', reason: '' })} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">Reschedule</button>
-                      </>
-                    )}
+
+                  <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="grid grid-cols-7 gap-1">
+                      {DAYS.map((day) => (
+                        <div key={`schedule-header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          {day.shortLabel}
+                        </div>
+                      ))}
+                      {scheduleCalendarDays.map((day) => {
+                        const daySessions = sessionsByDate.get(day.value) || []
+                        const hasSessions = daySessions.length > 0
+                        const isSelected = selectedScheduleDate === day.value
+                        return (
+                          <button
+                            key={`schedule-day-${day.value}`}
+                            type="button"
+                            onClick={() => hasSessions && setSelectedScheduleDate(day.value)}
+                            aria-label={hasSessions ? `${day.value}, ${daySessions.length} coaching slot${daySessions.length > 1 ? 's' : ''}` : day.value}
+                            className={`min-h-24 rounded-2xl border p-2 text-left transition ${
+                              isSelected
+                                ? 'border-gym-600 bg-gym-50 shadow-sm'
+                                : hasSessions
+                                  ? 'border-emerald-200 bg-emerald-50/70 hover:border-gym-400 hover:bg-gym-50'
+                                  : day.isCurrentMonth
+                                    ? 'border-slate-200 bg-white text-slate-700'
+                                    : 'border-slate-100 bg-slate-100 text-slate-300'
+                            } ${hasSessions ? 'cursor-pointer' : 'cursor-default'}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <span className={`text-sm font-semibold ${day.isCurrentMonth ? 'text-slate-800' : 'text-slate-300'}`}>{day.dayNumber}</span>
+                              {hasSessions && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.14)]" />}
+                            </div>
+                            {hasSessions && (
+                              <div className="mt-6">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                  <span>{daySessions.length}</span>
+                                  <span>{daySessions.length === 1 ? 'slot' : 'slots'}</span>
+                                </div>
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
-              ))}
-              {!loading && scheduleData.items.length === 0 && (
-                <div className="text-sm text-slate-500">No PT sessions yet.</div>
-              )}
-            </section>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Selected date</p>
+                  <h4 className="mt-2 text-lg font-bold text-slate-900">
+                    {selectedScheduleDate ? formatHumanDate(selectedScheduleDate) : 'Pick a green-marked day'}
+                  </h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Dates with coaching sessions are marked with a green signal in the calendar.
+                  </p>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedScheduleItems.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                        No coaching sessions selected for this day.
+                      </div>
+                    )}
+                    {selectedScheduleItems.map((s) => {
+                      const appearance = getSessionStatusAppearance(s.status)
+                      return (
+                        <div key={s.ptSessionId} className={`rounded-2xl border p-4 space-y-3 ${appearance.card}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h5 className="font-bold text-slate-900">{s.coachName}</h5>
+                              <p className="text-sm text-slate-600">
+                                Slot {s.slotIndex} | {String(s.startTime || '').slice(0, 5)} - {String(s.endTime || '').slice(0, 5)}
+                              </p>
+                            </div>
+                            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>
+                              <span className={`h-2 w-2 rounded-full ${appearance.dot}`} />
+                              {s.status}
+                            </span>
+                          </div>
+                          {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-700">Reschedule pending coach approval</div>}
+                          {s.reschedule?.status === 'DENIED' && <div className="text-xs text-red-700">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
+                          {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
+                            <div className="flex gap-2">
+                              <button onClick={() => cancelSession(s.ptSessionId)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
+                              <button onClick={() => setRescheduleModal({ open: true, session: s, sessionDate: '', timeSlotId: '', reason: '' })} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">Reschedule</button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </section>
+            )}
           </div>
         )}
 
@@ -580,117 +972,103 @@ function CustomerCoachBookingPage() {
 
       {plannerModal.open && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-6xl bg-white rounded-2xl p-4 md:p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-visible rounded-2xl bg-white p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h4>
               <button
-                onClick={() => setPlannerModal({ open: false, focusDate: '', monthCursor: '' })}
+                onClick={closePlannerModal}
                 className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
               >
                 Close
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="text-xs text-slate-600">Start
-                  <input
-                    aria-label="Start date"
-                    type="date"
-                    value={form.startDate}
-                    onChange={(e) => {
-                      const nextStart = e.target.value
-                      setPlannerRange({ startDate: nextStart })
-                      if (nextStart) {
-                        setPlannerModal((prev) => ({
-                          ...prev,
-                          monthCursor: `${nextStart.slice(0, 7)}-01`,
-                          focusDate: nextStart,
-                        }))
-                      }
-                    }}
-                    className="mt-1 w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
-                  />
-                </label>
-                <label className="text-xs text-slate-600">End
-                  <input
-                    aria-label="End date"
-                    type="date"
-                    value={form.endDate}
-                    onChange={(e) => setPlannerRange({ endDate: e.target.value })}
-                    className="mt-1 w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
-                  />
-                </label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPlannerModal((prev) => ({ ...prev, monthCursor: shiftMonth(prev.monthCursor, -1) }))}
-                  className="px-2 py-1 rounded-md border border-slate-300 text-slate-600"
-                >
-                  ‹
-                </button>
-                <span className="text-sm font-semibold text-slate-700 min-w-32 text-center">{toMonthTitle(plannerModal.monthCursor)}</span>
-                <button
-                  onClick={() => setPlannerModal((prev) => ({ ...prev, monthCursor: shiftMonth(prev.monthCursor, 1) }))}
-                  className="px-2 py-1 rounded-md border border-slate-300 text-slate-600"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2 border border-slate-200 rounded-xl p-3">
-                <div className="grid grid-cols-7 gap-1 mb-2">
-                  {DAYS.map((day) => (
-                    <div key={day.id} className="text-[11px] font-semibold text-slate-500 text-center py-1">{day.label}</div>
-                  ))}
+            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+              <div className="relative z-10 grid gap-3 xl:grid-cols-[0.72fr_0.92fr_1fr]">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approval rule</p>
+                    <div className="mt-1.5 text-sm font-semibold text-slate-900">{minimumBookingStartValue}</div>
+                    <div className="mt-1 text-[11px] leading-relaxed text-slate-500">Earliest possible start if the coach uses the full 1-week approval window.</div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {calendarWeeks.flat().map((cell) => {
-                    const isInRange = isDateInSelectedRange(cell.date)
-                    const isFocused = plannerModal.focusDate === cell.date
-                    const selectedCount = requestedDateSlots.filter((item) => item.date === cell.date).length
-                    return (
+                <div className="relative rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat end date for booking</p>
+                  <button
+                    type="button"
+                    aria-label="Repeat end date for booking"
+                    onClick={() => openDatePicker('endDate')}
+                    className="mt-2 flex w-full items-center justify-between rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-left transition hover:border-gym-400 hover:bg-gym-50"
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{formatHumanDate(form.endDate)}</div>
+                      <div className="text-[11px] text-slate-500">Choose when the recurring booking should stop</div>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">Edit</span>
+                  </button>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                    After approval, sessions start on the next Monday and continue until this end date.
+                  </p>
+                  {datePicker.field === 'endDate' && (
+                    <DatePickerPopover
+                      title="Repeat end date"
+                      monthCursor={datePicker.monthCursor}
+                      selectedValue={form.endDate}
+                      minValue={minimumBookingStartValue}
+                      onShiftMonth={(delta) => setDatePicker((prev) => ({ ...prev, monthCursor: shiftMonth(prev.monthCursor, delta) }))}
+                      onSelect={(value) => pickPlannerDate('endDate', value)}
+                      onClose={closeDatePicker}
+                      days={datePickerDays}
+                    />
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planner guide</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                    Choose a weekday from Monday to Sunday, then pick recurring time slots. Approved coaching always starts from the next Monday.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid min-h-0 grid-cols-1 gap-3 lg:grid-cols-[1.7fr_0.9fr]">
+                <div className="min-h-0 rounded-xl border border-slate-200 p-3">
+                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    {DAYS.map((day) => (
                       <button
-                        key={cell.date}
-                        onClick={() => selectCalendarDate(cell.date)}
-                        disabled={!isInRange}
-                        className={`h-14 rounded-lg border text-left px-2 py-1 transition ${
-                          !cell.isCurrentMonth
-                            ? 'bg-slate-50 text-slate-400 border-slate-100'
-                            : 'bg-white text-slate-700 border-slate-200'
-                        } ${isInRange ? 'hover:border-gym-400' : 'opacity-45 cursor-not-allowed'} ${isFocused ? 'border-gym-600 ring-1 ring-gym-600/30' : ''}`}
+                        key={day.id}
+                        type="button"
+                        onClick={() => selectPlannerDay(day.id)}
+                        className={`rounded-2xl border px-3 py-3 text-left transition ${
+                          plannerModal.focusDay === day.id
+                            ? 'border-gym-600 bg-gym-50 text-gym-900 shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-gym-300 hover:bg-slate-50'
+                        }`}
                       >
-                        <div className="text-xs font-semibold">{Number(cell.date.slice(8, 10))}</div>
-                        {selectedCount > 0 && (
-                          <div className="mt-1 inline-flex items-center justify-center min-w-5 px-1 text-[10px] font-semibold rounded-full bg-gym-100 text-gym-700">
-                            {selectedCount}
-                          </div>
-                        )}
+                        <div className="text-sm font-bold">{day.label}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {selectedSlotsByDay.get(day.id) || 0} slot(s) selected
+                        </div>
                       </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="border border-slate-200 rounded-xl p-3 space-y-3">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Selected date</p>
-                  <p className="text-sm font-bold text-slate-900">{plannerModal.focusDate || '-'}</p>
+                    ))}
+                  </div>
                 </div>
 
-                {plannerModal.focusDate && isDateInSelectedRange(plannerModal.focusDate) ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-slate-600">Available slots</p>
-                    <div className="max-h-72 overflow-y-auto space-y-2">
+                <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 p-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Selected weekday</p>
+                    <p className="text-sm font-bold text-slate-900">{getDayMeta(plannerModal.focusDay)?.label || '-'}</p>
+                  </div>
+
+                  <div className="mt-3 min-h-0 flex-1 space-y-2">
+                    <p className="text-xs font-semibold text-slate-600">Pick recurring slots</p>
+                    <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
                       {timeSlots.map((slot) => {
-                        const selected = isDateSlotSelected(plannerModal.focusDate, slot.timeSlotId)
+                        const selected = isWeeklySlotSelected(plannerModal.focusDay, slot.timeSlotId)
                         return (
                           <button
-                            key={`planner-slot-${slot.timeSlotId}`}
-                            onClick={() => toggleDateSlot(plannerModal.focusDate, slot.timeSlotId)}
+                            key={`planner-slot-${plannerModal.focusDay}-${slot.timeSlotId}`}
+                            onClick={() => toggleWeeklySlot(plannerModal.focusDay, slot.timeSlotId)}
                             className={`w-full text-left px-3 py-2 rounded-lg border text-xs ${
                               selected
                                 ? 'bg-gym-600 text-white border-gym-600'
@@ -704,34 +1082,50 @@ function CustomerCoachBookingPage() {
                       })}
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-600">Selected recurring slots</p>
+                    <p className="mt-1 text-[11px] text-slate-500">Remove any slot directly from the list below.</p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={closePlannerModal}
+                      className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={savePlannerAndSearch}
+                      disabled={loading || weeklySlots.length === 0}
+                      className="px-4 py-2 rounded-xl bg-gym-600 text-sm font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {loading ? 'Searching...' : 'Save and Search'}
+                    </button>
+                  </div>
+                </div>
+                {weeklySlots.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">No slots selected.</p>
                 ) : (
-                  <p className="text-sm text-slate-500">Choose a date inside the selected range to pick slots.</p>
+                  <div className="mt-3 flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1">
+                    {weeklySlots
+                      .map((item) => (
+                        <button
+                          key={`picked-${item.dayOfWeek}-${item.timeSlotId}`}
+                          onClick={() => removeRequestedWeeklySlot(item.dayOfWeek, item.timeSlotId)}
+                          className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-red-300 hover:text-red-700"
+                          title="Remove slot"
+                        >
+                          {getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`} | {formatSlotLabel(item.timeSlotId)}
+                          <span className="font-bold">x</span>
+                        </button>
+                      ))}
+                  </div>
                 )}
               </div>
-            </div>
-
-            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
-              <p className="text-xs font-semibold text-slate-600 mb-2">Selected date-slots</p>
-              {requestedDateSlots.length === 0 ? (
-                <p className="text-sm text-slate-500">No slots selected.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {requestedDateSlots
-                    .slice()
-                    .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlotId - b.timeSlotId)
-                    .map((item) => (
-                      <button
-                        key={`picked-${item.date}-${item.timeSlotId}`}
-                        onClick={() => removeRequestedDateSlot(item.date, item.timeSlotId)}
-                        className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-red-300 hover:text-red-700"
-                        title="Remove slot"
-                      >
-                        {item.date} · {formatSlotLabel(item.timeSlotId)}
-                        <span className="font-bold">×</span>
-                      </button>
-                    ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -743,7 +1137,7 @@ function CustomerCoachBookingPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h4 className="text-lg font-bold text-slate-900">Coach Match Review</h4>
-                <p className="text-sm text-slate-600">{coachReviewModal.coach.fullName} · {coachReviewModal.coach.email}</p>
+                <p className="text-sm text-slate-600">{coachReviewModal.coach.fullName}  |  {coachReviewModal.coach.email}</p>
               </div>
               <button
                 onClick={() => setCoachReviewModal({ open: false, coach: null })}
@@ -761,12 +1155,12 @@ function CustomerCoachBookingPage() {
               {coachReviewRows.length === 0 && <p className="text-sm text-slate-500">No selected slots to review.</p>}
               {coachReviewRows.map((row) => (
                 <div
-                  key={`review-${row.date}-${row.timeSlotId}`}
+                  key={`review-${row.dayOfWeek}-${row.timeSlotId}`}
                   className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${row.unavailable ? 'border-red-500/30 bg-red-500/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
                 >
                   <div>
                     <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : 'text-emerald-800'}`}>
-                      {row.date} · {formatSlotLabel(row.timeSlotId)}
+                      {row.dayLabel} | {formatSlotLabel(row.timeSlotId)}
                     </div>
                     <div className={`text-xs ${row.unavailable ? 'text-red-700' : 'text-emerald-700'}`}>
                       {row.unavailable ? getUnavailableReason(row.reason) : 'Matched'}
@@ -774,7 +1168,7 @@ function CustomerCoachBookingPage() {
                   </div>
                   {row.unavailable ? (
                     <button
-                      onClick={() => removeRequestedDateSlot(row.date, row.timeSlotId)}
+                      onClick={() => removeRequestedWeeklySlot(row.dayOfWeek, row.timeSlotId)}
                       className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-700 bg-white"
                     >
                       Remove
@@ -801,7 +1195,7 @@ function CustomerCoachBookingPage() {
               </button>
               <button
                 onClick={() => requestCoach(coachReviewModal.coach.coachId)}
-                disabled={loading || unresolvedReviewCount > 0 || requestedDateSlots.length === 0}
+                disabled={loading || unresolvedReviewCount > 0 || weeklySlots.length === 0}
                 className="px-4 py-2 rounded-xl bg-gym-600 text-white disabled:opacity-50"
               >
                 Confirm Booking Request
@@ -856,6 +1250,108 @@ function CustomerCoachBookingPage() {
           </div>
         </div>
       )}
+
+      {ptBookingBlockedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <button
+              type="button"
+              aria-label="Close PT booking popup"
+              onClick={() => setPtBookingBlockedModal(false)}
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X size={20} />
+            </button>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">PT booking unavailable</p>
+              <h4 className="text-2xl font-bold text-slate-900">You already have a PT booking in progress.</h4>
+              <p className="text-sm leading-relaxed text-slate-600">
+                {ptBookingGate.reason || 'You cannot start another PT booking while a request is pending or your current PT schedule is still active.'}
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current PT status</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{ptBookingGateSummary.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{ptBookingGateSummary.detail}</p>
+                </div>
+                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                  {ptBookingGateSummary.badge}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPtBookingBlockedModal(false)
+                  setActiveTab('schedule')
+                }}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Open My PT Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {membershipBlockedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <button
+              type="button"
+              aria-label="Close membership popup"
+              onClick={() => setMembershipBlockedModal(false)}
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X size={20} />
+            </button>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Membership required</p>
+              <h4 className="text-2xl font-bold text-slate-900">Coach booking is locked for your current membership.</h4>
+              <p className="text-sm leading-relaxed text-slate-600">
+                {membershipGate.reason || 'You need an active Gym + Coach membership before using the schedule planner or previewing coach matches.'}
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current membership</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{currentMembershipPlan?.name || 'No active Gym + Coach membership'}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Status: <span className="font-semibold text-slate-700">{membershipGate.membership?.status || 'NONE'}</span>
+                  </p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${membershipGate.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                  {membershipGate.eligible ? 'Eligible' : 'Not eligible'}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Link
+                to="/customer/current-membership"
+                onClick={() => setMembershipBlockedModal(false)}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                View my membership
+              </Link>
+              <Link
+                to="/customer/membership"
+                onClick={() => setMembershipBlockedModal(false)}
+                className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700"
+              >
+                Buy Gym + Coach plan
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </WorkspaceScaffold>
   )
 }
@@ -867,13 +1363,13 @@ function CoachCard({ coach, onReview }) {
   const isFullMatch = String(coach.matchType || '').toUpperCase() === 'FULL'
 
   return (
-    <article className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
+    <article className={`rounded-xl border p-4 space-y-2 ${isFullMatch ? 'border-emerald-200 bg-white' : 'border-red-200 bg-red-50/35'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h5 className="font-bold text-slate-900">{coach.fullName}</h5>
           <p className="text-xs text-slate-500">{coach.email}</p>
         </div>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-700' : 'bg-red-500/15 text-red-700'}`}>
           {coach.matchedSlots}/{coach.requestedSlots} slots
         </span>
       </div>
@@ -889,4 +1385,95 @@ function CoachCard({ coach, onReview }) {
   )
 }
 
+function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShiftMonth, onSelect, onClose, days }) {
+  const monthDate = parseDateValue(monthCursor)
+  const monthTitle = monthDate
+    ? monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : ''
+  const selectedLabel = formatHumanDate(selectedValue)
+
+  return (
+    <div className="absolute left-1/2 top-2 z-30 w-[min(26rem,calc(100vw-3rem))] -translate-x-1/2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+      <div className="bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.14),_transparent_55%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] px-4 py-4 text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold">{title}</p>
+            <p className="text-xs text-slate-200">Pick a date inside your recurring booking window.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/20"
+          >
+            Close
+          </button>
+        </div>
+        <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-300">Selected</span>
+          <span className="text-sm font-semibold">{selectedLabel}</span>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => onShiftMonth(-1)}
+            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+          >
+            Prev
+          </button>
+          <div className="text-center">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Month</div>
+            <div className="text-sm font-bold text-slate-800">{monthTitle}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onShiftMonth(1)}
+            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+          >
+            Next
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+          <div className="grid grid-cols-7 gap-1">
+            {DAYS.map((day) => (
+              <div key={`header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                {day.shortLabel}
+              </div>
+            ))}
+            {days.map((day) => {
+              const isDisabled = Boolean(minValue) && day.value < minValue
+              const isSelected = selectedValue === day.value
+              return (
+                <button
+                  key={day.value}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => onSelect(day.value)}
+                  className={`aspect-square rounded-2xl border text-sm font-semibold transition ${
+                    isSelected
+                      ? 'border-gym-600 bg-gym-600 text-white shadow-sm shadow-gym-600/30'
+                      : day.isCurrentMonth
+                        ? 'border-slate-200 bg-white text-slate-700 hover:border-gym-300 hover:bg-gym-50'
+                        : 'border-slate-100 bg-slate-100 text-slate-300'
+                  } ${isDisabled ? 'cursor-not-allowed opacity-35' : ''}`}
+                >
+                  {day.dayNumber}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <p className="mt-3 text-[11px] text-slate-500">
+          {minValue ? `Dates before ${formatHumanDate(minValue)} are disabled.` : 'You can choose any day to start the recurring booking.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default CustomerCoachBookingPage
+

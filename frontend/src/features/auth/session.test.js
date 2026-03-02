@@ -14,8 +14,8 @@ describe('auth session', () => {
 
   it('stores and loads auth user', () => {
     expect(getAuthUser()).toBeNull()
-    setAuthUser({ fullName: 'Nguyễn Văn Minh', email: 'a@gymcore.local' })
-    expect(getAuthUser()?.fullName).toBe('Nguyễn Văn Minh')
+    setAuthUser({ fullName: 'Jordan Miles', email: 'a@gymcore.local' })
+    expect(getAuthUser()?.fullName).toBe('Jordan Miles')
   })
 
   it('notifies subscribers when session changes', () => {
@@ -27,4 +27,3 @@ describe('auth session', () => {
     expect(cb).toHaveBeenCalled()
   })
 })
-

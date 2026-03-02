@@ -138,8 +138,8 @@ class AuthServiceLoginTest {
     }
 
     @Test
-    void loginWithPassword_shouldTrimAndLowercaseEmail_typicalVietnameseImeWhitespace() {
-        // IME/typing on Vietnamese keyboards often leaves accidental whitespace.
+    void loginWithPassword_shouldTrimAndLowercaseEmail_withWhitespaceAndMixedCaseEmail() {
+        // IME/typing on some input methods often leaves accidental whitespace.
         when(jdbcTemplate.queryForObject(contains("FROM dbo.Users"), any(RowMapper.class), eq("customer@gymcore.local")))
                 .thenReturn(customerUser(true, true, false, "$2a$hash"));
         when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
@@ -161,7 +161,7 @@ class AuthServiceLoginTest {
     }
 
     @Test
-    void loginWithPassword_shouldAcceptUnicodePassword_typicalVietnameseTyping() {
+    void loginWithPassword_shouldAcceptUnicodePassword_withUnicodeCharacters() {
         stubUserLookup(customerUser(true, true, false, "$2a$hash"));
         when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
         when(jdbcTemplate.update(any(), any(KeyHolder.class))).thenAnswer(invocation -> {
@@ -170,16 +170,16 @@ class AuthServiceLoginTest {
             return 1;
         });
 
-        String vietnamesePassword = "mậtkhẩuđẹp123";
+        String unicodePassword = "Password１２３!";
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(HttpHeaders.USER_AGENT, "JUnit");
         request.setRemoteAddr("127.0.0.1");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        Map<String, Object> result = authService.loginWithPassword("customer@gymcore.local", vietnamesePassword, request, response);
+        Map<String, Object> result = authService.loginWithPassword("customer@gymcore.local", unicodePassword, request, response);
         assertNotNull(result.get("accessToken"));
 
-        verify(passwordEncoder).matches(eq(vietnamesePassword), anyString());
+        verify(passwordEncoder).matches(eq(unicodePassword), anyString());
     }
 
     @Test
@@ -439,7 +439,7 @@ class AuthServiceLoginTest {
                 1,
                 "Customer",
                 "CUSTOMER",
-                "Nguyễn Văn Minh",
+                "Jordan Miles",
                 "customer@gymcore.local",
                 "0900123456",
                 passwordHash,

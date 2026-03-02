@@ -44,7 +44,7 @@ function AdminMembershipsPage() {
     },
   })
 
-  const plans = plansQuery.data?.data?.plans ?? []
+  const plans = useMemo(() => plansQuery.data?.data?.plans ?? [], [plansQuery.data])
   const filteredPlans = useMemo(
     () =>
       plans.filter((plan) => {

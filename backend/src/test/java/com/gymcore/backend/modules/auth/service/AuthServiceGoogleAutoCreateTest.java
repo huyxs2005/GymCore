@@ -61,7 +61,7 @@ class AuthServiceGoogleAutoCreateTest {
                         "email", "newuser@gmail.com",
                         "sub", "sub-new-123",
                         "email_verified", "true",
-                        "name", "Trần Minh Huy"
+                        "name", "Alex Carter"
                 ));
 
         // No existing provider link.
@@ -97,7 +97,7 @@ class AuthServiceGoogleAutoCreateTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), eq(101)))
                 .thenReturn(new UserRecord(
                         101, 1, "Customer", "CUSTOMER",
-                        "Trần Minh Huy", "newuser@gmail.com", null, null,
+                        "Alex Carter", "newuser@gmail.com", null, null,
                         false, true, true,
                         null, null
                 ));
@@ -125,4 +125,3 @@ class AuthServiceGoogleAutoCreateTest {
         field.set(target, value);
     }
 }
-

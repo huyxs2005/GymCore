@@ -35,15 +35,15 @@ function CustomerPromotionsPage() {
   const formatPostBenefit = (post) => {
     const discountPercent = Number(post.DiscountPercent || 0)
     const discountAmount = Number(post.DiscountAmount || 0)
-    const bonusDays = Number(post.BonusDurationDays || 0)
+    const bonusMonths = Number(post.BonusDurationMonths || 0)
     const parts = []
     if (discountPercent > 0) {
       parts.push(`${discountPercent}% OFF`)
     } else if (discountAmount > 0) {
       parts.push(`${discountAmount.toLocaleString()} VND OFF`)
     }
-    if (bonusDays > 0) {
-      parts.push(`+${bonusDays} DAYS`)
+    if (bonusMonths > 0) {
+      parts.push(`+${bonusMonths} MONTH${bonusMonths > 1 ? 'S' : ''}`)
     }
     return parts.length > 0 ? parts.join(' + ') : 'SPECIAL'
   }

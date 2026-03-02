@@ -25,35 +25,35 @@ public class CheckinHealthController {
     @GetMapping("/checkin/qr")
     public ApiResponse<Map<String, Object>> getQrToken(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-        return ApiResponse.ok("Lấy mã QR check-in thành công",
+        return ApiResponse.ok("Check-in QR code loaded successfully",
                 checkinHealthService.execute("customer-get-qr", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/checkin/history")
     public ApiResponse<Map<String, Object>> getCheckinHistory(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-        return ApiResponse.ok("Lấy lịch sử check-in thành công",
+        return ApiResponse.ok("Check-in history loaded successfully",
                 checkinHealthService.execute("customer-get-checkin-history", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/health/current")
     public ApiResponse<Map<String, Object>> getCurrentHealth(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-        return ApiResponse.ok("Lấy chỉ số sức khỏe hiện tại thành công",
+        return ApiResponse.ok("Current health metrics loaded successfully",
                 checkinHealthService.execute("customer-get-health-current", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/health/history")
     public ApiResponse<Map<String, Object>> getHealthHistory(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-        return ApiResponse.ok("Lấy lịch sử sức khỏe thành công",
+        return ApiResponse.ok("Health history loaded successfully",
                 checkinHealthService.execute("customer-get-health-history", withAuth(authorizationHeader, null)));
     }
 
     @GetMapping("/health/coach-notes")
     public ApiResponse<Map<String, Object>> getCoachNotes(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-        return ApiResponse.ok("Lấy ghi chú từ HLV thành công",
+        return ApiResponse.ok("Coach notes loaded successfully",
                 checkinHealthService.execute("customer-get-coach-notes", withAuth(authorizationHeader, null)));
     }
 
@@ -61,7 +61,7 @@ public class CheckinHealthController {
     public ApiResponse<Map<String, Object>> createHealthRecord(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
             @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("Cập nhật chỉ số sức khỏe thành công",
+        return ApiResponse.ok("Health metrics updated successfully",
                 checkinHealthService.execute("customer-create-health-record", withAuth(authorizationHeader, payload)));
     }
 
@@ -97,8 +97,9 @@ public class CheckinHealthController {
 
     private Map<String, Object> withAuth(String auth, Map<String, Object> payload) {
         Map<String, Object> map = new java.util.LinkedHashMap<>();
-        if (payload != null)
+        if (payload != null) {
             map.putAll(payload);
+        }
         map.put("authorizationHeader", auth);
         return map;
     }

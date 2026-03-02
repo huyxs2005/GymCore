@@ -41,7 +41,7 @@ class AuthMailServiceTest {
 
     @Test
     void sendRegisterOtp_shouldSendMultipartWithPlainAndHtmlContainingOtp() throws Exception {
-        authMailService.sendRegisterOtp("to@gymcore.local", "Trần Minh Huy", "123456", 120);
+        authMailService.sendRegisterOtp("to@gymcore.local", "Alex Carter", "123456", 120);
 
         verify(mailSender).send(any(MimeMessage.class));
 
@@ -165,4 +165,3 @@ class AuthMailServiceTest {
         field.set(target, value);
     }
 }
-

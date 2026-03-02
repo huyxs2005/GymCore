@@ -48,7 +48,7 @@ describe('ProfilePage', () => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Trần Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         phone: '',
         role: 'CUSTOMER',
@@ -59,12 +59,13 @@ describe('ProfilePage', () => {
 
     authApi.getProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Trần Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' } },
     })
 
     renderWithQuery(<ProfilePage />)
 
     expect(await screen.findByText('My Profile')).toBeInTheDocument()
+    expect(screen.getByText(/Choose image/i)).toBeInTheDocument()
     expect(screen.queryByText(/Raw API payload/i)).not.toBeInTheDocument()
   })
 
@@ -101,7 +102,7 @@ describe('ProfilePage', () => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Trần Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         phone: '',
         role: 'CUSTOMER',
@@ -112,7 +113,7 @@ describe('ProfilePage', () => {
 
     authApi.getProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Trần Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' } },
     })
 
     renderWithQuery(<ProfilePage />)
@@ -144,7 +145,7 @@ describe('ProfilePage', () => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Tráº§n Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         phone: '',
         role: 'CUSTOMER',
@@ -155,12 +156,12 @@ describe('ProfilePage', () => {
 
     authApi.getProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Tráº§n Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
     })
 
     authApi.updateProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Tráº§n Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
     })
 
     renderWithQuery(<ProfilePage />)
@@ -175,7 +176,7 @@ describe('ProfilePage', () => {
 
     expect(authApi.updateProfile).toHaveBeenCalledTimes(1)
     expect(authApi.updateProfile).toHaveBeenCalledWith({
-      fullName: 'Tráº§n Minh Huy',
+      fullName: 'Alex Carter',
       phone: null,
       dateOfBirth: null,
       gender: null,
@@ -189,7 +190,7 @@ describe('ProfilePage', () => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Tráº§n Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         phone: '',
         role: 'CUSTOMER',
@@ -200,7 +201,7 @@ describe('ProfilePage', () => {
 
     authApi.getProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Tráº§n Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' } },
     })
 
     renderWithQuery(<ProfilePage />)
@@ -226,7 +227,7 @@ describe('ProfilePage', () => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Tráº§n Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         phone: '',
         role: 'CUSTOMER',
@@ -237,19 +238,19 @@ describe('ProfilePage', () => {
 
     authApi.getProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Tráº§n Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
     })
 
     authApi.updateProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Tráº§n Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '0905675437' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '0905675437' } },
     })
 
     renderWithQuery(<ProfilePage />)
 
     const phone = await screen.findByLabelText(/Phone/i)
     await user.clear(phone)
-    await user.type(phone, '０９０５６７５４３７')
+    await user.type(phone, '\uFF10\uFF19\uFF10\uFF15\uFF16\uFF17\uFF15\uFF14\uFF13\uFF17')
     expect(phone).toHaveValue('0905675437')
 
     const save = screen.getByRole('button', { name: /Save changes/i })
@@ -257,7 +258,7 @@ describe('ProfilePage', () => {
 
     expect(authApi.updateProfile).toHaveBeenCalledTimes(1)
     expect(authApi.updateProfile).toHaveBeenCalledWith({
-      fullName: 'Tráº§n Minh Huy',
+      fullName: 'Alex Carter',
       phone: '0905675437',
       dateOfBirth: null,
       gender: null,
@@ -271,7 +272,7 @@ describe('ProfilePage', () => {
       setAccessToken('token')
       setAuthUser({
         userId: 1,
-        fullName: 'Tráº§n Minh Huy',
+        fullName: 'Alex Carter',
         email: 'kironinja2015@gmail.com',
         phone: '',
         role: 'CUSTOMER',
@@ -282,7 +283,7 @@ describe('ProfilePage', () => {
 
     authApi.getProfile.mockResolvedValue({
       success: true,
-      data: { user: { fullName: 'Tráº§n Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
+      data: { user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER', phone: '' } },
     })
 
     renderWithQuery(<ProfilePage />)

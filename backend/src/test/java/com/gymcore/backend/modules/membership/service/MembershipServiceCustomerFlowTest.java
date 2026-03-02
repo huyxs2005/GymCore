@@ -353,11 +353,311 @@ class MembershipServiceCustomerFlowTest {
     }
 
     @Test
+    void customerPurchase_shouldApplyMembershipCouponDiscountAndBonusMonth() throws Exception {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+
+        when(jdbcTemplate.query(contains("cm.Status = 'PENDING'"), any(RowMapper.class), eq(5)))
+                .thenReturn(List.of());
+        when(jdbcTemplate.query(contains("cm.Status = 'PENDING'"), any(RowMapper.class), eq(5), eq(5)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.query(contains("WHERE mp.MembershipPlanID = ?"), any(RowMapper.class), eq(2)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "MembershipPlanID", 2,
+                            "PlanName", "Gym Only - 1 Month",
+                            "PlanType", "GYM_ONLY",
+                            "Price", new BigDecimal("500000"),
+                            "DurationDays", 30,
+                            "AllowsCoachBooking", false
+                    )), 0));
+                });
+
+        when(jdbcTemplate.query(contains("cm.Status = ?"), any(RowMapper.class), eq(5), anyString()))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.queryForObject(contains("SELECT FullName, Phone, Email"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return mapper.mapRow(resultSet(Map.of(
+                            "FullName", "Customer Minh",
+                            "Phone", "0900000004",
+                            "Email", "customer@gymcore.local"
+                    )), 0);
+                });
+
+        Map<String, Object> membershipClaim = new LinkedHashMap<>();
+        membershipClaim.put("ClaimID", 77);
+        membershipClaim.put("ApplyTarget", "MEMBERSHIP");
+        membershipClaim.put("DiscountPercent", new BigDecimal("10.00"));
+        membershipClaim.put("DiscountAmount", null);
+        membershipClaim.put("BonusDurationMonths", 1);
+        when(jdbcTemplate.queryForList(contains("FROM dbo.UserPromotionClaims"), eq(5), eq("MEMBERBOOST")))
+                .thenReturn(List.of(membershipClaim));
+
+        AtomicInteger insertSequence = new AtomicInteger(0);
+        when(jdbcTemplate.update(any(PreparedStatementCreator.class), any(KeyHolder.class)))
+                .thenAnswer(invocation -> {
+                    KeyHolder keyHolder = invocation.getArgument(1);
+                    int call = insertSequence.incrementAndGet();
+                    Map<String, Object> keyMap = new LinkedHashMap<>();
+                    if (call == 1) {
+                        keyMap.put("CustomerMembershipID", 211);
+                    } else {
+                        keyMap.put("PaymentID", 311);
+                    }
+                    keyHolder.getKeyList().add(keyMap);
+                    return 1;
+                });
+
+        when(payOsService.createPaymentLink(
+                eq(311),
+                eq(new BigDecimal("450000.00")),
+                contains("Membership"),
+                eq("Customer Minh"),
+                eq("0900000004"),
+                eq("customer@gymcore.local"),
+                eq("GymCore Membership"),
+                any(),
+                eq(null),
+                eq(null)))
+                .thenReturn(new PayOsService.PayOsLink("LINK-311", "https://payos.vn/checkout/311", "PENDING"));
+
+        when(jdbcTemplate.update(
+                contains("SET PayOS_PaymentLinkId = ?"),
+                eq("LINK-311"),
+                eq("https://payos.vn/checkout/311"),
+                eq("PENDING"),
+                eq(311)))
+                .thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = membershipService.execute(
+                "customer-purchase-membership",
+                "Bearer customer",
+                Map.of("planId", 2, "paymentMethod", "PAYOS", "promoCode", "MEMBERBOOST"));
+
+        assertEquals(new BigDecimal("500000"), response.get("subtotal"));
+        assertEquals(new BigDecimal("50000.00"), response.get("discount"));
+        assertEquals(new BigDecimal("450000.00"), response.get("totalAmount"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) response.get("membership");
+        assertEquals(LocalDate.now().toString(), membership.get("startDate"));
+        assertEquals(LocalDate.now().plusDays(29).plusMonths(1).toString(), membership.get("endDate"));
+    }
+
+    @Test
+    void customerGetCurrentMembership_shouldExposeAppliedCouponDetails() throws Exception {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+
+        when(jdbcTemplate.query(contains("p.CreatedAt < DATEADD"), any(RowMapper.class), eq(5), eq(5)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.query(contains("OUTER APPLY"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("CustomerMembershipID", 211);
+                    row.put("Status", "ACTIVE");
+                    row.put("StartDate", LocalDate.now().minusDays(5));
+                    row.put("EndDate", LocalDate.now().plusDays(24).plusMonths(1));
+                    row.put("MembershipCreatedAt", Timestamp.from(Instant.now()));
+                    row.put("MembershipPlanID", 2);
+                    row.put("PlanName", "Gym Only - 1 Month");
+                    row.put("PlanType", "GYM_ONLY");
+                    row.put("Price", new BigDecimal("500000"));
+                    row.put("DurationDays", 30);
+                    row.put("AllowsCoachBooking", false);
+                    row.put("PaymentID", 311);
+                    row.put("PaymentStatus", "PAID");
+                    row.put("PaymentMethod", "PAYOS");
+                    row.put("PayOS_Status", "PAID");
+                    row.put("PayOS_CheckoutUrl", "https://payos.vn/checkout/311");
+                    row.put("OriginalAmount", new BigDecimal("500000"));
+                    row.put("DiscountAmount", new BigDecimal("50000"));
+                    row.put("PaymentAmount", new BigDecimal("450000"));
+                    row.put("ClaimID", 77);
+                    row.put("PromoCode", "MEMBERBOOST");
+                    row.put("ApplyTarget", "MEMBERSHIP");
+                    row.put("BonusDurationMonths", 1);
+                    row.put("PaymentCreatedAt", Timestamp.from(Instant.now()));
+                    return List.of(mapper.mapRow(resultSet(row), 0));
+                });
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = membershipService.execute(
+                "customer-get-current-membership",
+                "Bearer customer",
+                Map.of());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) response.get("membership");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payment = (Map<String, Object>) membership.get("payment");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> coupon = (Map<String, Object>) payment.get("coupon");
+
+        assertEquals(new BigDecimal("500000"), payment.get("originalAmount"));
+        assertEquals(new BigDecimal("50000"), payment.get("discountAmount"));
+        assertEquals("MEMBERBOOST", coupon.get("promoCode"));
+        assertEquals("MEMBERSHIP", coupon.get("applyTarget"));
+        assertEquals(1, coupon.get("bonusDurationMonths"));
+    }
+
+    @Test
+    void customerPurchase_shouldRejectOrderCouponForMembershipCheckout() {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+
+        when(jdbcTemplate.query(contains("WHERE mp.MembershipPlanID = ?"), any(RowMapper.class), eq(2)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "MembershipPlanID", 2,
+                            "PlanName", "Gym Only - 1 Month",
+                            "PlanType", "GYM_ONLY",
+                            "Price", new BigDecimal("500000"),
+                            "DurationDays", 30,
+                            "AllowsCoachBooking", false
+                    )), 0));
+                });
+
+        when(jdbcTemplate.query(contains("cm.Status = ?"), any(RowMapper.class), eq(5), anyString()))
+                .thenReturn(List.of());
+
+        Map<String, Object> orderClaim = new LinkedHashMap<>();
+        orderClaim.put("ClaimID", 88);
+        orderClaim.put("ApplyTarget", "ORDER");
+        orderClaim.put("DiscountPercent", new BigDecimal("10.00"));
+        orderClaim.put("DiscountAmount", null);
+        orderClaim.put("BonusDurationMonths", 0);
+        when(jdbcTemplate.queryForList(contains("FROM dbo.UserPromotionClaims"), eq(5), eq("WELCOME10")))
+                .thenReturn(List.of(orderClaim));
+
+        var exception = org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
+                () -> membershipService.execute(
+                        "customer-purchase-membership",
+                        "Bearer customer",
+                        Map.of("planId", 2, "paymentMethod", "PAYOS", "promoCode", "WELCOME10")));
+
+        assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(String.valueOf(exception.getReason()).contains("product orders only"));
+    }
+
+    @Test
+    void customerPurchase_shouldApplyBonusOnlyMembershipCouponWithoutChangingTotal() throws Exception {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+
+        when(jdbcTemplate.query(contains("cm.Status = 'PENDING'"), any(RowMapper.class), eq(5)))
+                .thenReturn(List.of());
+        when(jdbcTemplate.query(contains("cm.Status = 'PENDING'"), any(RowMapper.class), eq(5), eq(5)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.query(contains("WHERE mp.MembershipPlanID = ?"), any(RowMapper.class), eq(2)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "MembershipPlanID", 2,
+                            "PlanName", "Gym Only - 1 Month",
+                            "PlanType", "GYM_ONLY",
+                            "Price", new BigDecimal("500000"),
+                            "DurationDays", 30,
+                            "AllowsCoachBooking", false
+                    )), 0));
+                });
+
+        when(jdbcTemplate.query(contains("cm.Status = ?"), any(RowMapper.class), eq(5), anyString()))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.queryForObject(contains("SELECT FullName, Phone, Email"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return mapper.mapRow(resultSet(Map.of(
+                            "FullName", "Customer Minh",
+                            "Phone", "0900000004",
+                            "Email", "customer@gymcore.local"
+                    )), 0);
+                });
+
+        Map<String, Object> membershipClaim = new LinkedHashMap<>();
+        membershipClaim.put("ClaimID", 78);
+        membershipClaim.put("ApplyTarget", "MEMBERSHIP");
+        membershipClaim.put("DiscountPercent", null);
+        membershipClaim.put("DiscountAmount", null);
+        membershipClaim.put("BonusDurationMonths", 2);
+        when(jdbcTemplate.queryForList(contains("FROM dbo.UserPromotionClaims"), eq(5), eq("PLUS2M")))
+                .thenReturn(List.of(membershipClaim));
+
+        AtomicInteger insertSequence = new AtomicInteger(0);
+        when(jdbcTemplate.update(any(PreparedStatementCreator.class), any(KeyHolder.class)))
+                .thenAnswer(invocation -> {
+                    KeyHolder keyHolder = invocation.getArgument(1);
+                    int call = insertSequence.incrementAndGet();
+                    Map<String, Object> keyMap = new LinkedHashMap<>();
+                    if (call == 1) {
+                        keyMap.put("CustomerMembershipID", 212);
+                    } else {
+                        keyMap.put("PaymentID", 312);
+                    }
+                    keyHolder.getKeyList().add(keyMap);
+                    return 1;
+                });
+
+        when(payOsService.createPaymentLink(
+                eq(312),
+                eq(new BigDecimal("500000")),
+                contains("Membership"),
+                eq("Customer Minh"),
+                eq("0900000004"),
+                eq("customer@gymcore.local"),
+                eq("GymCore Membership"),
+                any(),
+                eq(null),
+                eq(null)))
+                .thenReturn(new PayOsService.PayOsLink("LINK-312", "https://payos.vn/checkout/312", "PENDING"));
+
+        when(jdbcTemplate.update(
+                contains("SET PayOS_PaymentLinkId = ?"),
+                eq("LINK-312"),
+                eq("https://payos.vn/checkout/312"),
+                eq("PENDING"),
+                eq(312)))
+                .thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = membershipService.execute(
+                "customer-purchase-membership",
+                "Bearer customer",
+                Map.of("planId", 2, "paymentMethod", "PAYOS", "promoCode", "PLUS2M"));
+
+        assertEquals(new BigDecimal("500000"), response.get("subtotal"));
+        assertEquals(BigDecimal.ZERO.setScale(2), ((BigDecimal) response.get("discount")).setScale(2));
+        assertEquals(new BigDecimal("500000"), response.get("totalAmount"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) response.get("membership");
+        assertEquals(LocalDate.now().plusDays(29).plusMonths(2).toString(), membership.get("endDate"));
+    }
+
+    @Test
     void paymentSuccessAfterPurchase_shouldAllowReceptionQrCheckin() throws Exception {
         AtomicBoolean membershipActivated = new AtomicBoolean(false);
 
         // Webhook verification passes
         Mockito.doNothing().when(payOsService).verifyWebhookSignature(any(HttpHeaders.class), any(Map.class));
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq(999))).thenReturn(999);
 
         when(jdbcTemplate.update(contains("SET PayOS_Status = ?"), eq("PAID"), eq(999))).thenReturn(1);
         when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(999)))
@@ -435,6 +735,7 @@ class MembershipServiceCustomerFlowTest {
     @Test
     void paymentWebhook_shouldApplyImmediateUpgradeSwitchWhenScheduledStartsToday() throws Exception {
         Mockito.doNothing().when(payOsService).verifyWebhookSignature(any(HttpHeaders.class), any(Map.class));
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq(888))).thenReturn(888);
 
         when(jdbcTemplate.update(contains("SET PayOS_Status = ?"), eq("PAID"), eq(888))).thenReturn(1);
         when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(888))).thenReturn(1);
@@ -471,6 +772,7 @@ class MembershipServiceCustomerFlowTest {
     void confirmPaymentReturn_shouldConfirmMembershipPaymentForOwner() {
         when(currentUserService.requireCustomer("Bearer customer"))
                 .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq(777))).thenReturn(777);
 
         when(jdbcTemplate.queryForObject(
                 contains("JOIN dbo.CustomerMemberships cm"),
@@ -492,6 +794,33 @@ class MembershipServiceCustomerFlowTest {
         assertTrue(Boolean.TRUE.equals(response.get("handled")));
         assertEquals(777, response.get("paymentId"));
         assertEquals("SUCCESS", response.get("status"));
+    }
+
+    @Test
+    void confirmPaymentReturn_shouldDecodeEncodedPayOsOrderCode() {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq("777654321"))).thenReturn(777);
+
+        when(jdbcTemplate.queryForObject(
+                contains("JOIN dbo.CustomerMemberships cm"),
+                eq(Integer.class),
+                eq(777),
+                eq(5)))
+                .thenReturn(1);
+
+        when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(777))).thenReturn(1);
+        when(jdbcTemplate.queryForObject(contains("cm.Status = 'SCHEDULED'"), any(RowMapper.class), eq(777)))
+                .thenThrow(new EmptyResultDataAccessException(1));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = membershipService.execute(
+                "customer-confirm-payment-return",
+                "Bearer customer",
+                Map.of("orderCode", "777654321", "status", "SUCCESS"));
+
+        assertTrue(Boolean.TRUE.equals(response.get("handled")));
+        assertEquals(777, response.get("paymentId"));
     }
 
     @Test

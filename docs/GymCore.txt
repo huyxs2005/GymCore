@@ -417,7 +417,8 @@ CREATE TABLE dbo.Promotions (
     Description NVARCHAR(200) NULL,
     DiscountPercent DECIMAL(5,2) NULL,
     DiscountAmount DECIMAL(12,2) NULL,
-    BonusDurationDays INT NOT NULL CONSTRAINT DF_Promotions_BonusDurationDays DEFAULT 0,
+    ApplyTarget NVARCHAR(20) NOT NULL CONSTRAINT DF_Promotions_ApplyTarget DEFAULT N'ORDER',
+    BonusDurationMonths INT NOT NULL CONSTRAINT DF_Promotions_BonusDurationMonths DEFAULT 0,
     ValidFrom DATETIME2 NOT NULL,
     ValidTo DATETIME2 NOT NULL,
     IsActive BIT NOT NULL CONSTRAINT DF_Promotions_IsActive DEFAULT 1,
@@ -428,7 +429,21 @@ CREATE TABLE dbo.Promotions (
     ),
     CONSTRAINT CK_Promotions_Percent CHECK (DiscountPercent IS NULL OR (DiscountPercent >= 0 AND DiscountPercent <= 100)),
     CONSTRAINT CK_Promotions_Amount CHECK (DiscountAmount IS NULL OR DiscountAmount >= 0),
-    CONSTRAINT CK_Promotions_BonusDurationDays CHECK (BonusDurationDays >= 0)
+    CONSTRAINT CK_Promotions_ApplyTarget CHECK (ApplyTarget IN (N'ORDER', N'MEMBERSHIP')),
+    CONSTRAINT CK_Promotions_BonusDurationMonths CHECK (BonusDurationMonths >= 0),
+    CONSTRAINT CK_Promotions_Benefit CHECK (
+        DiscountPercent IS NOT NULL
+        OR DiscountAmount IS NOT NULL
+        OR BonusDurationMonths > 0
+    ),
+    CONSTRAINT CK_Promotions_OrderBonusBlocked CHECK (
+        ApplyTarget = N'MEMBERSHIP'
+        OR BonusDurationMonths = 0
+    ),
+    CONSTRAINT CK_Promotions_MembershipBonusTarget CHECK (
+        BonusDurationMonths = 0
+        OR ApplyTarget = N'MEMBERSHIP'
+    )
 );
 GO
 

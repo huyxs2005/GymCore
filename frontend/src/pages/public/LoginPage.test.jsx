@@ -53,7 +53,7 @@ describe('LoginPage', () => {
       data: {
         accessToken: 'ACCESS',
         landingPath: '/customer/membership',
-        user: { userId: 1, fullName: 'Trần Minh Huy', email: 'a@b.com', role: 'CUSTOMER' },
+        user: { userId: 1, fullName: 'Alex Carter', email: 'a@b.com', role: 'CUSTOMER' },
       },
     })
 
@@ -124,4 +124,3 @@ describe('LoginPage', () => {
     await user.pointer([])
   })
 })
-

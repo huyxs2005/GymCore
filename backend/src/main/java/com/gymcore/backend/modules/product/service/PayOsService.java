@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +28,10 @@ import org.slf4j.LoggerFactory;
 public class PayOsService {
 
     private static final Logger log = LoggerFactory.getLogger(PayOsService.class);
+    private static final long ORDER_CODE_OFFSET = 3_000_000_000L;
+    private static final long ORDER_CODE_MULTIPLIER = 1_000_000L;
+    private static final int ORDER_CODE_SUFFIX_MIN = 100_000;
+    private static final int ORDER_CODE_SUFFIX_MAX_EXCLUSIVE = 1_000_000;
 
     private final RestTemplate restTemplate;
 
@@ -84,7 +89,7 @@ public class PayOsService {
                     "PayOS is not configured. Please check .env file and restart server.");
         }
 
-        long orderCode = paymentId;
+        long orderCode = buildPayOsOrderCode(paymentId);
         long amountVal = amount.longValue();
         String descStr = description == null || description.isBlank() ? "Gym #" + orderCode : description;
         if (descStr.length() > 25) {
@@ -128,7 +133,7 @@ public class PayOsService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
-            log.info("Creating PayOS payment link for paymentId={}.", paymentId);
+            log.info("Creating PayOS payment link for paymentId={} with orderCode={}.", paymentId, orderCode);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restTemplate.postForObject(
@@ -292,6 +297,46 @@ public class PayOsService {
 
     private String valueAsString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    long buildPayOsOrderCode(int paymentId) {
+        if (paymentId <= 0) {
+            throw new IllegalArgumentException("paymentId must be positive.");
+        }
+        long suffix = ThreadLocalRandom.current().nextInt(ORDER_CODE_SUFFIX_MIN, ORDER_CODE_SUFFIX_MAX_EXCLUSIVE);
+        return ORDER_CODE_OFFSET + (paymentId * ORDER_CODE_MULTIPLIER) + suffix;
+    }
+
+    public Integer resolvePaymentIdFromPayOsOrderCode(Object rawOrderCode) {
+        Long parsed = tryParsePositiveLong(rawOrderCode);
+        if (parsed == null) {
+            return null;
+        }
+        if (parsed < ORDER_CODE_OFFSET) {
+            return parsed.intValue();
+        }
+        long paymentId = (parsed - ORDER_CODE_OFFSET) / ORDER_CODE_MULTIPLIER;
+        if (paymentId <= 0 || paymentId > Integer.MAX_VALUE) {
+            return null;
+        }
+        return (int) paymentId;
+    }
+
+    private Long tryParsePositiveLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            long parsed;
+            if (value instanceof Number number) {
+                parsed = number.longValue();
+            } else {
+                parsed = Long.parseLong(String.valueOf(value).trim());
+            }
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     public record PayOsLink(String paymentLinkId, String checkoutUrl, String status) {

@@ -147,9 +147,17 @@ public class MembershipService {
                         p.PaymentMethod,
                         p.PayOS_Status,
                         p.PayOS_CheckoutUrl,
+                        p.OriginalAmount,
+                        p.DiscountAmount,
                         p.Amount,
+                        p.ClaimID,
+                        promo.PromoCode,
+                        promo.ApplyTarget,
+                        promo.BonusDurationMonths,
                         p.CreatedAt
                     FROM dbo.Payments p
+                    LEFT JOIN dbo.UserPromotionClaims c ON c.ClaimID = p.ClaimID
+                    LEFT JOIN dbo.Promotions promo ON promo.PromotionID = c.PromotionID
                     WHERE p.CustomerMembershipID = cm.CustomerMembershipID
                     ORDER BY p.PaymentID DESC
                 ) pay
@@ -190,9 +198,21 @@ public class MembershipService {
         MembershipSnapshot scheduledMembership = findTopMembership(user.userId(), "SCHEDULED");
         String returnUrl = asNullableString(payload.get("returnUrl"));
         String cancelUrl = asNullableString(payload.get("cancelUrl"));
+        String promoCode = asNullableString(payload.get("promoCode"));
 
         LocalDate startDate = resolveStartDate(mode, activeMembership, scheduledMembership);
-        LocalDate endDate = resolveEndDate(startDate, plan.planType(), plan.durationDays());
+        if (plan.price().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Membership plan price must be greater than zero for PayOS checkout.");
+        }
+
+        BigDecimal subtotal = plan.price();
+        CouponApplication coupon = resolveMembershipCoupon(user.userId(), promoCode, subtotal);
+        BigDecimal discount = coupon == null ? BigDecimal.ZERO : coupon.discountAmount();
+        BigDecimal totalAmount = subtotal.subtract(discount);
+        int bonusDurationMonths = coupon == null ? 0 : coupon.bonusDurationMonths();
+        Integer claimId = coupon == null ? null : coupon.claimId();
+        LocalDate endDate = resolveEndDate(startDate, plan.planType(), plan.durationDays(), bonusDurationMonths);
         expireStalePendingCheckouts(user.userId());
 
         Map<String, Object> existingPending = findExistingPendingCheckout(
@@ -200,23 +220,17 @@ public class MembershipService {
                 plan,
                 startDate,
                 endDate,
-                mode);
+                mode,
+                claimId);
         if (!existingPending.isEmpty()) {
             return existingPending;
         }
 
-        if (plan.price().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Membership plan price must be greater than zero for PayOS checkout.");
-        }
-
         CheckoutContact contact = loadCheckoutContact(user.userId());
-        BigDecimal subtotal = plan.price();
-        BigDecimal discount = BigDecimal.ZERO;
-        BigDecimal totalAmount = subtotal;
 
         int customerMembershipId = insertCustomerMembership(user.userId(), plan.planId(), startDate, endDate);
-        int paymentId = insertPaymentForMembership(customerMembershipId, subtotal, discount, totalAmount, paymentMethod);
+        int paymentId = insertPaymentForMembership(customerMembershipId, claimId, subtotal, discount, totalAmount,
+                paymentMethod);
 
         List<PayOsService.PayOsItem> payOsItems = List.of(
                 new PayOsService.PayOsItem(
@@ -315,6 +329,7 @@ public class MembershipService {
         try {
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
+            markMembershipClaimUsageIfNeeded(paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to confirm payment from return URL.", exception);
@@ -331,7 +346,7 @@ public class MembershipService {
      * Handle PayOS webhook callback for both membership payments and product orders.
      *
      * Expected minimal payload:
-     * - paymentId: numeric PaymentID in our database (we use PaymentID as PayOS orderCode)
+     * - paymentId: numeric PaymentID in our database, or an encoded PayOS orderCode
      * - status / payosStatus: PayOS status string, we treat "PAID" or "SUCCESS" as success.
      * - headers: HttpHeaders from the original request, used for signature verification.
      */
@@ -375,6 +390,7 @@ public class MembershipService {
                     """, normalizedSuccessStatus(status), paymentId);
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
+            markMembershipClaimUsageIfNeeded(paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.", exception);
         }
@@ -712,10 +728,12 @@ public class MembershipService {
             MembershipPlan requestedPlan,
             LocalDate requestedStartDate,
             LocalDate requestedEndDate,
-            CheckoutMode requestedMode) {
+            CheckoutMode requestedMode,
+            Integer requestedClaimId) {
         String sql = """
                 SELECT TOP (1)
                     p.PaymentID,
+                    p.ClaimID,
                     p.PayOS_CheckoutUrl,
                     p.PayOS_Status,
                     p.PaymentMethod,
@@ -750,6 +768,7 @@ public class MembershipService {
                     rs.getBoolean("AllowsCoachBooking"));
             return new PendingCheckout(
                     rs.getInt("PaymentID"),
+                    (Integer) rs.getObject("ClaimID"),
                     rs.getInt("CustomerMembershipID"),
                     pendingPlan,
                     toLocalDate(rs, "StartDate"),
@@ -773,7 +792,8 @@ public class MembershipService {
 
         boolean isSameRequestedCheckout = pending.plan().planId() == requestedPlan.planId()
                 && requestedStartDate.equals(pending.startDate())
-                && requestedEndDate.equals(pending.endDate());
+                && requestedEndDate.equals(pending.endDate())
+                && java.util.Objects.equals(pending.claimId(), requestedClaimId);
         if (!isSameRequestedCheckout) {
             cancelPendingCheckout(pending.customerMembershipId(), pending.paymentId(), "CANCELLED");
             return Map.of();
@@ -797,6 +817,87 @@ public class MembershipService {
                 pending.startDate(),
                 pending.endDate(),
                 true);
+    }
+
+    private CouponApplication resolveMembershipCoupon(int customerId, String promoCode, BigDecimal subtotal) {
+        if (promoCode == null || promoCode.isBlank()) {
+            return null;
+        }
+
+        List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
+                SELECT TOP (1)
+                    c.ClaimID,
+                    p.ApplyTarget,
+                    p.DiscountPercent,
+                    p.DiscountAmount,
+                    p.BonusDurationMonths
+                FROM dbo.UserPromotionClaims c
+                JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                WHERE c.UserID = ?
+                  AND p.PromoCode = ?
+                  AND c.UsedAt IS NULL
+                  AND p.IsActive = 1
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
+                ORDER BY c.ClaimID DESC
+                """, customerId, promoCode);
+        if (claims.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired promo code.");
+        }
+
+        Map<String, Object> claim = claims.get(0);
+        String applyTarget = upperText(claim.get("ApplyTarget"));
+        if (!"MEMBERSHIP".equals(applyTarget)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This coupon applies to product orders only.");
+        }
+
+        BigDecimal discountPercent = optionalDecimal(claim.get("DiscountPercent"), "Invalid discount percent.");
+        BigDecimal discountAmount = optionalDecimal(claim.get("DiscountAmount"), "Invalid discount amount.");
+        Integer parsedBonusMonths = tryParsePositiveInt(claim.get("BonusDurationMonths"));
+        int bonusDurationMonths = parsedBonusMonths == null ? 0 : parsedBonusMonths;
+
+        BigDecimal effectiveDiscount = BigDecimal.ZERO;
+        if (discountPercent != null && discountPercent.compareTo(BigDecimal.ZERO) > 0) {
+            effectiveDiscount = subtotal.multiply(discountPercent)
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        } else if (discountAmount != null && discountAmount.compareTo(BigDecimal.ZERO) > 0) {
+            effectiveDiscount = discountAmount;
+        }
+        if (effectiveDiscount.compareTo(subtotal) > 0) {
+            effectiveDiscount = subtotal;
+        }
+
+        return new CouponApplication(
+                ((Number) claim.get("ClaimID")).intValue(),
+                promoCode,
+                effectiveDiscount,
+                bonusDurationMonths);
+    }
+
+    private void markMembershipClaimUsageIfNeeded(int paymentId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT PaymentID, ClaimID, CustomerMembershipID
+                FROM dbo.Payments
+                WHERE PaymentID = ?
+                """, paymentId);
+        if (rows.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> row = rows.get(0);
+        Integer claimId = tryParsePositiveInt(row.get("ClaimID"));
+        Integer customerMembershipId = tryParsePositiveInt(row.get("CustomerMembershipID"));
+        if (claimId == null || customerMembershipId == null) {
+            return;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE dbo.UserPromotionClaims
+                SET UsedAt = COALESCE(UsedAt, SYSDATETIME()),
+                    UsedPaymentID = COALESCE(UsedPaymentID, ?),
+                    UsedOnMembershipID = COALESCE(UsedOnMembershipID, ?)
+                WHERE ClaimID = ?
+                """, paymentId, customerMembershipId, claimId);
     }
 
     private void expireStalePendingCheckouts(int customerId) {
@@ -932,10 +1033,20 @@ public class MembershipService {
     }
 
     private LocalDate resolveEndDate(LocalDate startDate, String planType, int durationDays) {
+        return resolveEndDate(startDate, planType, durationDays, 0);
+    }
+
+    private LocalDate resolveEndDate(LocalDate startDate, String planType, int durationDays, int bonusDurationMonths) {
+        LocalDate endDate;
         if ("DAY_PASS".equalsIgnoreCase(planType)) {
-            return startDate;
+            endDate = startDate;
+        } else {
+            endDate = startDate.plusDays(Math.max(0, durationDays - 1L));
         }
-        return startDate.plusDays(Math.max(0, durationDays - 1L));
+        if (bonusDurationMonths > 0) {
+            endDate = endDate.plusMonths(bonusDurationMonths);
+        }
+        return endDate;
     }
 
     private int insertCustomerMembership(int customerId, int planId, LocalDate startDate, LocalDate endDate) {
@@ -958,19 +1069,24 @@ public class MembershipService {
         return key.intValue();
     }
 
-    private int insertPaymentForMembership(int customerMembershipId, BigDecimal originalAmount, BigDecimal discountAmount,
-            BigDecimal amount, String paymentMethod) {
+    private int insertPaymentForMembership(int customerMembershipId, Integer claimId, BigDecimal originalAmount,
+            BigDecimal discountAmount, BigDecimal amount, String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var statement = connection.prepareStatement("""
-                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, PaymentMethod, CustomerMembershipID)
-                    VALUES (?, ?, ?, 'PENDING', ?, ?)
+                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, PaymentMethod, CustomerMembershipID, ClaimID)
+                    VALUES (?, ?, ?, 'PENDING', ?, ?, ?)
                     """, new String[] { "PaymentID" });
             statement.setBigDecimal(1, originalAmount);
             statement.setBigDecimal(2, discountAmount);
             statement.setBigDecimal(3, amount);
             statement.setString(4, paymentMethod);
             statement.setInt(5, customerMembershipId);
+            if (claimId == null) {
+                statement.setNull(6, java.sql.Types.INTEGER);
+            } else {
+                statement.setInt(6, claimId);
+            }
             return statement;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -1061,8 +1177,23 @@ public class MembershipService {
             payment.put("paymentMethod", rs.getString("PaymentMethod"));
             payment.put("payOsStatus", rs.getString("PayOS_Status"));
             payment.put("checkoutUrl", rs.getString("PayOS_CheckoutUrl"));
+            payment.put("originalAmount", optionalDecimal(rs.getObject("OriginalAmount"), "Invalid original amount."));
+            payment.put("discountAmount", optionalDecimal(rs.getObject("DiscountAmount"), "Invalid discount amount."));
             payment.put("amount", rs.getBigDecimal("PaymentAmount"));
             payment.put("createdAt", rs.getTimestamp("PaymentCreatedAt"));
+
+            Integer claimId = tryParsePositiveInt(rs.getObject("ClaimID"));
+            String promoCode = asNullableString(rs.getString("PromoCode"));
+            String applyTarget = asNullableString(rs.getString("ApplyTarget"));
+            Integer bonusDurationMonths = tryParsePositiveInt(rs.getObject("BonusDurationMonths"));
+            if (claimId != null || promoCode != null || bonusDurationMonths != null) {
+                Map<String, Object> coupon = new LinkedHashMap<>();
+                coupon.put("claimId", claimId);
+                coupon.put("promoCode", promoCode);
+                coupon.put("applyTarget", applyTarget);
+                coupon.put("bonusDurationMonths", bonusDurationMonths == null ? 0 : bonusDurationMonths);
+                payment.put("coupon", coupon);
+            }
         }
 
         Map<String, Object> membership = new LinkedHashMap<>();
@@ -1241,7 +1372,7 @@ public class MembershipService {
     }
 
     private int resolvePaymentId(Object rawValue) {
-        Integer parsed = tryParsePositiveInt(rawValue);
+        Integer parsed = payOsService.resolvePaymentIdFromPayOsOrderCode(rawValue);
         if (parsed != null) {
             return parsed;
         }
@@ -1270,7 +1401,7 @@ public class MembershipService {
 
     private Integer resolvePaymentIdFromReturnPayload(Map<String, Object> payload) {
         Object rawPaymentId = firstNonNull(payload.get("paymentId"), payload.get("orderCode"));
-        Integer parsed = tryParsePositiveInt(rawPaymentId);
+        Integer parsed = payOsService.resolvePaymentIdFromPayOsOrderCode(rawPaymentId);
         if (parsed != null) {
             return parsed;
         }
@@ -1308,6 +1439,27 @@ public class MembershipService {
             return bool;
         }
         return "TRUE".equals(upperText(successRaw));
+    }
+
+    private BigDecimal optionalDecimal(Object value, String message) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            if (value instanceof BigDecimal decimal) {
+                return decimal;
+            }
+            if (value instanceof Number number) {
+                return BigDecimal.valueOf(number.doubleValue());
+            }
+            return new BigDecimal(text);
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
     }
 
     private Integer tryParsePositiveInt(Object value) {
@@ -1350,6 +1502,7 @@ public class MembershipService {
 
     private record PendingCheckout(
             int paymentId,
+            Integer claimId,
             int customerMembershipId,
             MembershipPlan plan,
             LocalDate startDate,
@@ -1360,6 +1513,14 @@ public class MembershipService {
             String paymentMethod,
             String checkoutUrl,
             Timestamp paymentCreatedAt
+    ) {
+    }
+
+    private record CouponApplication(
+            int claimId,
+            String promoCode,
+            BigDecimal discountAmount,
+            int bonusDurationMonths
     ) {
     }
 

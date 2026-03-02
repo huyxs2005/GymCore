@@ -23,7 +23,7 @@ const AdminReportsPage = () => {
       link.click()
       link.parentNode.removeChild(link)
       toast.success('PDF Report downloaded!')
-    } catch (error) {
+    } catch {
       toast.error('Failed to export PDF')
     }
   }

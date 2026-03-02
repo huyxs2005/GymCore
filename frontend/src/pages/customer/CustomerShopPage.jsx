@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff, Zap, X } from 'lucide-react'
+import { ShoppingCart, CreditCard, Star, StarHalf, StarOff, Zap, X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { productApi } from '../../features/product/api/productApi'
@@ -14,11 +14,9 @@ function CustomerShopPage() {
   const [productSearch, setProductSearch] = useState('')
   const [reviewText, setReviewText] = useState('')
   const [reviewRating, setReviewRating] = useState(5)
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false)
-  const [isCartDrawerOpen, setCartDrawerOpen] = useState(false)
+  const [isCartDrawerOpen, setCartDrawerOpen] = useState(() => new URLSearchParams(window.location.search).get('openCart') === '1')
   const [productQuantities, setProductQuantities] = useState({})
   const [checkoutOptions, setCheckoutOptions] = useState({
-    paymentMethod: 'PAYOS',
     promoCode: '',
   })
   const [couponPreview, setCouponPreview] = useState(null)
@@ -43,6 +41,16 @@ function CustomerShopPage() {
       window.removeEventListener('gymcore:close-cart', closeCart)
       window.removeEventListener('gymcore:toggle-cart', toggleCart)
     }
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('openCart') !== '1') return
+
+    params.delete('openCart')
+    const nextSearch = params.toString()
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`
+    window.history.replaceState({}, document.title, nextUrl)
   }, [])
 
   const productsQuery = useQuery({
@@ -73,8 +81,8 @@ function CustomerShopPage() {
 
   const myClaims = claimsData?.data?.claims || []
   const availableCoupons = myClaims.filter(c => !c.UsedAt)
-  const productCoupons = availableCoupons.filter((claim) => Number(claim.BonusDurationDays || 0) <= 0)
-  const membershipOnlyCoupons = availableCoupons.filter((claim) => Number(claim.BonusDurationDays || 0) > 0)
+  const productCoupons = availableCoupons.filter((claim) => String(claim.ApplyTarget || '').toUpperCase() === 'ORDER')
+  const membershipOnlyCoupons = availableCoupons.filter((claim) => String(claim.ApplyTarget || '').toUpperCase() === 'MEMBERSHIP')
 
   const addToCartMutation = useMutation({
     mutationFn: cartApi.addItem,
@@ -227,9 +235,6 @@ function CustomerShopPage() {
       if (openCart || openCheckout) {
         setCartDrawerOpen(true)
       }
-      if (openCheckout) {
-        setShowCheckoutModal(true)
-      }
     } catch (error) {
       const message = error?.response?.data?.message || error?.message || 'Unable to add item to cart.'
       alert(message)
@@ -251,26 +256,38 @@ function CustomerShopPage() {
 
   const handleCheckout = () => {
     if (!cart.items || cart.items.length === 0) return
-    setShowCheckoutModal(true)
+    checkoutMutation.mutate({
+      paymentMethod: 'PAYOS',
+      promoCode: checkoutOptions.promoCode,
+    })
   }
 
-  const confirmCheckout = () => {
-    checkoutMutation.mutate(checkoutOptions)
-    setShowCheckoutModal(false)
+  const handlePromoCodeChange = (promoCode) => {
+    setCheckoutOptions((prev) => ({ ...prev, promoCode }))
+    setCouponPreview(null)
+    setCouponPreviewError('')
+
+    if (!promoCode) return
+
+    previewCouponMutation.mutate({
+      promoCode,
+      target: 'ORDER',
+      subtotal: Number(cart.subtotal || 0),
+    })
   }
 
   const formatClaimBenefit = (claim) => {
     const discountPercent = Number(claim.DiscountPercent || 0)
     const discountAmount = Number(claim.DiscountAmount || 0)
-    const bonusDays = Number(claim.BonusDurationDays || 0)
+    const bonusMonths = Number(claim.BonusDurationMonths || 0)
     const parts = []
     if (discountPercent > 0) {
       parts.push(`${discountPercent}% off`)
     } else if (discountAmount > 0) {
       parts.push(`${discountAmount.toLocaleString()} VND off`)
     }
-    if (bonusDays > 0) {
-      parts.push(`+${bonusDays} membership day${bonusDays > 1 ? 's' : ''}`)
+    if (bonusMonths > 0) {
+      parts.push(`+${bonusMonths} membership month${bonusMonths > 1 ? 's' : ''}`)
     }
     return parts.length > 0 ? parts.join(' + ') : 'No benefit'
   }
@@ -327,89 +344,6 @@ function CustomerShopPage() {
             </div>
             <h2 className="mb-2 text-2xl font-bold text-slate-900">Order Successful!</h2>
             <p className="text-slate-600">Your payment was confirmed. Please pick up your products at the gym front desk.</p>
-          </div>
-        </div>
-      )}
-
-      {showCheckoutModal && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md animate-in fade-in zoom-in rounded-3xl bg-white p-6 shadow-2xl duration-200">
-            <h3 className="mb-4 text-xl font-bold text-slate-900">Checkout Options</h3>
-            <div className="space-y-4">
-              <p className="rounded-xl border border-gym-100 bg-gym-50 px-3 py-2 text-xs text-gym-800">
-                Product orders are picked up in person at the gym front desk (no shipping delivery).
-              </p>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Payment Method</label>
-                <select
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
-                  value={checkoutOptions.paymentMethod}
-                  onChange={(e) => setCheckoutOptions({ ...checkoutOptions, paymentMethod: e.target.value })}
-                >
-                  <option value="PAYOS">PayOS (Online Payment)</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Apply Coupon (Optional)</label>
-                <select
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-gym-500 focus:outline-none"
-                  value={checkoutOptions.promoCode}
-                  onChange={(e) => {
-                    const promoCode = e.target.value
-                    setCheckoutOptions({ ...checkoutOptions, promoCode })
-                    setCouponPreview(null)
-                    setCouponPreviewError('')
-                    if (promoCode) {
-                      previewCouponMutation.mutate({
-                        promoCode,
-                        target: 'ORDER',
-                        subtotal: Number(cart.subtotal || 0),
-                      })
-                    }
-                  }}
-                >
-                  <option value="">No coupon applied</option>
-                  {productCoupons.map((claim) => (
-                    <option key={claim.ClaimID} value={claim.PromoCode}>
-                      {claim.PromoCode} - {formatClaimBenefit(claim)}
-                    </option>
-                  ))}
-                </select>
-                {productCoupons.length === 0 && (
-                  <p className="mt-1 text-[10px] text-slate-400">No available coupons in your wallet. Claim some in the Promotions page!</p>
-                )}
-                {membershipOnlyCoupons.length > 0 && (
-                  <p className="mt-1 text-[10px] text-amber-600">
-                    {membershipOnlyCoupons.length} coupon(s) are membership-only and cannot be used for product checkout.
-                  </p>
-                )}
-                {couponPreview && checkoutOptions.promoCode && (
-                  <p className="mt-2 rounded-lg border border-gym-100 bg-gym-50 px-2 py-1 text-[11px] text-gym-800">
-                    Preview: discount {Number(couponPreview.estimatedDiscount || 0).toLocaleString()} VND,
-                    total {Number(couponPreview.estimatedFinalAmount || cart.subtotal || 0).toLocaleString()} VND.
-                  </p>
-                )}
-                {couponPreviewError && (
-                  <p className="mt-2 rounded-lg border border-red-100 bg-red-50 px-2 py-1 text-[11px] text-red-700">
-                    {couponPreviewError}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowCheckoutModal(false)}
-                className="flex-1 rounded-full border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmCheckout}
-                className="flex-1 rounded-full border border-gym-700 bg-gym-600 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300 disabled:text-slate-100"
-              >
-                Confirm Order
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -690,12 +624,19 @@ function CustomerShopPage() {
         itemCount={cartItemCount}
         cart={cart}
         cartItems={cartItems}
-        orders={orders}
+        checkoutOptions={checkoutOptions}
         checkoutMutation={checkoutMutation}
+        couponPreview={couponPreview}
+        couponPreviewError={couponPreviewError}
+        formatClaimBenefit={formatClaimBenefit}
+        membershipOnlyCoupons={membershipOnlyCoupons}
         onClose={() => setCartDrawerOpen(false)}
         onCheckout={handleCheckout}
+        onPromoCodeChange={handlePromoCodeChange}
         onUpdateQuantity={handleUpdateCartQty}
         onRemoveItem={handleRemoveCartItem}
+        previewCouponPending={previewCouponMutation.isPending}
+        productCoupons={productCoupons}
       />
       </div>
     </WorkspaceScaffold>
@@ -707,12 +648,19 @@ function CartDrawer({
   itemCount,
   cart,
   cartItems,
-  orders,
+  checkoutOptions,
   checkoutMutation,
+  couponPreview,
+  couponPreviewError,
+  formatClaimBenefit,
+  membershipOnlyCoupons,
   onClose,
   onCheckout,
+  onPromoCodeChange,
   onUpdateQuantity,
   onRemoveItem,
+  previewCouponPending,
+  productCoupons,
 }) {
   return (
     <>
@@ -805,6 +753,41 @@ function CartDrawer({
                 <span className="text-slate-500">Discount</span>
                 <span className="font-medium text-gym-600">Calculated at PayOS</span>
               </div>
+              <div className="pt-1">
+                <label htmlFor="cart-promo-code" className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Apply coupon</label>
+                <select
+                  id="cart-promo-code"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                  value={checkoutOptions.promoCode}
+                  onChange={(event) => onPromoCodeChange(event.target.value)}
+                >
+                  <option value="">No coupon applied</option>
+                  {productCoupons.map((claim) => (
+                    <option key={claim.ClaimID} value={claim.PromoCode}>
+                      {claim.PromoCode} - {formatClaimBenefit(claim)}
+                    </option>
+                  ))}
+                </select>
+                {productCoupons.length === 0 && (
+                  <p className="mt-1 text-[10px] text-slate-400">No available coupons in your wallet. Claim some in the Promotions page.</p>
+                )}
+                {membershipOnlyCoupons.length > 0 && (
+                  <p className="mt-1 text-[10px] text-amber-600">
+                    {membershipOnlyCoupons.length} coupon(s) are membership-only and cannot be used for product checkout.
+                  </p>
+                )}
+                {previewCouponPending && <p className="mt-2 text-[11px] text-slate-500">Checking coupon...</p>}
+                {couponPreview && checkoutOptions.promoCode && (
+                  <p className="mt-2 rounded-lg border border-gym-100 bg-gym-50 px-2 py-1 text-[11px] text-gym-800">
+                    Preview: discount {Number(couponPreview.estimatedDiscount || 0).toLocaleString()} VND, total {Number(couponPreview.estimatedFinalAmount || cart.subtotal || 0).toLocaleString()} VND.
+                  </p>
+                )}
+                {couponPreviewError && (
+                  <p className="mt-2 rounded-lg border border-red-100 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                    {couponPreviewError}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 disabled={checkoutMutation.isPending || cartItems.length === 0}
@@ -814,57 +797,6 @@ function CartDrawer({
                 <CreditCard size={16} />
                 {checkoutMutation.isPending ? 'Redirecting to PayOS...' : 'Checkout with PayOS'}
               </button>
-            </section>
-
-            <section className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
-              <header className="flex items-center gap-2">
-                <span className="rounded-md bg-slate-900 p-1.5 text-white">
-                  <History size={14} />
-                </span>
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Purchase history</h3>
-                  <p className="mt-0.5 text-[11px] text-slate-500">Recently paid and pending orders.</p>
-                </div>
-              </header>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1 pt-1">
-                {orders.length === 0 && <p className="text-xs text-slate-500">You do not have any orders yet.</p>}
-                {orders.map((order) => (
-                  <div
-                    key={order.orderId}
-                    className="space-y-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-800">
-                        Order #{order.orderId}{' '}
-                        <span
-                          className={
-                            order.status === 'PAID'
-                              ? 'text-emerald-600'
-                              : order.status === 'PENDING'
-                                ? 'text-amber-600'
-                                : 'text-slate-500'
-                          }
-                        >
-                          {order.status}
-                        </span>
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        {order.orderDate ? new Date(order.orderDate).toLocaleString() : ''}
-                      </p>
-                    </div>
-                    <ul className="space-y-0.5 text-[11px] text-slate-700">
-                      {order.items?.map((item) => (
-                        <li key={item.productId}>
-                          {item.quantity} x {item.name}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-xs font-semibold text-slate-900">
-                      Total: {Number(order.totalAmount || 0).toLocaleString('en-US')} {order.currency || 'VND'}
-                    </p>
-                  </div>
-                ))}
-              </div>
             </section>
           </div>
         </div>

@@ -35,7 +35,6 @@ describe('coachBookingApi', () => {
 
   it('sends match payload for preview', async () => {
     const payload = {
-      startDate: '2026-03-01',
       endDate: '2026-03-31',
       slots: [{ dayOfWeek: 1, timeSlotId: 1 }],
     }

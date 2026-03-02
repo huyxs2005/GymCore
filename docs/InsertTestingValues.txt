@@ -42,11 +42,18 @@ BEGIN TRY
     DECLARE @CartID INT;
     DECLARE @ProdCreatine INT;
     DECLARE @ProdWhey INT;
+    DECLARE @ProdCreatinePrice DECIMAL(12,2);
+    DECLARE @ProdWheyPrice DECIMAL(12,2);
     DECLARE @PromoID INT;
     DECLARE @PromoSummerID INT;
     DECLARE @PostID INT;
+    DECLARE @SummerPostID INT;
     DECLARE @ClaimID INT;
     DECLARE @OrderID INT;
+    DECLARE @OrderSubtotal DECIMAL(12,2);
+    DECLARE @OrderDiscount DECIMAL(12,2);
+    DECLARE @OrderTotal DECIMAL(12,2);
+    DECLARE @PromoDiscountPercent DECIMAL(5,2);
     DECLARE @Slot1 INT;
     DECLARE @Slot2 INT;
     DECLARE @PTRequestID INT;
@@ -458,8 +465,11 @@ BEGIN TRY
     SELECT @CartID = CartID FROM dbo.Carts WHERE CustomerID = @CustomerID;
     SELECT @ProdCreatine = ProductID FROM dbo.Products WHERE ProductName = N'Creatine Monohydrate';
     SELECT @ProdWhey = ProductID FROM dbo.Products WHERE ProductName = N'Whey Protein';
+    SELECT @ProdCreatinePrice = Price FROM dbo.Products WHERE ProductID = @ProdCreatine;
+    SELECT @ProdWheyPrice = Price FROM dbo.Products WHERE ProductID = @ProdWhey;
 
     IF @CartID IS NULL OR @ProdCreatine IS NULL OR @ProdWhey IS NULL
+       OR @ProdCreatinePrice IS NULL OR @ProdWheyPrice IS NULL
     BEGIN
         THROW 50005, 'Cart or product IDs could not be resolved.', 1;
     END;
@@ -480,13 +490,14 @@ BEGIN TRY
     IF NOT EXISTS (SELECT 1 FROM dbo.Promotions WHERE PromoCode = N'WELCOME10')
     BEGIN
         INSERT INTO dbo.Promotions (
-            PromoCode, Description, DiscountPercent, DiscountAmount, BonusDurationDays, ValidFrom, ValidTo, IsActive
+            PromoCode, Description, DiscountPercent, DiscountAmount, ApplyTarget, BonusDurationMonths, ValidFrom, ValidTo, IsActive
         )
         VALUES (
             N'WELCOME10',
             N'10% off for claimed users',
             CAST(10.00 AS DECIMAL(5,2)),
             NULL,
+            N'ORDER',
             0,
             DATEADD(DAY, -1, SYSDATETIME()),
             DATEADD(DAY, 30, SYSDATETIME()),
@@ -494,25 +505,49 @@ BEGIN TRY
         );
     END;
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.Promotions WHERE PromoCode = N'SUMMERPLUS30')
+    IF NOT EXISTS (SELECT 1 FROM dbo.Promotions WHERE PromoCode = N'SUMMERPLUS1M')
     BEGIN
         INSERT INTO dbo.Promotions (
-            PromoCode, Description, DiscountPercent, DiscountAmount, BonusDurationDays, ValidFrom, ValidTo, IsActive
+            PromoCode, Description, DiscountPercent, DiscountAmount, ApplyTarget, BonusDurationMonths, ValidFrom, ValidTo, IsActive
         )
         VALUES (
-            N'SUMMERPLUS30',
-            N'Summer promo: 5% off and +30 days membership bonus',
+            N'SUMMERPLUS1M',
+            N'Summer promo: 5% off and +1 membership month bonus',
             CAST(5.00 AS DECIMAL(5,2)),
             NULL,
-            30,
+            N'MEMBERSHIP',
+            1,
             DATEADD(DAY, -1, SYSDATETIME()),
             DATEADD(DAY, 30, SYSDATETIME()),
             1
         );
     END;
 
+    UPDATE dbo.Promotions
+    SET Description = N'10% off for claimed users',
+        DiscountPercent = CAST(10.00 AS DECIMAL(5,2)),
+        DiscountAmount = NULL,
+        ApplyTarget = N'ORDER',
+        BonusDurationMonths = 0,
+        ValidFrom = DATEADD(DAY, -1, SYSDATETIME()),
+        ValidTo = DATEADD(DAY, 30, SYSDATETIME()),
+        IsActive = 1
+    WHERE PromoCode = N'WELCOME10';
+
+    UPDATE dbo.Promotions
+    SET PromoCode = N'SUMMERPLUS1M',
+        Description = N'Summer promo: 5% off and +1 membership month bonus',
+        DiscountPercent = CAST(5.00 AS DECIMAL(5,2)),
+        DiscountAmount = NULL,
+        ApplyTarget = N'MEMBERSHIP',
+        BonusDurationMonths = 1,
+        ValidFrom = DATEADD(DAY, -1, SYSDATETIME()),
+        ValidTo = DATEADD(DAY, 30, SYSDATETIME()),
+        IsActive = 1
+    WHERE PromoCode IN (N'SUMMERPLUS30', N'SUMMERPLUS1M');
+
     SELECT @PromoID = PromotionID FROM dbo.Promotions WHERE PromoCode = N'WELCOME10';
-    SELECT @PromoSummerID = PromotionID FROM dbo.Promotions WHERE PromoCode = N'SUMMERPLUS30';
+    SELECT @PromoSummerID = PromotionID FROM dbo.Promotions WHERE PromoCode = N'SUMMERPLUS1M';
 
     IF @PromoID IS NULL
     BEGIN
@@ -550,7 +585,7 @@ BEGIN TRY
         INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
         VALUES (
             N'Summer Plus Promo',
-            N'Claim SUMMERPLUS30: 5% off and +30 membership days.',
+            N'Claim SUMMERPLUS1M: 5% off and +1 membership month.',
             NULL,
             @PromoSummerID,
             DATEADD(DAY, -1, SYSDATETIME()),
@@ -564,6 +599,12 @@ BEGIN TRY
     FROM dbo.PromotionPosts
     WHERE PromotionID = @PromoID
       AND Title = N'Welcome Promo'
+    ORDER BY PromotionPostID DESC;
+
+    SELECT TOP (1) @SummerPostID = PromotionPostID
+    FROM dbo.PromotionPosts
+    WHERE PromotionID = @PromoSummerID
+      AND Title = N'Summer Plus Promo'
     ORDER BY PromotionPostID DESC;
 
     IF @PostID IS NULL
@@ -580,6 +621,16 @@ BEGIN TRY
         VALUES (@CustomerID, @PromoID, @PostID);
     END;
 
+    IF @PromoSummerID IS NOT NULL
+       AND NOT EXISTS (
+            SELECT 1 FROM dbo.UserPromotionClaims
+            WHERE UserID = @CustomerID AND PromotionID = @PromoSummerID
+       )
+    BEGIN
+        INSERT INTO dbo.UserPromotionClaims (UserID, PromotionID, SourcePostID)
+        VALUES (@CustomerID, @PromoSummerID, @SummerPostID);
+    END;
+
     SELECT @ClaimID = ClaimID
     FROM dbo.UserPromotionClaims
     WHERE UserID = @CustomerID AND PromotionID = @PromoID;
@@ -588,6 +639,17 @@ BEGIN TRY
     BEGIN
         THROW 50008, 'Promotion claim was not found for seeded customer.', 1;
     END;
+
+    SET @OrderSubtotal = (@ProdCreatinePrice * 1) + (@ProdWheyPrice * 1);
+    SELECT @PromoDiscountPercent = COALESCE(DiscountPercent, CAST(0 AS DECIMAL(5,2)))
+    FROM dbo.Promotions
+    WHERE PromotionID = @PromoID;
+
+    SET @OrderDiscount = ROUND(@OrderSubtotal * (COALESCE(@PromoDiscountPercent, 0) / 100.0), 2);
+    IF @OrderDiscount > @OrderSubtotal
+        SET @OrderDiscount = @OrderSubtotal;
+
+    SET @OrderTotal = @OrderSubtotal - @OrderDiscount;
 
     /* Create or reuse a pending order */
     SELECT TOP (1) @OrderID = OrderID
@@ -600,23 +662,23 @@ BEGIN TRY
     IF @OrderID IS NULL
     BEGIN
         INSERT INTO dbo.Orders (CustomerID, ClaimID, Subtotal, DiscountApplied, TotalAmount, Status)
-        VALUES (@CustomerID, @ClaimID, 3000, 300, 2700, 'PENDING');
+        VALUES (@CustomerID, @ClaimID, @OrderSubtotal, @OrderDiscount, @OrderTotal, 'PENDING');
 
         SET @OrderID = SCOPE_IDENTITY();
     END;
 
     /* Keep seeded pending order totals synchronized on re-run */
     UPDATE dbo.Orders
-    SET Subtotal = 3000,
-        DiscountApplied = 300,
-        TotalAmount = 2700
+    SET Subtotal = @OrderSubtotal,
+        DiscountApplied = @OrderDiscount,
+        TotalAmount = @OrderTotal
     WHERE OrderID = @OrderID
       AND Status = 'PENDING';
 
     MERGE dbo.OrderItems AS tgt
     USING (VALUES
-        (@OrderID, @ProdCreatine, 1, CAST(1000 AS DECIMAL(12,2))),
-        (@OrderID, @ProdWhey,     1, CAST(2000 AS DECIMAL(12,2)))
+        (@OrderID, @ProdCreatine, 1, @ProdCreatinePrice),
+        (@OrderID, @ProdWhey,     1, @ProdWheyPrice)
     ) AS src(OrderID, ProductID, Quantity, UnitPrice)
     ON tgt.OrderID = src.OrderID AND tgt.ProductID = src.ProductID
     WHEN MATCHED THEN
@@ -638,16 +700,16 @@ BEGIN TRY
             PayOS_PaymentLinkId, PayOS_CheckoutUrl, PayOS_Status
         )
         VALUES (
-            2700, 0, 2700, 'PENDING', @OrderID,
+            @OrderSubtotal, @OrderDiscount, @OrderTotal, 'PENDING', @OrderID,
             @PayOSLinkId, N'https://payos.vn/checkout/example', N'PENDING'
         );
     END;
 
     /* Keep seeded pending payment amount synchronized on re-run */
     UPDATE dbo.Payments
-    SET OriginalAmount = 2700,
-        DiscountAmount = 0,
-        Amount = 2700
+    SET OriginalAmount = @OrderSubtotal,
+        DiscountAmount = @OrderDiscount,
+        Amount = @OrderTotal
     WHERE OrderID = @OrderID
       AND Status = 'PENDING';
 

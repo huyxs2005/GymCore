@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gymcore.backend.modules.auth.service.AuthService;
+import java.sql.ResultSet;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,6 +43,9 @@ class CoachBookingServiceTest {
         when(authService.requireAuthContext("Bearer customer"))
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
 
+        when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
+                .thenReturn(List.of());
+
         when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
                 eq(10), any(LocalDate.class), any(LocalDate.class)))
                 .thenThrow(new EmptyResultDataAccessException(1));
@@ -51,12 +55,40 @@ class CoachBookingServiceTest {
                 Map.of(
                         "authorizationHeader", "Bearer customer",
                         "coachId", 20,
-                        "startDate", "2026-03-01",
                         "endDate", "2026-03-31",
                         "slots", List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)))));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(String.valueOf(exception.getReason()).contains("ACTIVE Gym + Coach membership"));
+    }
+
+    @Test
+    void customerCreateBookingRequest_shouldRejectWhenPendingPtRequestAlreadyExists() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    ResultSet rs = Mockito.mock(ResultSet.class);
+                    when(rs.getString("Status")).thenReturn("PENDING");
+                    when(rs.getDate("StartDate")).thenReturn(java.sql.Date.valueOf(LocalDate.now().plusDays(7)));
+                    when(rs.getDate("EndDate")).thenReturn(java.sql.Date.valueOf(LocalDate.now().plusDays(35)));
+                    when(rs.getInt("CoachID")).thenReturn(20);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
+                "customer-create-booking-request",
+                Map.of(
+                        "authorizationHeader", "Bearer customer",
+                        "coachId", 20,
+                        "endDate", "2026-03-31",
+                        "slots", List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(String.valueOf(exception.getReason()).contains("pending coach approval"));
     }
 
     @Test
@@ -249,6 +281,20 @@ class CoachBookingServiceTest {
         when(authService.requireAuthContext("Bearer customer"))
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
 
+        when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
+                eq(10), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    ResultSet rs = Mockito.mock(ResultSet.class);
+                    when(rs.getInt("CustomerMembershipID")).thenReturn(77);
+                    when(rs.getBoolean("AllowsCoachBooking")).thenReturn(true);
+                    return mapper.mapRow(rs, 0);
+                });
+
         when(jdbcTemplate.query(contains("FROM dbo.Coaches"), any(RowMapper.class)))
                 .thenReturn(List.of(
                         mapOfNullable("coachId", 501, "fullName", "Coach Full", "email", "full@gymcore.local",
@@ -284,7 +330,6 @@ class CoachBookingServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) service.execute("customer-match-coaches", Map.of(
                 "authorizationHeader", "Bearer customer",
-                "startDate", "2026-03-01",
                 "endDate", "2026-03-31",
                 "slots", List.of(
                         Map.of("dayOfWeek", 1, "timeSlotId", 1),
@@ -299,6 +344,116 @@ class CoachBookingServiceTest {
         assertEquals(501, fullMatches.getFirst().get("coachId"));
         assertEquals(1, partialMatches.size());
         assertEquals(502, partialMatches.getFirst().get("coachId"));
+    }
+
+    @Test
+    void customerMatchCoaches_shouldRejectWhenNoActiveGymCoachMembership() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
+                eq(10), any(LocalDate.class), any(LocalDate.class)))
+                .thenThrow(new EmptyResultDataAccessException(1));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
+                "customer-match-coaches",
+                Map.of(
+                        "authorizationHeader", "Bearer customer",
+                        "endDate", "2026-03-31",
+                        "slots", List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(String.valueOf(exception.getReason()).contains("ACTIVE Gym + Coach membership"));
+    }
+
+    @Test
+    void customerMatchCoaches_shouldRejectWhenApprovedPtStillActive() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    ResultSet rs = Mockito.mock(ResultSet.class);
+                    when(rs.getString("Status")).thenReturn("APPROVED");
+                    when(rs.getDate("StartDate")).thenReturn(java.sql.Date.valueOf(LocalDate.now().minusDays(2)));
+                    when(rs.getDate("EndDate")).thenReturn(java.sql.Date.valueOf(LocalDate.now().plusDays(21)));
+                    when(rs.getInt("CoachID")).thenReturn(20);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
+                "customer-match-coaches",
+                Map.of(
+                        "authorizationHeader", "Bearer customer",
+                        "endDate", "2026-03-31",
+                        "slots", List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(String.valueOf(exception.getReason()).contains("active PT schedule"));
+    }
+
+    @Test
+    void coachApprovePtRequest_shouldMoveStartDateToNextMondayAfterApproval() {
+        LocalDate approvalDate = LocalDate.now();
+        LocalDate expectedStartDate = approvalDate.plusDays(8 - approvalDate.getDayOfWeek().getValue());
+        LocalDate endDate = expectedStartDate.plusDays(21);
+
+        when(authService.requireAuthContext("Bearer coach"))
+                .thenReturn(new AuthService.AuthContext(20, "COACH", "Coach Alex", "coach@gymcore.local"));
+
+        when(jdbcTemplate.query(
+                contains("SELECT CustomerID, CustomerMembershipID, StartDate, EndDate, Status FROM dbo.PTRecurringRequests"),
+                any(RowMapper.class),
+                eq(900),
+                eq(20)))
+                .thenReturn(List.of(mapOfNullable(
+                        "customerId", 10,
+                        "customerMembershipId", 77,
+                        "startDate", LocalDate.now().plusDays(7),
+                        "endDate", endDate,
+                        "status", "PENDING")));
+
+        when(jdbcTemplate.query(
+                contains("SELECT DayOfWeek, TimeSlotID FROM dbo.PTRequestSlots"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenReturn(List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)));
+
+        when(jdbcTemplate.query(
+                contains("SELECT cm.CustomerMembershipID, mp.AllowsCoachBooking"),
+                any(RowMapper.class),
+                eq(10),
+                eq(77),
+                eq(expectedStartDate),
+                eq(endDate)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    ResultSet rs = Mockito.mock(ResultSet.class);
+                    when(rs.getInt("CustomerMembershipID")).thenReturn(77);
+                    when(rs.getBoolean("AllowsCoachBooking")).thenReturn(true);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        when(jdbcTemplate.update(contains("UPDATE dbo.PTRecurringRequests SET StartDate = ?"), eq(expectedStartDate), eq(900)))
+                .thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "coach-approve-pt-request",
+                Map.of(
+                        "authorizationHeader", "Bearer coach",
+                        "requestId", 900));
+
+        assertEquals("APPROVED", result.get("status"));
+        assertEquals(expectedStartDate.toString(), result.get("startDate"));
+        assertEquals(endDate.toString(), result.get("endDate"));
+        verify(jdbcTemplate).update(contains("UPDATE dbo.PTRecurringRequests SET StartDate = ?"), eq(expectedStartDate), eq(900));
     }
 
     private Map<String, Object> mapOfNullable(Object... keyValues) {

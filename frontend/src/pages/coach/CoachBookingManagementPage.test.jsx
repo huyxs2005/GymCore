@@ -69,7 +69,7 @@ describe('CoachBookingManagementPage', () => {
   })
 
   it('does not call approve when confirm is cancelled', async () => {
-    global.confirm.mockReturnValue(false)
+    globalThis.confirm.mockReturnValue(false)
     coachBookingApi.getPendingRequests.mockResolvedValue({ data: { items: [] } })
     coachBookingApi.getRescheduleRequests.mockResolvedValue({
       data: {

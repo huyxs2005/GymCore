@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarClock, CreditCard } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
+import { promotionApi } from '../../features/promotion/api/promotionApi'
 
 const planTypeMeta = {
   DAY_PASS: { label: 'Day Pass' },
@@ -71,6 +72,9 @@ function CustomerMembershipPage() {
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('DAY_PASS')
   const [checkoutWarning, setCheckoutWarning] = useState(null)
+  const [selectedPromoCode, setSelectedPromoCode] = useState('')
+  const [couponPreview, setCouponPreview] = useState(null)
+  const [couponPreviewError, setCouponPreviewError] = useState('')
   const [showSuccessMessage, setShowSuccessMessage] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('status')
     const normalizedStatus = status ? status.trim().toUpperCase() : ''
@@ -87,8 +91,19 @@ function CustomerMembershipPage() {
     queryFn: membershipApi.getCurrentMembership,
   })
 
-  const plans = plansQuery.data?.data?.plans ?? []
+  const claimsQuery = useQuery({
+    queryKey: ['myClaims'],
+    queryFn: promotionApi.getMyClaims,
+  })
+
+  const plans = useMemo(() => plansQuery.data?.data?.plans ?? [], [plansQuery.data])
   const currentMembership = currentMembershipQuery.data?.data?.membership ?? {}
+  const membershipCoupons = useMemo(
+    () => (claimsQuery.data?.data?.claims ?? []).filter(
+      (claim) => !claim.UsedAt && String(claim.ApplyTarget || '').toUpperCase() === 'MEMBERSHIP',
+    ),
+    [claimsQuery.data],
+  )
   const validForCheckin = Boolean(currentMembershipQuery.data?.data?.validForCheckin)
   const invalidReason = currentMembershipQuery.data?.data?.reason || ''
   const hasActiveMembership = String(currentMembership?.status || '').toUpperCase() === 'ACTIVE'
@@ -108,43 +123,37 @@ function CustomerMembershipPage() {
     [plans],
   )
 
-  const visiblePlans = plansByCategory[selectedCategory] ?? []
+  const availableCategories = useMemo(
+    () => Object.keys(planTypeMeta).filter((key) => (plansByCategory[key] ?? []).length > 0),
+    [plansByCategory],
+  )
 
-  useEffect(() => {
-    if ((plansByCategory[selectedCategory] ?? []).length > 0) {
-      return
-    }
+  const activeCategory = availableCategories.includes(selectedCategory)
+    ? selectedCategory
+    : (availableCategories[0] ?? 'DAY_PASS')
 
-    const fallback = Object.keys(planTypeMeta).find((key) => (plansByCategory[key] ?? []).length > 0)
-    if (fallback && fallback !== selectedCategory) {
-      setSelectedCategory(fallback)
-    }
-  }, [plansByCategory, selectedCategory])
+  const visiblePlans = useMemo(
+    () => plansByCategory[activeCategory] ?? [],
+    [activeCategory, plansByCategory],
+  )
 
-  useEffect(() => {
-    if (visiblePlans.length === 0) {
-      setSelectedPlanId(null)
-      return
-    }
-
-    const stillVisible = visiblePlans.some((plan) => plan.planId === selectedPlanId)
-    if (!stillVisible) {
-      setSelectedPlanId(visiblePlans[0].planId)
-    }
-  }, [visiblePlans, selectedPlanId])
+  const activeSelectedPlanId = visiblePlans.some((plan) => plan.planId === selectedPlanId)
+    ? selectedPlanId
+    : (visiblePlans[0]?.planId ?? null)
 
   const selectedPlan = useMemo(
-    () => plans.find((plan) => plan.planId === selectedPlanId) ?? null,
-    [plans, selectedPlanId],
+    () => visiblePlans.find((plan) => plan.planId === activeSelectedPlanId) ?? null,
+    [activeSelectedPlanId, visiblePlans],
   )
 
   const checkoutMutation = useMutation({
-    mutationFn: ({ mode, planId }) => {
+    mutationFn: ({ mode, planId, promoCode }) => {
       const payload = {
         planId,
         paymentMethod: 'PAYOS',
         returnUrl: `${window.location.origin}/customer/membership`,
         cancelUrl: `${window.location.origin}/customer/membership?status=CANCELLED`,
+        promoCode: promoCode || undefined,
       }
       if (mode === 'RENEW') {
         return membershipApi.renew(payload)
@@ -165,6 +174,18 @@ function CustomerMembershipPage() {
     onError: (error) => {
       const message = error.response?.data?.message || error.message || 'Membership checkout failed.'
       alert(message)
+    },
+  })
+
+  const previewCouponMutation = useMutation({
+    mutationFn: (payload) => promotionApi.applyCoupon(payload),
+    onSuccess: (response) => {
+      setCouponPreviewError('')
+      setCouponPreview(response?.data ?? null)
+    },
+    onError: (error) => {
+      setCouponPreview(null)
+      setCouponPreviewError(error.response?.data?.message || error.message || 'Unable to preview coupon.')
     },
   })
 
@@ -205,7 +226,7 @@ function CustomerMembershipPage() {
       return
     }
 
-    checkoutMutation.mutate({ mode, planId: selectedPlan.planId })
+    checkoutMutation.mutate({ mode, planId: selectedPlan.planId, promoCode: selectedPromoCode })
   }
 
   const confirmCheckoutAfterWarning = () => {
@@ -216,10 +237,48 @@ function CustomerMembershipPage() {
 
     const mode = checkoutWarning.mode
     setCheckoutWarning(null)
-    checkoutMutation.mutate({ mode, planId: selectedPlan.planId })
+    checkoutMutation.mutate({ mode, planId: selectedPlan.planId, promoCode: selectedPromoCode })
   }
 
   const checkoutModePreview = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : null
+
+  const resetCouponSelection = () => {
+    setSelectedPromoCode('')
+    setCouponPreview(null)
+    setCouponPreviewError('')
+  }
+
+  const handlePromoCodeChange = (promoCode) => {
+    setSelectedPromoCode(promoCode)
+    setCouponPreview(null)
+    setCouponPreviewError('')
+
+    if (!promoCode || !selectedPlan) {
+      return
+    }
+
+    previewCouponMutation.mutate({
+      promoCode,
+      target: 'MEMBERSHIP',
+      subtotal: Number(selectedPlan.price || 0),
+    })
+  }
+
+  const formatClaimBenefit = (claim) => {
+    const discountPercent = Number(claim.DiscountPercent || 0)
+    const discountAmount = Number(claim.DiscountAmount || 0)
+    const bonusMonths = Number(claim.BonusDurationMonths || 0)
+    const parts = []
+    if (discountPercent > 0) {
+      parts.push(`${discountPercent}% off`)
+    } else if (discountAmount > 0) {
+      parts.push(`${discountAmount.toLocaleString('en-US')} VND off`)
+    }
+    if (bonusMonths > 0) {
+      parts.push(`+${bonusMonths} month${bonusMonths > 1 ? 's' : ''}`)
+    }
+    return parts.join(' + ') || 'No benefit'
+  }
 
   return (
     <WorkspaceScaffold
@@ -257,12 +316,16 @@ function CustomerMembershipPage() {
           <div className="grid gap-2 sm:grid-cols-3">
             {Object.entries(planTypeMeta).map(([key, meta]) => {
               const count = plansByCategory[key]?.length ?? 0
-              const selected = selectedCategory === key
+              const selected = activeCategory === key
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setSelectedCategory(key)}
+                  onClick={() => {
+                    setSelectedCategory(key)
+                    setSelectedPlanId(null)
+                    resetCouponSelection()
+                  }}
                   className={`rounded-xl border px-3 py-2 text-left transition ${
                     selected
                       ? 'border-gym-300 bg-gym-50'
@@ -278,12 +341,15 @@ function CustomerMembershipPage() {
 
           <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
             {visiblePlans.map((plan) => {
-              const selected = selectedPlanId === plan.planId
+              const selected = activeSelectedPlanId === plan.planId
               return (
                 <button
                   key={plan.planId}
                   type="button"
-                  onClick={() => setSelectedPlanId(plan.planId)}
+                  onClick={() => {
+                    setSelectedPlanId(plan.planId)
+                    resetCouponSelection()
+                  }}
                   className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                     selected
                       ? 'border-gym-300 bg-gym-50'
@@ -370,6 +436,46 @@ function CustomerMembershipPage() {
                 <p className="mt-2 text-[11px] text-slate-600">
                   Checkout mode will be applied automatically:{' '}
                   <span className="font-semibold">{checkoutModeLabel[checkoutModePreview]}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+              <label htmlFor="membership-promo-code" className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Apply membership coupon
+              </label>
+              <select
+                id="membership-promo-code"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-gym-500 focus:outline-none"
+                value={selectedPromoCode}
+                onChange={(event) => handlePromoCodeChange(event.target.value)}
+                disabled={!selectedPlan}
+              >
+                <option value="">No coupon applied</option>
+                {membershipCoupons.map((claim) => (
+                  <option key={claim.ClaimID} value={claim.PromoCode}>
+                    {claim.PromoCode} - {formatClaimBenefit(claim)}
+                  </option>
+                ))}
+              </select>
+              {membershipCoupons.length === 0 && (
+                <p className="text-[11px] text-slate-500">No membership coupons available in your wallet.</p>
+              )}
+              {previewCouponMutation.isPending && (
+                <p className="text-[11px] text-slate-500">Checking coupon...</p>
+              )}
+              {couponPreview && selectedPromoCode && (
+                <p className="rounded-lg border border-gym-100 bg-gym-50 px-2 py-2 text-[11px] text-gym-800">
+                  Preview: discount {Number(couponPreview.estimatedDiscount || 0).toLocaleString('en-US')} VND
+                  {Number(couponPreview.bonusDurationMonths || 0) > 0
+                    ? `, +${Number(couponPreview.bonusDurationMonths)} month${Number(couponPreview.bonusDurationMonths) > 1 ? 's' : ''}`
+                    : ''}
+                  , total {Number(couponPreview.estimatedFinalAmount || selectedPlan?.price || 0).toLocaleString('en-US')} VND.
+                </p>
+              )}
+              {couponPreviewError && (
+                <p className="rounded-lg border border-red-100 bg-red-50 px-2 py-2 text-[11px] text-red-700">
+                  {couponPreviewError}
                 </p>
               )}
             </div>

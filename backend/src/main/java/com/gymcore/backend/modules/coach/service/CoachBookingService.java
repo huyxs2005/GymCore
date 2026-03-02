@@ -75,7 +75,7 @@ public class CoachBookingService {
             case "admin-update-coach-profile" -> adminUpdateCoachProfile(request);
             case "admin-get-coach-performance" -> adminGetCoachPerformance(request);
             case "admin-get-coach-students" -> adminGetCoachStudents(request);
-            default -> todo(action, payload);
+            default -> throw unsupportedAction(action);
         };
     }
 
@@ -235,11 +235,15 @@ public class CoachBookingService {
     }
 
     private Map<String, Object> customerMatchCoaches(Map<String, Object> payload) {
-        requireCustomer(payload);
-        String startDateStr = requireText(payload, "startDate");
+        AuthService.AuthContext customer = requireCustomer(payload);
+        ensureNoBlockingPtRequest(customer.userId());
         String endDateStr = requireText(payload, "endDate");
-        LocalDate startDate = LocalDate.parse(startDateStr);
+        LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
         LocalDate endDate = LocalDate.parse(endDateStr);
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after the earliest possible coaching start date.");
+        }
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> slots = (List<Map<String, Object>>) payload.get("slots");
@@ -247,6 +251,13 @@ public class CoachBookingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "At least one slot (dayOfWeek, timeSlotId) is required.");
         }
+
+        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate, endDate);
+        if (membership.customerMembershipId() == null || !membership.allowsCoachBooking()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "You need an ACTIVE Gym + Coach membership covering the selected period.");
+        }
+
         List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
         List<Map<String, Object>> coaches = asList(customerGetCoaches(payload).get("items"));
 
@@ -278,6 +289,7 @@ public class CoachBookingService {
         result.put("fullMatches", fullMatches);
         result.put("partialMatches", partialMatches);
         result.put("requestedSlotsCount", requestedSlots.size());
+        result.put("estimatedStartDate", dateToString(startDate));
         result.put("fromDate", dateToString(startDate));
         result.put("toDate", dateToString(endDate));
         List<Map<String, Object>> items = new ArrayList<>();
@@ -290,8 +302,8 @@ public class CoachBookingService {
     @Transactional
     private Map<String, Object> customerCreateBookingRequest(Map<String, Object> payload) {
         AuthService.AuthContext customer = requireCustomer(payload);
+        ensureNoBlockingPtRequest(customer.userId());
         int coachId = requireInteger(payload, "coachId");
-        String startDateStr = requireText(payload, "startDate");
         String endDateStr = requireText(payload, "endDate");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> slots = (List<Map<String, Object>>) payload.get("slots");
@@ -300,15 +312,16 @@ public class CoachBookingService {
                     "At least one slot (dayOfWeek, timeSlotId) is required.");
         }
 
-        LocalDate startDate = LocalDate.parse(startDateStr);
+        LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
         LocalDate endDate = LocalDate.parse(endDateStr);
-        if (!endDate.isAfter(startDate) && !endDate.isEqual(startDate)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endDate must be >= startDate.");
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after the earliest possible coaching start date.");
         }
 
-        // Tự động lấy gói ACTIVE của customer nêú có.
-        // Thay vì báo lỗi nếu không có, ta sẽ lấy NULL để cho phép đặt không cần
-        // membership.
+        // Automatically resolve the customer's ACTIVE membership when available.
+        // If none exists, return NULL here and let the flow enforce the final rule.
+
         MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate, endDate);
         Integer customerMembershipId = membership.customerMembershipId();
         if (customerMembershipId == null || !membership.allowsCoachBooking()) {
@@ -365,8 +378,48 @@ public class CoachBookingService {
         // In PENDING flow, we do NOT generate sessions until coach approves
         return Map.of(
                 "ptRequestId", ptRequestId,
+                "startDate", dateToString(startDate),
+                "endDate", dateToString(endDate),
                 "status", "PENDING",
-                "message", "Yêu cầu đặt lịch đã được gửi. Vui lòng chờ PT xác nhận.");
+                "message", "Booking request sent successfully. Please wait for coach approval.");
+    }
+
+    private void ensureNoBlockingPtRequest(int customerId) {
+        ExistingPtBooking existing = findBlockingPtRequest(customerId);
+        if (existing == null) {
+            return;
+        }
+        if ("PENDING".equals(existing.status())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "You already have a PT request pending coach approval. Please wait for the coach response before booking again.");
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "You already have an active PT schedule. You cannot book another coach until your current PT arrangement ends.");
+    }
+
+    private ExistingPtBooking findBlockingPtRequest(int customerId) {
+        List<ExistingPtBooking> items = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    Status,
+                    StartDate,
+                    EndDate,
+                    CoachID
+                FROM dbo.PTRecurringRequests
+                WHERE CustomerID = ?
+                  AND (
+                        Status = 'PENDING'
+                        OR (Status = 'APPROVED' AND EndDate >= CAST(GETDATE() AS DATE))
+                  )
+                ORDER BY
+                    CASE WHEN Status = 'PENDING' THEN 1 ELSE 2 END,
+                    EndDate DESC,
+                    PTRequestID DESC
+                """, (rs, i) -> new ExistingPtBooking(
+                rs.getString("Status"),
+                rs.getDate("StartDate") != null ? rs.getDate("StartDate").toLocalDate() : null,
+                rs.getDate("EndDate") != null ? rs.getDate("EndDate").toLocalDate() : null,
+                rs.getInt("CoachID")), customerId);
+        return items.isEmpty() ? null : items.getFirst();
     }
 
     private int generatePTSessions(int ptRequestId, int customerId, int coachId, LocalDate startDate, LocalDate endDate,
@@ -827,11 +880,12 @@ public class CoachBookingService {
         int requestId = requireInteger(payload, "requestId");
 
         Map<String, Object> req = jdbcTemplate.query("""
-                SELECT CustomerID, StartDate, EndDate, Status FROM dbo.PTRecurringRequests
+                SELECT CustomerID, CustomerMembershipID, StartDate, EndDate, Status FROM dbo.PTRecurringRequests
                 WHERE PTRequestID = ? AND CoachID = ?
                 """, (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("customerId", rs.getInt("CustomerID"));
+            m.put("customerMembershipId", rs.getInt("CustomerMembershipID"));
             m.put("startDate", rs.getDate("StartDate").toLocalDate());
             m.put("endDate", rs.getDate("EndDate").toLocalDate());
             m.put("status", rs.getString("Status"));
@@ -848,20 +902,37 @@ public class CoachBookingService {
                 """, (rs, i) -> Map.of("dayOfWeek", rs.getInt("DayOfWeek"), "timeSlotId", rs.getInt("TimeSlotID")),
                 requestId);
 
+        LocalDate actualStartDate = nextMondayAfter(LocalDate.now());
+        LocalDate endDate = (LocalDate) req.get("endDate");
+        if (actualStartDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This request can no longer be approved because the selected coaching window has already passed.");
+        }
+        requireValidMembershipForPt(
+                (Integer) req.get("customerId"),
+                (Integer) req.get("customerMembershipId"),
+                actualStartDate,
+                endDate);
+
         if (hasPtRequestDenyReasonColumn()) {
             jdbcTemplate.update(
-                    "UPDATE dbo.PTRecurringRequests SET Status = 'APPROVED', DenyReason = NULL, UpdatedAt = SYSDATETIME() WHERE PTRequestID = ?",
-                    requestId);
+                    "UPDATE dbo.PTRecurringRequests SET StartDate = ?, Status = 'APPROVED', DenyReason = NULL, UpdatedAt = SYSDATETIME() WHERE PTRequestID = ?",
+                    actualStartDate, requestId);
         } else {
             jdbcTemplate.update(
-                    "UPDATE dbo.PTRecurringRequests SET Status = 'APPROVED', UpdatedAt = SYSDATETIME() WHERE PTRequestID = ?",
-                    requestId);
+                    "UPDATE dbo.PTRecurringRequests SET StartDate = ?, Status = 'APPROVED', UpdatedAt = SYSDATETIME() WHERE PTRequestID = ?",
+                    actualStartDate, requestId);
         }
 
         int count = generatePTSessions(requestId, (Integer) req.get("customerId"), coach.userId(),
-                (LocalDate) req.get("startDate"), (LocalDate) req.get("endDate"), slots);
+                actualStartDate, endDate, slots);
 
-        return Map.of("ptRequestId", requestId, "status", "APPROVED", "sessionsCreated", count);
+        return Map.of(
+                "ptRequestId", requestId,
+                "status", "APPROVED",
+                "startDate", dateToString(actualStartDate),
+                "endDate", dateToString(endDate),
+                "sessionsCreated", count);
     }
 
     private Map<String, Object> coachDenyPtRequest(Map<String, Object> payload) {
@@ -1421,8 +1492,8 @@ public class CoachBookingService {
                             rs.getBoolean("AllowsCoachBooking")),
                     customerId, startDate, endDate);
         } catch (EmptyResultDataAccessException e) {
-            // Cho phép trả về NULL ID nếu không có membership để người dùng có thể đặt
-            // không cần gói
+            // Allow returning a NULL membership ID when no membership exists.
+            // The caller then decides whether a membership is required.
             return new MembershipForPt(null, false);
         }
     }
@@ -1440,9 +1511,23 @@ public class CoachBookingService {
                 customerId, customerMembershipId, startDate, endDate);
         if (list.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Membership ID không hợp lệ hoặc gói không ACTIVE/không cho phép đặt PT. Để không nhập ID, hãy bỏ trống — hệ thống sẽ dùng gói ACTIVE của bạn.");
+                    "Membership ID is invalid, inactive, or does not allow PT booking. Leave it empty to let the system use your active membership automatically.");
         }
         return list.get(0);
+    }
+
+    private LocalDate resolveMinimumBookingStartDate(LocalDate requestDate) {
+        return nextMondayOnOrAfter(requestDate.plusDays(7));
+    }
+
+    private LocalDate nextMondayOnOrAfter(LocalDate date) {
+        int daysUntilMonday = Math.floorMod(8 - date.getDayOfWeek().getValue(), 7);
+        return date.plusDays(daysUntilMonday);
+    }
+
+    private LocalDate nextMondayAfter(LocalDate date) {
+        int daysUntilMonday = 8 - date.getDayOfWeek().getValue();
+        return date.plusDays(daysUntilMonday);
     }
 
     private void requireCoachExists(int coachId) {
@@ -1682,8 +1767,8 @@ public class CoachBookingService {
     }
 
     /**
-     * Row mapper cho CoachWeeklyAvailability (không dùng cột IsAvailable để tương
-     * thích mọi DB).
+     * Row mapper for CoachWeeklyAvailability (avoids relying on the IsAvailable
+     * column for compatibility across database variants).
      */
     private RowMapper<Map<String, Object>> availabilityWithoutIsAvailableRowMapper() {
         return (rs, i) -> {
@@ -1699,8 +1784,8 @@ public class CoachBookingService {
     }
 
     /**
-     * Lấy lịch trống theo tuần của PT. Luôn dùng query không dùng cột IsAvailable
-     * để tương thích DB thiếu cột.
+     * Loads weekly coach availability. Always uses a query that does not depend
+     * on the IsAvailable column so it stays compatible with database variants.
      */
     private List<Map<String, Object>> loadWeeklyAvailability(int coachId) {
         List<Map<String, Object>> rows = jdbcTemplate.query("""
@@ -1854,16 +1939,14 @@ public class CoachBookingService {
         };
     }
 
-    private Map<String, Object> todo(String action, Object payload) {
-        Map<String, Object> r = new LinkedHashMap<>();
-        r.put("module", "coach-booking");
-        r.put("action", action);
-        r.put("status", "TODO");
-        r.put("payload", payload == null ? Map.of() : payload);
-        return r;
+    private ResponseStatusException unsupportedAction(String action) {
+        return new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Unsupported coach-booking action: " + action);
     }
 
     private record MembershipForPt(Integer customerMembershipId, boolean allowsCoachBooking) {
+    }
+
+    private record ExistingPtBooking(String status, LocalDate startDate, LocalDate endDate, int coachId) {
     }
 
     private record RequestedSlot(int dayOfWeek, int timeSlotId) {
@@ -1875,3 +1958,4 @@ public class CoachBookingService {
     private record RescheduleMeta(String state, LocalDate requestedDate, int requestedTimeSlotId, String note) {
     }
 }
+

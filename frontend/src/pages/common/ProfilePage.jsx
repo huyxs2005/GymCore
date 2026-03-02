@@ -192,13 +192,27 @@ function ProfilePage() {
 
               <div className="mt-4">
                 <label className="block text-sm font-medium text-slate-700">Change profile photo</label>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  disabled={isUploading}
-                  onChange={handleAvatarChange}
-                  className="mt-2 block w-full text-sm"
-                />
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <input
+                    id="profile-avatar-upload"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={isUploading}
+                    onChange={handleAvatarChange}
+                    className="sr-only"
+                  />
+                  <label
+                    htmlFor="profile-avatar-upload"
+                    className={`inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                      isUploading
+                        ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                        : 'border-gym-200 bg-gym-50 text-gym-700 hover:border-gym-400 hover:bg-gym-100'
+                    }`}
+                  >
+                    {isUploading ? 'Uploading...' : 'Choose image'}
+                  </label>
+                  <span className="text-xs text-slate-500">PNG, JPG, or WebP. Square images work best.</span>
+                </div>
                 {uploadError ? <p className="mt-2 text-sm text-rose-700">{uploadError}</p> : null}
                 {isUploading ? <p className="mt-2 text-xs text-slate-500">Uploading...</p> : null}
               </div>

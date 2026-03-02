@@ -42,7 +42,7 @@ public class CheckinHealthService {
             case "reception-scan-checkin" -> receptionScanCheckin(asMap(payload));
             case "reception-validate-membership" -> receptionValidateMembership(asMap(payload));
             case "reception-get-checkin-history" -> receptionGetCheckinHistory(asMap(payload));
-            default -> todo(action, payload);
+            default -> throw unsupportedAction(action);
         };
     }
 
@@ -504,13 +504,8 @@ public class CheckinHealthService {
         return timestamp == null ? null : timestamp.toInstant().toString();
     }
 
-    private Map<String, Object> todo(String action, Object payload) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("module", "checkin-health");
-        response.put("action", action);
-        response.put("status", "TODO");
-        response.put("payload", payload == null ? Map.of() : payload);
-        return response;
+    private ResponseStatusException unsupportedAction(String action) {
+        return new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Unsupported checkin-health action: " + action);
     }
 
     @SuppressWarnings("unchecked")

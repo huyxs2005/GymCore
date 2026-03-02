@@ -70,7 +70,7 @@ class AuthServiceProfileAvatarTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -87,7 +87,7 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), eq(1)))
                 .thenReturn(Map.of("DateOfBirth", Date.valueOf("2000-01-02"), "Gender", "Male"));
 
-        Map<String, Object> result = authService.updateProfile("Bearer " + token, "Nguyễn Văn Minh", "0900123456", "2000-01-02", "Male");
+        Map<String, Object> result = authService.updateProfile("Bearer " + token, "Jordan Miles", "0900123456", "2000-01-02", "Male");
         @SuppressWarnings("unchecked")
         Map<String, Object> user = (Map<String, Object>) result.get("user");
 
@@ -103,13 +103,13 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                         false, true, true,
                         null, null
                 ));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.updateProfile("Bearer " + token, "Nguyễn Văn Minh", "0900123456", "02-01-2000", "Male"));
+                authService.updateProfile("Bearer " + token, "Jordan Miles", "0900123456", "02-01-2000", "Male"));
         assertEquals(400, ex.getStatusCode().value());
     }
 
@@ -119,13 +119,13 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyá»…n VÄƒn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                         false, true, true,
                         null, null
                 ));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "abc", null, null));
+                authService.updateProfile("Bearer " + token, "Jordan Miles", "abc", null, null));
         assertEquals(400, ex.getStatusCode().value());
 
         verify(jdbcTemplate, never()).update(contains("UPDATE dbo.Users"), any(), any(), any());
@@ -136,7 +136,7 @@ class AuthServiceProfileAvatarTest {
         String token = JwtTestUtil.accessTokenForUserId(2, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord coach = new UserRecord(
                 2, 2, "Coach", "COACH",
-                "Trần Minh Huy", "coach@gymcore.local", "0900123456", null,
+                "Alex Carter", "coach@gymcore.local", "0900123456", null,
                 false, true, true,
                 null, null
         );
@@ -150,7 +150,7 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Coaches"), eq(2)))
                 .thenReturn(Map.of("DateOfBirth", Date.valueOf("1998-01-01"), "Gender", "Male"));
 
-        Map<String, Object> result = authService.updateProfile("Bearer " + token, "Trần Minh Huy", "0900123456", "1998-01-01", "Male");
+        Map<String, Object> result = authService.updateProfile("Bearer " + token, "Alex Carter", "0900123456", "1998-01-01", "Male");
         @SuppressWarnings("unchecked")
         Map<String, Object> user = (Map<String, Object>) result.get("user");
 
@@ -164,7 +164,7 @@ class AuthServiceProfileAvatarTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -176,7 +176,7 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), eq(1)))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                         false, true, true,
                         "/uploads/avatars/1/avatar.png", "CUSTOM"
                 ));
@@ -206,7 +206,7 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                         false, true, true,
                         null, null
                 ));
@@ -223,7 +223,7 @@ class AuthServiceProfileAvatarTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                         false, true, true,
                         null, null
                 ));

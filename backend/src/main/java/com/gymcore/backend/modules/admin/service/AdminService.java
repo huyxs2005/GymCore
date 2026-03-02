@@ -28,14 +28,7 @@ public class AdminService {
             case "get-product-revenue" -> getProductRevenue(safePayload);
             case "get-coach-feedback" -> getCoachFeedback();
             case "get-coach-students" -> getCoachStudents();
-            default -> {
-                Map<String, Object> response = new LinkedHashMap<>();
-                response.put("module", "admin");
-                response.put("action", action);
-                response.put("status", "TODO");
-                response.put("payload", safePayload);
-                yield response;
-            }
+            default -> throw unsupportedAction(action);
         };
     }
 
@@ -192,5 +185,9 @@ public class AdminService {
             return (Map<String, Object>) map;
         }
         return Map.of();
+    }
+
+    private ResponseStatusException unsupportedAction(String action) {
+        return new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Unsupported admin action: " + action);
     }
 }

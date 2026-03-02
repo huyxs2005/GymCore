@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, QrCode, User } from 'lucide-react'
+import { CreditCard, LogOut, QrCode, User } from 'lucide-react'
 import { authApi } from '../../features/auth/api/authApi'
 import { clearSession } from '../../features/auth/session'
 import { useSession } from '../../features/auth/useSession'
@@ -108,17 +108,27 @@ function AccountMenu({ className = '' }) {
               View profile
             </Link>
             {isCustomer ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false)
-                  setQrOpen(true)
-                }}
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
-              >
-                <QrCode size={16} />
-                QR code
-              </button>
+              <>
+                <Link
+                  to="/customer/current-membership"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                >
+                  <CreditCard size={16} />
+                  Current membership
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    setQrOpen(true)
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                >
+                  <QrCode size={16} />
+                  QR code
+                </button>
+              </>
             ) : null}
             <button
               type="button"

@@ -77,22 +77,48 @@ class ProductSalesServiceCheckoutTest {
 
         Map<String, Object> bonusOnlyClaim = new HashMap<>();
         bonusOnlyClaim.put("ClaimID", 321);
+        bonusOnlyClaim.put("ApplyTarget", "MEMBERSHIP");
         bonusOnlyClaim.put("DiscountPercent", null);
         bonusOnlyClaim.put("DiscountAmount", null);
-        bonusOnlyClaim.put("BonusDurationDays", 30);
+        bonusOnlyClaim.put("BonusDurationMonths", 1);
 
-        when(jdbcTemplate.queryForList(contains("FROM dbo.UserPromotionClaims"), eq(5), eq("SUMMERPLUS30")))
+        when(jdbcTemplate.queryForList(contains("FROM dbo.UserPromotionClaims"), eq(5), eq("SUMMERPLUS1M")))
                 .thenReturn(List.of(bonusOnlyClaim));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
                 service.execute("customer-checkout", "Bearer customer", Map.of(
-                        "promoCode", "SUMMERPLUS30",
+                        "promoCode", "SUMMERPLUS1M",
                         "paymentMethod", "PAYOS")));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(String.valueOf(exception.getReason()).contains("membership purchases only"));
         verify(payOsService, never()).createPaymentLink(anyInt(), any(), anyString(), anyString(), anyString(),
                 anyString(), anyString(), any());
+    }
+
+    @Test
+    void confirmPaymentReturn_shouldDecodeEncodedPayOsOrderCode() {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq("555123456"))).thenReturn(555);
+
+        when(jdbcTemplate.queryForObject(
+                contains("JOIN dbo.Orders o ON o.OrderID = p.OrderID"),
+                eq(Integer.class),
+                eq(555),
+                eq(5)))
+                .thenReturn(1);
+
+        when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(555))).thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = service.execute(
+                "customer-confirm-payment-return",
+                "Bearer customer",
+                Map.of("orderCode", "555123456", "status", "SUCCESS"));
+
+        assertTrue(Boolean.TRUE.equals(response.get("handled")));
+        assertEquals(555, response.get("paymentId"));
     }
 
     private ResultSet resultSet(Map<String, Object> values) throws Exception {

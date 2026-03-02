@@ -103,8 +103,8 @@ Customer
 - View Notifications (badge count)
 
 Admin
-- Create Coupon Code (discount and/or bonus duration days)
-- Update Coupon Code (discount and/or bonus duration days)
+- Create Coupon Code (product discount, membership discount, membership extra months, or membership discount + extra months)
+- Update Coupon Code (product discount, membership discount, membership extra months, or membership discount + extra months)
 - Create Promotion Post
 - Update Promotion Post
 - View Revenue Report
@@ -207,6 +207,12 @@ I4. Coach booking and PT scheduling rules
   - covers requested StartDate..EndDate (`TRG_PTRecurringRequests_ValidateMembership`).
 - PT request must reference `CustomerMembershipID` (not nullable in DB).
 - One customer can have only one APPROVED recurring PT request at a time.
+- Customer cannot start another PT booking flow when either of these is true:
+  - a PT recurring request is already `PENDING`,
+  - or an `APPROVED` PT arrangement is still active / has future scheduled sessions.
+- This duplicate-booking block is enforced in both places:
+  - backend request validation for `customer-match-coaches` and `customer-create-booking-request`,
+  - frontend coach-booking UI before opening the planner or previewing matches.
 - PTSession statuses: SCHEDULED, COMPLETED, CANCELLED.
 - Coach cannot be double-booked on same SessionDate + TimeSlotID for SCHEDULED/COMPLETED sessions.
 - Coach deny action requires DenyReason.
@@ -265,7 +271,7 @@ I6. Product sales, cart, order, payment rules
 - Payment method audit values are strictly PAYOS or CASH on Orders and Payments (defaults and checks applied in `alter.txt`).
 - API checkout currently accepts PAYOS only (membership and product checkout services normalize/reject non-PAYOS values).
 - Membership checkout channel is PayOS redirect.
-- Product checkout rejects coupons with `BonusDurationDays > 0` (membership-only coupon).
+- Product checkout rejects membership-only coupons and accepts at most one coupon claim.
 - Membership webhook requires valid PayOS signature (missing/invalid signature is rejected).
 - Payment success procedure (`sp_ConfirmPaymentSuccess`) behavior:
   - payment moves PENDING -> SUCCESS,
@@ -279,14 +285,29 @@ I7. Promotions, coupon wallet, and claim usage rules
   - DiscountPercent and DiscountAmount cannot both be set at same time.
   - DiscountPercent must be 0..100 when present.
   - DiscountAmount must be >= 0 when present.
-  - BonusDurationDays must be >= 0.
+  - ApplyTarget must be exactly `ORDER` or `MEMBERSHIP`.
+  - BonusDurationMonths must be >= 0.
 - PromotionPost validity: `EndAt > StartAt`.
 - Claim-first policy:
   - Customer must claim coupon before apply/checkout.
 - One claim per user per promotion.
-- Coupon apply target is restricted to ORDER or MEMBERSHIP (default ORDER).
-- For ORDER target, coupon with `BonusDurationDays > 0` is rejected as membership-only.
-- Coupon definition must include at least one benefit: percent discount OR amount discount OR bonus duration days.
+- Coupon apply target is restricted to `ORDER` or `MEMBERSHIP`.
+- Coupon definition must include at least one benefit:
+  - percent discount, or
+  - amount discount, or
+  - membership bonus months.
+- Product / order coupon rules:
+  - target must be `ORDER`,
+  - supports discount only,
+  - must not carry membership bonus months.
+- Membership coupon rules:
+  - target must be `MEMBERSHIP`,
+  - may be discount only,
+  - may be extra membership months only,
+  - may combine discount + extra membership months.
+- Coupon stacking is forbidden:
+  - one checkout may reference at most one coupon claim,
+  - customer cannot apply multiple coupons to the same order or membership payment.
 - Claim usage shape integrity:
   - unused claim has no used fields,
   - used claim must have UsedAt + UsedPaymentID,
@@ -302,7 +323,7 @@ I7. Promotions, coupon wallet, and claim usage rules
   - claim user must match payment target customer,
   - claim must be unused,
   - promotion must still be active/valid.
-- Coupon can provide discount and/or bonus duration days for membership flow.
+- Membership checkout can apply discount and/or bonus months from one membership-target coupon only.
 
 I8. Notification and anti-spam rules
 - Notification row has read/unread state (`IsRead`).

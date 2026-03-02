@@ -23,7 +23,7 @@ function CoachBookingManagementPage() {
       ])
       setRequests(bookingData?.data?.items || [])
       setRescheduleRequests(rescheduleData?.data?.items || [])
-    } catch (err) {
+    } catch {
       setError('Cannot load booking requests')
     } finally {
       setLoading(false)
@@ -178,8 +178,11 @@ function CoachBookingManagementPage() {
 
                 <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Period:</span>
+                    <span className="text-slate-500">Requested window:</span>
                     <span className="font-semibold text-slate-800">{req.startDate} to {req.endDate}</span>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Approval starts recurring sessions from the next Monday after you approve.
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Submitted:</span>

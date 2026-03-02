@@ -5,8 +5,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Trang gốc (/) - Backend là API server, không có giao diện web.
- * Dùng Postman/curl hoặc frontend để gọi API tại /api/v1/...
+ * Root endpoint (/). The backend is an API server and does not render a web UI.
+ * Use Postman, curl, or the frontend app to call endpoints under /api/v1/.
  */
 @RestController
 public class HomeController {
@@ -18,7 +18,7 @@ public class HomeController {
                 "status", "running",
                 "apiBase", "/api/v1",
                 "auth", "/api/v1/auth/login",
-                "docs", "Xem docs/HUONG-DAN-CHAY-VA-GOI-API.md để gọi API"
+                "docs", "See the project documentation in docs/ for API usage details."
         );
     }
 }
