@@ -79,24 +79,30 @@ const schedule = [
 
 const plans = [
   {
-    title: 'Basic',
+    title: 'Daypass',
     subtitle: 'Perfect for beginners',
-    price: '$29',
+    amount: '80,000',
+    currency: 'VND',
+    period: '/day',
     features: ['Access to gym facilities', 'Locker room access', '2 group classes per week', 'Mobile app access'],
     popular: false,
   },
   {
-    title: 'Pro',
+    title: 'Gym Only',
     subtitle: 'Most popular choice',
-    price: '$59',
-    features: ['All Basic features', 'Unlimited group classes', '2 personal training sessions/month', 'Nutrition guidance', 'Priority booking'],
+    amount: '500,000',
+    currency: 'VND',
+    period: '/month',
+    features: ['All Daypass features', 'Unlimited group classes', '2 personal training sessions/month', 'Nutrition guidance', 'Priority booking'],
     popular: true,
   },
   {
-    title: 'Elite',
+    title: 'Gym + Coach',
     subtitle: 'For serious athletes',
-    price: '$99',
-    features: ['All Pro features', 'Unlimited personal training', 'Custom meal plans', 'Recovery & massage therapy', '24/7 gym access', 'Guest passes (2/month)'],
+    amount: '5,000,000',
+    currency: 'VND',
+    period: '/6 months',
+    features: ['All Gym Only features', 'Unlimited personal training', 'Custom meal plans', 'Recovery & massage therapy', '24/7 gym access', 'Guest passes (2/month)'],
     popular: false,
   },
 ]
@@ -321,9 +327,18 @@ function LandingPage() {
                   <h3 className="text-3xl font-black text-gym-dark-900 mb-2">{plan.title}</h3>
                   <p className="text-gym-dark-400 font-bold">{plan.subtitle}</p>
                 </div>
-                <div className="mb-10 flex items-end justify-center gap-1">
-                  <span className="text-5xl font-black text-gym-dark-900">{plan.price}</span>
-                  <span className="text-gym-dark-400 font-black mb-1">/month</span>
+                <div className="mb-10 flex flex-col items-center justify-center gap-2 text-center">
+                  <div className="text-4xl font-black text-gym-dark-900 leading-none tracking-tight whitespace-nowrap">
+                    {plan.amount}
+                  </div>
+                  <div className="flex items-baseline justify-center gap-2 whitespace-nowrap">
+                    <span className="text-2xl font-black text-gym-dark-900 leading-none tracking-tight">
+                      {plan.currency || 'VND'}
+                    </span>
+                    <span className="text-2xl font-black text-gym-dark-400 leading-none tracking-tight">
+                      {plan.period || '/month'}
+                    </span>
+                  </div>
                 </div>
                 <ul className="text-left space-y-4 mb-12 flex-1">
                   {plan.features.map((f, i) => (
