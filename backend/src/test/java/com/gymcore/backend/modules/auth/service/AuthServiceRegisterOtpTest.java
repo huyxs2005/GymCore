@@ -62,7 +62,7 @@ class AuthServiceRegisterOtpTest {
     @Test
     void startRegistration_shouldRejectShortPassword() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", "123", "123"));
+                authService.startRegistration("Jordan Avery", "a@gymcore.local", "0900123456", "123", "123"));
         assertEquals(400, ex.getStatusCode().value());
         assertEquals(PASSWORD_POLICY_MESSAGE, ex.getReason());
     }
@@ -70,7 +70,7 @@ class AuthServiceRegisterOtpTest {
     @Test
     void startRegistration_shouldRejectPasswordMismatch() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", "Secret123!", "Secret124!"));
+                authService.startRegistration("Jordan Avery", "a@gymcore.local", "0900123456", "Secret123!", "Secret124!"));
         assertEquals(400, ex.getStatusCode().value());
     }
 
@@ -88,7 +88,7 @@ class AuthServiceRegisterOtpTest {
                 .thenReturn(customerUserVerified());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "customer@gymcore.local", "0900123456", "Secret123!", "Secret123!"));
+                authService.startRegistration("Jordan Avery", "customer@gymcore.local", "0900123456", "Secret123!", "Secret123!"));
         assertEquals(HttpStatus.CONFLICT.value(), ex.getStatusCode().value());
     }
 
@@ -104,7 +104,7 @@ class AuthServiceRegisterOtpTest {
                 .thenReturn(coach);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "coach@gymcore.local", "0900123456", "Secret123!", "Secret123!"));
+                authService.startRegistration("Jordan Avery", "coach@gymcore.local", "0900123456", "Secret123!", "Secret123!"));
         assertEquals(HttpStatus.CONFLICT.value(), ex.getStatusCode().value());
     }
 
@@ -131,7 +131,7 @@ class AuthServiceRegisterOtpTest {
                 .thenReturn(0);
 
         Map<String, Object> result = authService.startRegistration(
-                "Nguyễn Văn A",
+                "Jordan Avery",
                 "  NEW@GymCore.Local ",
                 "0900123456",
                 "Secret123!",
@@ -142,7 +142,7 @@ class AuthServiceRegisterOtpTest {
         assertEquals(120L, result.get("expiresInSeconds"));
         assertEquals(5L, result.get("resendCooldownSeconds"));
 
-        verify(authMailService).sendRegisterOtp(eq("new@gymcore.local"), eq("Nguyễn Văn A"), anyString(), eq(120L));
+        verify(authMailService).sendRegisterOtp(eq("new@gymcore.local"), eq("Jordan Avery"), anyString(), eq(120L));
     }
 
     @Test
@@ -251,7 +251,7 @@ class AuthServiceRegisterOtpTest {
     private UserRecord customerUserUnverified() {
         return new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                 false, true, false,
                 null, null
         );
@@ -260,7 +260,7 @@ class AuthServiceRegisterOtpTest {
     private UserRecord customerUserVerified() {
         return new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -268,7 +268,7 @@ class AuthServiceRegisterOtpTest {
 
     private void assertPasswordPolicyRejected(String password) {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Nguyễn Văn A", "a@gymcore.local", "0900123456", password, password));
+                authService.startRegistration("Jordan Avery", "a@gymcore.local", "0900123456", password, password));
         assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
         assertEquals(PASSWORD_POLICY_MESSAGE, ex.getReason());
     }

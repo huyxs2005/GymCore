@@ -52,7 +52,7 @@ class AuthServiceQrTokenTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Trần Minh Huy", "customer@gymcore.local", null, "$2a$hash",
+                        "Alex Carter", "customer@gymcore.local", null, "$2a$hash",
                         false, true, true,
                         null, null
                 ));
@@ -69,7 +69,7 @@ class AuthServiceQrTokenTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Trần Minh Huy", "customer@gymcore.local", null, "$2a$hash",
+                        "Alex Carter", "customer@gymcore.local", null, "$2a$hash",
                         false, true, true,
                         null, null
                 ));
@@ -87,4 +87,3 @@ class AuthServiceQrTokenTest {
         field.set(target, value);
     }
 }
-

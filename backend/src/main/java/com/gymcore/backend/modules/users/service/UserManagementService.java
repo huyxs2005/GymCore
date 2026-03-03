@@ -31,7 +31,7 @@ public class UserManagementService {
         return switch (action) {
             case "reception-search-customers" -> receptionSearchCustomers(asMap(payload));
             case "reception-customer-membership" -> receptionCustomerMembership(asMap(payload));
-            default -> todo(action, payload);
+            default -> throw unsupportedAction(action);
         };
     }
 
@@ -284,13 +284,8 @@ public class UserManagementService {
         return value == null ? null : value.format(DATE_FORMAT);
     }
 
-    private Map<String, Object> todo(String action, Object payload) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("module", "users");
-        response.put("action", action);
-        response.put("status", "TODO");
-        response.put("payload", payload == null ? Map.of() : payload);
-        return response;
+    private ResponseStatusException unsupportedAction(String action) {
+        return new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Unsupported users action: " + action);
     }
 
     @SuppressWarnings("unchecked")

@@ -54,7 +54,7 @@ class AuthServicePhoneEdgeCasesTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", null, "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -69,11 +69,11 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), org.mockito.ArgumentMatchers.eq(1)))
                 .thenReturn(Map.of("DateOfBirth", Date.valueOf("2000-01-02"), "Gender", "Male"));
 
-        authService.updateProfile("Bearer " + token, "Nguyễn Văn Minh", "(090) 567-5437", "2000-01-02", "Male");
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "(090) 567-5437", "2000-01-02", "Male");
 
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                org.mockito.ArgumentMatchers.eq("Nguyễn Văn Minh"),
+                org.mockito.ArgumentMatchers.eq("Jordan Miles"),
                 org.mockito.ArgumentMatchers.eq("0905675437"),
                 org.mockito.ArgumentMatchers.eq(1)
         );
@@ -84,7 +84,7 @@ class AuthServicePhoneEdgeCasesTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", null, "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -97,11 +97,11 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), org.mockito.ArgumentMatchers.eq(1)))
                 .thenReturn(Map.of());
 
-        authService.updateProfile("Bearer " + token, "Nguyễn Văn Minh", "+84905675437", null, null);
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "+84905675437", null, null);
 
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                org.mockito.ArgumentMatchers.eq("Nguyễn Văn Minh"),
+                org.mockito.ArgumentMatchers.eq("Jordan Miles"),
                 org.mockito.ArgumentMatchers.eq("+84905675437"),
                 org.mockito.ArgumentMatchers.eq(1)
         );
@@ -112,7 +112,7 @@ class AuthServicePhoneEdgeCasesTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyá»…n VÄƒn Minh", "customer@gymcore.local", null, "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -126,11 +126,11 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), eq(1)))
                 .thenReturn(Map.of());
 
-        authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "    ", null, null);
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "    ", null, null);
 
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                eq("Nguyá»…n VÄƒn Minh"),
+                eq("Jordan Miles"),
                 eq(null),
                 eq(1)
         );
@@ -141,7 +141,7 @@ class AuthServicePhoneEdgeCasesTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyá»…n VÄƒn Minh", "customer@gymcore.local", null, "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -155,18 +155,18 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), eq(1)))
                 .thenReturn(Map.of());
 
-        authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "12345678", null, null);
-        authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "123456789012345", null, null);
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "12345678", null, null);
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "123456789012345", null, null);
 
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                eq("Nguyá»…n VÄƒn Minh"),
+                eq("Jordan Miles"),
                 eq("12345678"),
                 eq(1)
         );
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                eq("Nguyá»…n VÄƒn Minh"),
+                eq("Jordan Miles"),
                 eq("123456789012345"),
                 eq(1)
         );
@@ -177,7 +177,7 @@ class AuthServicePhoneEdgeCasesTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyá»…n VÄƒn Minh", "customer@gymcore.local", null, "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -191,11 +191,11 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), eq(1)))
                 .thenReturn(Map.of());
 
-        authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "  +84 (905) 675-437  ", null, null);
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "  +84 (905) 675-437  ", null, null);
 
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                eq("Nguyá»…n VÄƒn Minh"),
+                eq("Jordan Miles"),
                 eq("+84905675437"),
                 eq(1)
         );
@@ -206,7 +206,7 @@ class AuthServicePhoneEdgeCasesTest {
         String token = JwtTestUtil.accessTokenForUserId(1, "this-is-a-test-jwt-secret-at-least-32-chars!!");
         UserRecord current = new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyá»…n VÄƒn Minh", "customer@gymcore.local", null, "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -220,11 +220,11 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForMap(contains("FROM dbo.Customers"), eq(1)))
                 .thenReturn(Map.of());
 
-        authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "０９０５６７５４３７", null, null);
+        authService.updateProfile("Bearer " + token, "Jordan Miles", "\uFF10\uFF19\uFF10\uFF15\uFF16\uFF17\uFF15\uFF14\uFF13\uFF17", null, null);
 
         verify(jdbcTemplate).update(
                 contains("UPDATE dbo.Users"),
-                eq("Nguyá»…n VÄƒn Minh"),
+                eq("Jordan Miles"),
                 eq("0905675437"),
                 eq(1)
         );
@@ -236,13 +236,13 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyá»…n VÄƒn Minh", "customer@gymcore.local", null, "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                         false, true, true,
                         null, null
                 ));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.updateProfile("Bearer " + token, "Nguyá»…n VÄƒn Minh", "090😊5675437", null, null));
+                authService.updateProfile("Bearer " + token, "Jordan Miles", "090\uD83D\uDE0A5675437", null, null));
         assertEquals(400, ex.getStatusCode().value());
 
         verify(jdbcTemplate, never()).update(contains("UPDATE dbo.Users"), any(), any(), any());
@@ -254,13 +254,13 @@ class AuthServicePhoneEdgeCasesTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), any()))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyễn Văn Minh", "customer@gymcore.local", null, "$2a$hash",
+                        "Jordan Miles", "customer@gymcore.local", null, "$2a$hash",
                         false, true, true,
                         null, null
                 ));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.updateProfile("Bearer " + token, "Nguyễn Văn Minh", "+1234567890123456", null, null));
+                authService.updateProfile("Bearer " + token, "Jordan Miles", "+1234567890123456", null, null));
         assertEquals(400, ex.getStatusCode().value());
 
         verify(jdbcTemplate, never()).update(contains("UPDATE dbo.Users"), any(), any(), any());

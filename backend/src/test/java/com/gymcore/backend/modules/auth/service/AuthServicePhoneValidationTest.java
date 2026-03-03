@@ -43,7 +43,7 @@ class AuthServicePhoneValidationTest {
     @Test
     void startRegistration_shouldRejectInvalidPhone() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.startRegistration("Trần Minh Huy", "a@gymcore.local", "abc", "Secret123!", "Secret123!"));
+                authService.startRegistration("Alex Carter", "a@gymcore.local", "abc", "Secret123!", "Secret123!"));
         assertEquals(400, ex.getStatusCode().value());
 
         // Phone validation happens before any DB side-effects or emails.
@@ -57,4 +57,3 @@ class AuthServicePhoneValidationTest {
         field.set(target, value);
     }
 }
-

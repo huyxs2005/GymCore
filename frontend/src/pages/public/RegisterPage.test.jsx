@@ -62,7 +62,7 @@ describe('RegisterPage - Resend OTP Cooldown', () => {
 
     renderAtRegister()
 
-    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Trần Minh Huy' } })
+    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Alex Carter' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'a@b.com' } })
     fireEvent.change(screen.getByLabelText(/^Phone$/i), { target: { value: '0901234567' } })
     fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'secret123' } })

@@ -17,19 +17,17 @@ if (-not (Test-Path (Join-Path $frontendDir 'package.json'))) {
 }
 
 $backendRunCommand = '.\mvnw.cmd spring-boot:run'
-try {
-    $jdkRootReg = 'HKLM:\SOFTWARE\JavaSoft\JDK'
-    if (Test-Path $jdkRootReg) {
-        $currentVersion = (Get-ItemProperty $jdkRootReg).CurrentVersion
-        if ($currentVersion) {
-            $javaHome = (Get-ItemProperty (Join-Path $jdkRootReg $currentVersion)).JavaHome
-            if ($javaHome -match '^[A-Za-z]:$' -and (Test-Path "$javaHome\bin\java.exe")) {
-                $backendRunCommand = ".\mvnw.cmd --% -Djava.home=$javaHome/ spring-boot:run"
-            }
-        }
-    }
-}
-catch {
+$preferredJavaHomes = @(@(
+    'C:\Program Files\Java\latest\jdk-25',
+    'C:\Program Files\Java\latest\jdk-25.0.2',
+    $env:JAVA_HOME
+) | Where-Object {
+    $_ -and (Test-Path (Join-Path $_ 'bin\java.exe'))
+})
+
+if ($preferredJavaHomes.Count -gt 0) {
+    $selectedJavaHome = $preferredJavaHomes[0]
+    $backendRunCommand = "`$env:JAVA_HOME='$selectedJavaHome'; `$env:Path=(`$env:JAVA_HOME + '\bin;' + `$env:Path); .\mvnw.cmd spring-boot:run"
 }
 
 $backendArgs = @(

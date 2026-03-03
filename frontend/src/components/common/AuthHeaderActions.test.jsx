@@ -22,13 +22,12 @@ describe('AuthHeaderActions', () => {
   it('shows account menu when authenticated', () => {
     persistSession({
       accessToken: 'token',
-      user: { fullName: 'Trần Minh Huy', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' },
+      user: { fullName: 'Alex Carter', email: 'kironinja2015@gmail.com', role: 'CUSTOMER' },
     })
 
     renderWithRouter(<AuthHeaderActions />)
-    expect(screen.getByText('Trần Minh Huy')).toBeInTheDocument()
+    expect(screen.getByText('Alex Carter')).toBeInTheDocument()
     expect(screen.queryByText('Login')).toBeNull()
     expect(screen.queryByText('Register')).toBeNull()
   })
 })
-

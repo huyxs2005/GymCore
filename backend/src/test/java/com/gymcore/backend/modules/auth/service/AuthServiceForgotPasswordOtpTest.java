@@ -214,7 +214,7 @@ class AuthServiceForgotPasswordOtpTest {
     @Test
     void updateProfile_shouldRequireValidBearerToken() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
-                authService.updateProfile(null, "Nguyễn Văn A", "0900123456", null, null));
+                authService.updateProfile(null, "Jordan Avery", "0900123456", null, null));
         assertEquals(401, ex.getStatusCode().value());
     }
 
@@ -228,15 +228,15 @@ class AuthServiceForgotPasswordOtpTest {
         when(jdbcTemplate.queryForObject(contains("WHERE u.UserID"), any(RowMapper.class), eq(1)))
                 .thenReturn(new UserRecord(
                         1, 1, "Customer", "CUSTOMER",
-                        "Nguyễn Văn A", "customer@gymcore.local", "0900123456", "$2a$hash",
+                        "Jordan Avery", "customer@gymcore.local", "0900123456", "$2a$hash",
                         false, true, true,
                         null, null
                 ));
 
-        Map<String, Object> result = authService.updateProfile("Bearer " + token, "Nguyễn Văn A", "0900123456", null, null);
+        Map<String, Object> result = authService.updateProfile("Bearer " + token, "Jordan Avery", "0900123456", null, null);
         @SuppressWarnings("unchecked")
         Map<String, Object> user = (Map<String, Object>) result.get("user");
-        assertEquals("Nguyễn Văn A", user.get("fullName"));
+        assertEquals("Jordan Avery", user.get("fullName"));
     }
 
     @Test
@@ -258,7 +258,7 @@ class AuthServiceForgotPasswordOtpTest {
     private UserRecord customerVerifiedActive() {
         return new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", "$2a$hash",
+                "Jordan Miles", "customer@gymcore.local", "0900123456", "$2a$hash",
                 false, true, true,
                 null, null
         );
@@ -267,7 +267,7 @@ class AuthServiceForgotPasswordOtpTest {
     private UserRecord customerVerifiedActiveWithPassword(String passwordHash) {
         return new UserRecord(
                 1, 1, "Customer", "CUSTOMER",
-                "Nguyễn Văn Minh", "customer@gymcore.local", "0900123456", passwordHash,
+                "Jordan Miles", "customer@gymcore.local", "0900123456", passwordHash,
                 false, true, true,
                 null, null
         );
