@@ -24,11 +24,11 @@ public class PromotionController {
                 this.promotionService = promotionService;
         }
 
-        @GetMapping("/promotions/posts")
-        public ApiResponse<Map<String, Object>> getPosts(
+        @GetMapping("/promotions/coupons")
+        public ApiResponse<Map<String, Object>> getCustomerCoupons(
                         @RequestHeader(value = org.springframework.http.HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-                return ApiResponse.ok("Promotion posts retrieved",
-                                promotionService.execute("customer-get-promotion-posts", authorization, null));
+                return ApiResponse.ok("Coupons retrieved",
+                                promotionService.execute("customer-get-coupons", authorization, null));
         }
 
         @PostMapping("/promotions/claims")
@@ -102,40 +102,6 @@ public class PromotionController {
                 return ApiResponse.ok("Coupon deactivated",
                                 promotionService.execute("admin-delete-coupon", authorization,
                                                 Map.of("promotionId", promotionId)));
-        }
-
-        @PostMapping("/admin/promotions/posts")
-        public ApiResponse<Map<String, Object>> createPost(
-                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
-                        @RequestBody Map<String, Object> payload) {
-                return ApiResponse.ok("Promotion post created",
-                                promotionService.execute("admin-create-promotion-post", authorization, payload));
-        }
-
-        @PutMapping("/admin/promotions/posts/{postId}")
-        public ApiResponse<Map<String, Object>> updatePost(
-                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
-                        @PathVariable Integer postId,
-                        @RequestBody Map<String, Object> payload) {
-                return ApiResponse.ok("Promotion post updated",
-                                promotionService.execute("admin-update-promotion-post", authorization,
-                                                Map.of("postId", postId, "body", payload)));
-        }
-
-        @DeleteMapping("/admin/promotions/posts/{postId}")
-        public ApiResponse<Map<String, Object>> deletePost(
-                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
-                        @PathVariable Integer postId) {
-                return ApiResponse.ok("Promotion post deactivated",
-                                promotionService.execute("admin-delete-promotion-post", authorization,
-                                                Map.of("postId", postId)));
-        }
-
-        @GetMapping("/admin/promotions/posts")
-        public ApiResponse<Map<String, Object>> getAdminPosts(
-                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
-                return ApiResponse.ok("Admin promotion posts retrieved",
-                                promotionService.execute("admin-get-posts", authorization, null));
         }
 
         @GetMapping("/admin/promotions/revenue-report")

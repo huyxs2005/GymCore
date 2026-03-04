@@ -343,7 +343,6 @@ public class ProductSalesService {
                     JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                     WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
                     AND p.IsActive = 1
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
                     """, customerId, promoCode);
 
             if (claims.isEmpty()) {
@@ -352,13 +351,15 @@ public class ProductSalesService {
 
             Map<String, Object> claim = claims.get(0);
             claimId = (Integer) claim.get("ClaimID");
-            BigDecimal pct = requireDecimal(claim.get("DiscountPercent"), "Invalid percent");
-            BigDecimal amt = requireDecimal(claim.get("DiscountAmount"), "Invalid amount");
+            BigDecimal pct = parseNullableDecimal(claim.get("DiscountPercent"));
+            BigDecimal amt = parseNullableDecimal(claim.get("DiscountAmount"));
 
             if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
                 discount = subtotal.multiply(pct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
-            } else if (amt != null) {
+            } else if (amt != null && amt.compareTo(BigDecimal.ZERO) > 0) {
                 discount = amt;
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid promo code.");
             }
 
             if (discount.compareTo(subtotal) > 0) {
@@ -890,6 +891,23 @@ public class ProductSalesService {
             return new BigDecimal(String.valueOf(value));
         } catch (NumberFormatException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+    }
+
+    private BigDecimal parseNullableDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            if (value instanceof BigDecimal bigDecimal) {
+                return bigDecimal;
+            }
+            if (value instanceof Number number) {
+                return BigDecimal.valueOf(number.doubleValue());
+            }
+            return new BigDecimal(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return null;
         }
     }
 

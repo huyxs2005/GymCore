@@ -522,6 +522,37 @@ BEGIN
 END
 GO
 
+IF EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = 'FK_UserPromotionClaims_SourcePost'
+      AND parent_object_id = OBJECT_ID('dbo.UserPromotionClaims')
+)
+BEGIN
+    ALTER TABLE dbo.UserPromotionClaims
+    DROP CONSTRAINT FK_UserPromotionClaims_SourcePost;
+END
+GO
+
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.UserPromotionClaims')
+      AND name = 'SourcePostID'
+      AND is_nullable = 0
+)
+BEGIN
+    ALTER TABLE dbo.UserPromotionClaims
+    ALTER COLUMN SourcePostID INT NULL;
+END
+GO
+
+IF OBJECT_ID('dbo.TRG_UserPromotionClaims_Validate', 'TR') IS NOT NULL
+BEGIN
+    DROP TRIGGER dbo.TRG_UserPromotionClaims_Validate;
+END
+GO
+
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Notifications' AND schema_id = SCHEMA_ID('dbo'))
 BEGIN
     CREATE TABLE dbo.Notifications (

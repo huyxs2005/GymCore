@@ -2,6 +2,11 @@ package com.gymcore.backend.modules.promotion.service;
 
 import com.gymcore.backend.modules.admin.service.ReportService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -29,18 +34,34 @@ public class PromotionService {
             case "admin-create-coupon" -> adminCreateCoupon(auth, payload);
             case "admin-update-coupon" -> adminUpdateCoupon(auth, payload);
             case "admin-delete-coupon" -> adminDeleteCoupon(auth, payload);
-            case "admin-get-posts" -> adminGetPosts(auth);
-            case "admin-create-promotion-post" -> adminCreatePost(auth, payload);
-            case "admin-update-promotion-post" -> adminUpdatePost(auth, payload);
-            case "admin-delete-promotion-post" -> adminDeletePost(auth, payload);
             case "admin-get-revenue-report" -> adminGetRevenueReport(auth);
-            case "customer-get-promotion-posts" -> customerGetPosts(auth);
+            case "customer-get-coupons" -> customerGetCoupons(auth);
             case "customer-claim-coupon" -> customerClaimCoupon(auth, payload);
             case "customer-get-my-claims" -> customerGetMyClaims(auth);
+            case "customer-apply-coupon" -> customerApplyCoupon(auth, payload);
             case "customer-get-notifications" -> customerGetNotifications(auth);
             case "customer-mark-notification-read" -> customerMarkRead(auth, payload);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown action: " + action);
         };
+    }
+
+    private Map<String, Object> customerApplyCoupon(String auth, Map<String, Object> payload) {
+        CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
+        String promoCode = String.valueOf(payload.get("promoCode"));
+
+        List<Map<String, Object>> claims = jdbcTemplate.queryForList("""
+                SELECT c.ClaimID, p.DiscountPercent, p.DiscountAmount, p.PromoCode, p.Description
+                FROM dbo.UserPromotionClaims c
+                JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                WHERE c.UserID = ? AND p.PromoCode = ? AND c.UsedAt IS NULL
+                AND p.IsActive = 1
+                """, user.userId(), promoCode);
+
+        if (claims.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This coupon is either invalid, not claimed, or already used.");
+        }
+
+        return Map.of("success", true, "claim", claims.get(0));
     }
 
     private Map<String, Object> adminGetRevenueReport(String auth) {
@@ -66,33 +87,45 @@ public class PromotionService {
     }
 
     private Map<String, Object> adminCreateCoupon(String auth, Map<String, Object> payload) {
-        CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
+        currentUserService.requireAdmin(auth);
+        java.math.BigDecimal[] discountValues = resolveDiscountValues(payload.get("discountPercent"),
+                payload.get("discountAmount"));
+        java.math.BigDecimal discountPercent = discountValues[0];
+        java.math.BigDecimal discountAmount = discountValues[1];
+        Timestamp validFrom = normalizeDateTime(payload.get("validFrom"), false, "Valid from date is required.");
+        Timestamp validTo = normalizeDateTime(payload.get("validTo"), true, "Valid to date is required.");
+        if (!validTo.after(validFrom)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valid to date must be after valid from date.");
+        }
+
         jdbcTemplate.update(
                 """
                         INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, ValidFrom, ValidTo, IsActive)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                         """,
-                payload.get("promoCode"),
-                payload.get("description"),
-                requireDecimal(payload.get("discountPercent")),
-                requireDecimal(payload.get("discountAmount")),
-                payload.get("validFrom"),
-                payload.get("validTo"),
+                requireText(payload.get("promoCode"), "Coupon code is required."),
+                optionalText(payload.get("description")),
+                discountPercent,
+                discountAmount,
+                validFrom,
+                validTo,
                 requireBit(payload.getOrDefault("isActive", 1)));
-
-        Integer promotionId = jdbcTemplate.queryForObject(
-                "SELECT TOP (1) PromotionID FROM dbo.Promotions WHERE PromoCode = ?",
-                Integer.class,
-                payload.get("promoCode"));
-        ensurePromotionHasAtLeastOnePost(promotionId, payload, admin.userId());
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminUpdateCoupon(String auth, Map<String, Object> payload) {
-        CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
+        currentUserService.requireAdmin(auth);
         int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
+        java.math.BigDecimal[] discountValues = resolveDiscountValues(body.get("discountPercent"), body.get("discountAmount"));
+        java.math.BigDecimal discountPercent = discountValues[0];
+        java.math.BigDecimal discountAmount = discountValues[1];
+        Timestamp validFrom = normalizeDateTime(body.get("validFrom"), false, "Valid from date is required.");
+        Timestamp validTo = normalizeDateTime(body.get("validTo"), true, "Valid to date is required.");
+        if (!validTo.after(validFrom)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valid to date must be after valid from date.");
+        }
 
         jdbcTemplate.update(
                 """
@@ -100,16 +133,14 @@ public class PromotionService {
                         SET PromoCode = ?, Description = ?, DiscountPercent = ?, DiscountAmount = ?, ValidFrom = ?, ValidTo = ?, IsActive = ?
                         WHERE PromotionID = ?
                         """,
-                body.get("promoCode"),
-                body.get("description"),
-                requireDecimal(body.get("discountPercent")),
-                requireDecimal(body.get("discountAmount")),
-                body.get("validFrom"),
-                body.get("validTo"),
+                requireText(body.get("promoCode"), "Coupon code is required."),
+                optionalText(body.get("description")),
+                discountPercent,
+                discountAmount,
+                validFrom,
+                validTo,
                 requireBit(body.getOrDefault("isActive", 1)),
                 promotionId);
-
-        ensurePromotionHasAtLeastOnePost(promotionId, body, admin.userId());
         return Map.of("success", true);
     }
 
@@ -120,136 +151,63 @@ public class PromotionService {
         return Map.of("success", true);
     }
 
-    private Map<String, Object> adminGetPosts(String auth) {
-        currentUserService.requireAdmin(auth);
-        String sql = """
-                SELECT p.*, r.PromoCode
-                FROM dbo.PromotionPosts p
-                JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
-                ORDER BY p.PromotionPostID DESC
-                """;
-        return Map.of("posts", jdbcTemplate.queryForList(sql));
-    }
 
-    private Map<String, Object> adminCreatePost(String auth, Map<String, Object> payload) {
-        CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
-        jdbcTemplate.update(
-                """
-                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                payload.get("title"),
-                payload.get("content"),
-                payload.get("bannerUrl"),
-                requireInt(payload.get("promotionId"), "Promotion ID is required."),
-                payload.get("startAt"),
-                payload.get("endAt"),
-                requireBit(payload.getOrDefault("isActive", 1)),
-                admin.userId());
-        return Map.of("success", true);
-    }
-
-    private Map<String, Object> adminUpdatePost(String auth, Map<String, Object> payload) {
-        currentUserService.requireAdmin(auth);
-        int postId = requireInt(payload.get("postId"), "Post ID is required.");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) payload.get("body");
-
-        jdbcTemplate.update("""
-                UPDATE dbo.PromotionPosts
-                SET Title = ?, Content = ?, BannerUrl = ?, StartAt = ?, EndAt = ?, IsActive = ?, PromotionID = ?
-                WHERE PromotionPostID = ?
-                """,
-                body.get("title"),
-                body.get("content"),
-                body.get("bannerUrl"),
-                body.get("startAt"),
-                body.get("endAt"),
-                requireBit(body.getOrDefault("isActive", 1)),
-                requireInt(body.get("promotionId"), "Promotion ID is required."),
-                postId);
-        return Map.of("success", true);
-    }
-
-    private Map<String, Object> adminDeletePost(String auth, Map<String, Object> payload) {
-        currentUserService.requireAdmin(auth);
-        int postId = requireInt(payload.get("postId"), "Post ID is required.");
-        jdbcTemplate.update("UPDATE dbo.PromotionPosts SET IsActive = 0 WHERE PromotionPostID = ?", postId);
-        return Map.of("success", true);
-    }
-
-    private Map<String, Object> customerGetPosts(String auth) {
-        ensureActiveCouponsHaveVisiblePosts();
-
+    private Map<String, Object> customerGetCoupons(String auth) {
         CurrentUserService.UserInfo user = currentUserService.findUser(auth).orElse(null);
         String sql;
-        List<Map<String, Object>> posts;
+        List<Map<String, Object>> coupons;
 
         if (user != null) {
             sql = """
-                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount,
+                    SELECT
+                           r.PromotionID,
+                           CONCAT('Coupon ', r.PromoCode) AS Title,
+                           COALESCE(NULLIF(LTRIM(RTRIM(r.Description)), ''), 'Claim this coupon and use it during checkout.') AS Content,
+                           CAST(NULL AS NVARCHAR(500)) AS BannerUrl,
+                           r.ValidFrom AS StartAt,
+                           r.ValidTo AS EndAt,
+                           r.PromoCode,
+                           r.DiscountPercent,
+                           r.DiscountAmount,
                            CASE WHEN c.ClaimID IS NOT NULL THEN 1 ELSE 0 END as IsClaimed
-                    FROM dbo.PromotionPosts p
-                    JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
+                    FROM dbo.Promotions r
                     LEFT JOIN dbo.UserPromotionClaims c ON c.PromotionID = r.PromotionID AND c.UserID = ?
-                    WHERE p.IsActive = 1 AND r.IsActive = 1
-                    ORDER BY p.CreatedAt DESC
+                    WHERE r.IsActive = 1
+                    ORDER BY r.PromotionID DESC
                     """;
-            posts = jdbcTemplate.queryForList(sql, user.userId());
+            coupons = jdbcTemplate.queryForList(sql, user.userId());
         } else {
             sql = """
-                    SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount,
+                    SELECT
+                           r.PromotionID,
+                           CONCAT('Coupon ', r.PromoCode) AS Title,
+                           COALESCE(NULLIF(LTRIM(RTRIM(r.Description)), ''), 'Claim this coupon and use it during checkout.') AS Content,
+                           CAST(NULL AS NVARCHAR(500)) AS BannerUrl,
+                           r.ValidFrom AS StartAt,
+                           r.ValidTo AS EndAt,
+                           r.PromoCode,
+                           r.DiscountPercent,
+                           r.DiscountAmount,
                            0 as IsClaimed
-                    FROM dbo.PromotionPosts p
-                    JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
-                    WHERE p.IsActive = 1 AND r.IsActive = 1
-                    ORDER BY p.CreatedAt DESC
+                    FROM dbo.Promotions r
+                    WHERE r.IsActive = 1
+                    ORDER BY r.PromotionID DESC
                     """;
-            posts = jdbcTemplate.queryForList(sql);
+            coupons = jdbcTemplate.queryForList(sql);
         }
-        return Map.of("posts", posts);
-    }
-
-    private void ensureActiveCouponsHaveVisiblePosts() {
-        jdbcTemplate.update(
-                """
-                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
-                        SELECT
-                            CONCAT('Coupon ', r.PromoCode),
-                            COALESCE(NULLIF(LTRIM(RTRIM(r.Description)), ''), 'Claim this coupon in Promotions and use it during checkout.'),
-                            NULL,
-                            r.PromotionID,
-                            r.ValidFrom,
-                            r.ValidTo,
-                            1,
-                            NULL
-                        FROM dbo.Promotions r
-                        WHERE r.IsActive = 1
-                          AND NOT EXISTS (
-                              SELECT 1
-                              FROM dbo.PromotionPosts p
-                              WHERE p.PromotionID = r.PromotionID
-                                AND p.IsActive = 1
-                          )
-                        """);
+        return Map.of("posts", coupons);
     }
 
    private Map<String, Object> customerClaimCoupon(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
         int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
-        int sourcePostId = requireInt(payload.get("sourcePostId"), "Source post ID is required.");
 
         Integer claimable = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1)
                 FROM dbo.Promotions r
-                JOIN dbo.PromotionPosts p ON p.PromotionID = r.PromotionID
                 WHERE r.PromotionID = ?
-                  AND p.PromotionPostID = ?
                   AND r.IsActive = 1
-                  AND p.IsActive = 1
-                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
-                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
-                """, Integer.class, promotionId, sourcePostId);
+                """, Integer.class, promotionId);
         if (claimable == null || claimable == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This coupon is not available to claim.");
         }
@@ -265,8 +223,8 @@ public class PromotionService {
 
         jdbcTemplate.update("""
                 INSERT INTO dbo.UserPromotionClaims (UserID, PromotionID, SourcePostID)
-                VALUES (?, ?, ?)
-                """, user.userId(), promotionId, sourcePostId);
+                VALUES (?, ?, NULL)
+                """, user.userId(), promotionId);
 
         return Map.of("success", true, "message", "Coupon added to your wallet!");
     }
@@ -279,7 +237,6 @@ public class PromotionService {
                 JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
                 WHERE c.UserID = ? AND c.UsedAt IS NULL
                 AND p.IsActive = 1
-                AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
                 """;
         return Map.of("claims", jdbcTemplate.queryForList(sql, user.userId()));
     }
@@ -345,37 +302,63 @@ public class PromotionService {
         return s.equals("true") || s.equals("1") || s.equals("on") ? 1 : 0;
     }
 
-    private void ensurePromotionHasAtLeastOnePost(Integer promotionId, Map<String, Object> source, Integer adminUserId) {
-        if (promotionId == null) {
-            return;
+    private String requireText(Object value, String message) {
+        if (value == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
-
-        Integer postCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(1) FROM dbo.PromotionPosts WHERE PromotionID = ?",
-                Integer.class,
-                promotionId);
-        if (postCount != null && postCount > 0) {
-            return;
+        String s = String.valueOf(value).trim();
+        if (s.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
-
-        String promoCode = String.valueOf(source.getOrDefault("promoCode", "NEW"));
-        String description = String.valueOf(source.getOrDefault("description", "")).trim();
-        String content = description.isBlank()
-                ? "Claim this coupon in Promotions and use it during checkout."
-                : description;
-
-        jdbcTemplate.update(
-                """
-                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                "Coupon " + promoCode,
-                content,
-                null,
-                promotionId,
-                source.get("validFrom"),
-                source.get("validTo"),
-                requireBit(source.getOrDefault("isActive", 1)),
-                adminUserId);
+        return s;
     }
+
+    private String optionalText(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String s = String.valueOf(value).trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private Timestamp normalizeDateTime(Object value, boolean endOfDay, String requiredMessage) {
+        String raw = requireText(value, requiredMessage);
+        try {
+            if (raw.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                LocalDate date = LocalDate.parse(raw);
+                LocalDateTime dateTime = endOfDay ? date.atTime(LocalTime.of(23, 59, 59)) : date.atStartOfDay();
+                return Timestamp.valueOf(dateTime);
+            }
+            return Timestamp.valueOf(LocalDateTime.parse(raw.replace(" ", "T")));
+        } catch (DateTimeParseException | IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, requiredMessage);
+        }
+    }
+
+    private java.math.BigDecimal[] resolveDiscountValues(Object percentRaw, Object amountRaw) {
+        java.math.BigDecimal percent = requireDecimal(percentRaw);
+        java.math.BigDecimal amount = requireDecimal(amountRaw);
+
+        if (percent != null && percent.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            percent = null;
+        }
+        if (amount != null && amount.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            amount = null;
+        }
+
+        if (percent != null && percent.compareTo(java.math.BigDecimal.valueOf(100)) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Discount percent must be at most 100.");
+        }
+        if (percent != null && amount != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Please provide only one discount type: percent or amount.");
+        }
+        if (percent == null && amount == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Please provide discount percent or discount amount.");
+        }
+
+        return new java.math.BigDecimal[] { percent, amount };
+    }
+
 }

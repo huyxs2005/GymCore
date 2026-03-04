@@ -7,8 +7,8 @@ const PromotionsPage = () => {
     const queryClient = useQueryClient()
 
     const { data: postsData, isLoading } = useQuery({
-        queryKey: ['promotionPosts'],
-        queryFn: () => promotionApi.getPromotionPosts(),
+        queryKey: ['promotionCoupons'],
+        queryFn: () => promotionApi.getCoupons(),
     })
 
     const claimMutation = useMutation({
@@ -46,7 +46,7 @@ const PromotionsPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {posts.map((post) => (
                     <div
-                        key={post.PromotionPostID}
+                        key={post.PromotionID}
                         className="group bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 transition-all duration-300 hover:shadow-2xl hover:-translate-y-2"
                     >
                         <div className="relative h-56 w-full">
@@ -83,7 +83,7 @@ const PromotionsPage = () => {
                             </div>
 
                             <button
-                                onClick={() => claimMutation.mutate({ promotionId: post.PromotionID, sourcePostId: post.PromotionPostID })}
+                                onClick={() => claimMutation.mutate({ promotionId: post.PromotionID })}
                                 disabled={claimMutation.isPending}
                                 className={`w-full py-3 px-6 rounded-xl font-bold text-white transition-all duration-200 
                   ${claimMutation.isPending

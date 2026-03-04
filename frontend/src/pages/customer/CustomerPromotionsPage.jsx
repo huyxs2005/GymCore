@@ -12,8 +12,8 @@ function CustomerPromotionsPage() {
   const queryClient = useQueryClient()
 
   const { data: postsData, isLoading } = useQuery({
-    queryKey: ['promotionPosts'],
-    queryFn: () => promotionApi.getPromotionPosts(),
+    queryKey: ['promotionCoupons'],
+    queryFn: () => promotionApi.getCoupons(),
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   })
@@ -25,7 +25,7 @@ function CustomerPromotionsPage() {
       const post = posts.find(p => p.PromotionID === variables.promotionId)
       setClaimedCoupon(post)
       setShowSuccessModal(true)
-      queryClient.invalidateQueries({ queryKey: ['promotionPosts'] })
+      queryClient.invalidateQueries({ queryKey: ['promotionCoupons'] })
       queryClient.invalidateQueries({ queryKey: ['myClaims'] })
     },
     onError: (error) => {
@@ -49,7 +49,7 @@ function CustomerPromotionsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {posts.map((post) => (
             <div
-              key={post.PromotionPostID}
+              key={post.PromotionID}
               className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group transition-all hover:shadow-md hover:-translate-y-1"
             >
               <div className="relative h-48 overflow-hidden">
@@ -99,7 +99,7 @@ function CustomerPromotionsPage() {
                 </div>
 
                 <button
-                  onClick={() => claimMutation.mutate({ promotionId: post.PromotionID, sourcePostId: post.PromotionPostID })}
+                  onClick={() => claimMutation.mutate({ promotionId: post.PromotionID })}
                   disabled={claimMutation.isPending || post.IsClaimed === 1}
                   className={`w-full py-2.5 px-4 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2
                     ${post.IsClaimed === 1
