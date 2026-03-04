@@ -1,15 +1,54 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CalendarClock, CreditCard } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CreditCard, Dumbbell, ShieldCheck, Sparkles, Ticket } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
 import { promotionApi } from '../../features/promotion/api/promotionApi'
 
 const planTypeMeta = {
-  DAY_PASS: { label: 'Day Pass' },
-  GYM_ONLY: { label: 'Gym Only' },
-  GYM_PLUS_COACH: { label: 'Gym + Coach' },
+  DAY_PASS: {
+    label: 'Day Pass',
+    headline: 'Quick access for a single training day',
+    accent: 'from-amber-500/15 via-white to-orange-500/10',
+    border: 'border-amber-200',
+    button: 'bg-amber-500 text-white',
+    tone: 'text-amber-700',
+    icon: Ticket,
+    benefits: [
+      'One-day front desk check-in access',
+      'Best for trial visits and occasional drop-ins',
+      'No long-term commitment or PT booking included',
+    ],
+  },
+  GYM_ONLY: {
+    label: 'Gym Only',
+    headline: 'Standard membership for consistent self-training',
+    accent: 'from-sky-500/15 via-white to-cyan-500/10',
+    border: 'border-sky-200',
+    button: 'bg-sky-600 text-white',
+    tone: 'text-sky-700',
+    icon: ShieldCheck,
+    benefits: [
+      'Full gym floor access for the selected duration',
+      'Receptionist check-in and health tracking support',
+      'Best fit if you train independently without PT sessions',
+    ],
+  },
+  GYM_PLUS_COACH: {
+    label: 'Gym + Coach',
+    headline: 'Premium plan with personal training booking access',
+    accent: 'from-emerald-500/18 via-white to-teal-500/12',
+    border: 'border-emerald-200',
+    button: 'bg-gym-600 text-white',
+    tone: 'text-emerald-700',
+    icon: Dumbbell,
+    benefits: [
+      'Includes full gym membership access',
+      'Unlocks coach matching and PT booking requests',
+      'Best for members who want guided progress and follow-up',
+    ],
+  },
 }
 
 const checkoutModeLabel = {
@@ -22,6 +61,16 @@ function normalizePlanType(planType) {
   return String(planType || '')
     .trim()
     .toUpperCase()
+}
+
+function formatDurationLabel(durationDays) {
+  const days = Number(durationDays || 0)
+  if (days <= 1) return '1 day'
+  if (days >= 365 * 2) return '24 months'
+  if (days >= 365) return '12 months'
+  if (days >= 180) return '6 months'
+  if (days >= 30) return '1 month'
+  return `${days} days`
 }
 
 function inferCheckoutMode(selectedPlan, currentMembership) {
@@ -98,6 +147,7 @@ function CustomerMembershipPage() {
 
   const plans = useMemo(() => plansQuery.data?.data?.plans ?? [], [plansQuery.data])
   const currentMembership = currentMembershipQuery.data?.data?.membership ?? {}
+  const queuedMembership = currentMembershipQuery.data?.data?.queuedMembership ?? null
   const membershipCoupons = useMemo(
     () => (claimsQuery.data?.data?.claims ?? []).filter(
       (claim) => !claim.UsedAt && String(claim.ApplyTarget || '').toUpperCase() === 'MEMBERSHIP',
@@ -144,6 +194,24 @@ function CustomerMembershipPage() {
   const selectedPlan = useMemo(
     () => visiblePlans.find((plan) => plan.planId === activeSelectedPlanId) ?? null,
     [activeSelectedPlanId, visiblePlans],
+  )
+
+  const planColumns = useMemo(
+    () =>
+      Object.entries(planTypeMeta).map(([key, meta]) => {
+        const categoryPlans = plansByCategory[key] ?? []
+        const fallbackPlan = categoryPlans[0] ?? null
+        const chosenPlan = categoryPlans.find((plan) => plan.planId === selectedPlanId) ?? null
+        const activePlan = selectedCategory === key ? chosenPlan ?? fallbackPlan : fallbackPlan
+        return {
+          key,
+          meta,
+          plans: categoryPlans,
+          activePlan,
+          selected: selectedCategory === key,
+        }
+      }),
+    [plansByCategory, selectedCategory, selectedPlanId],
   )
 
   const checkoutMutation = useMutation({
@@ -299,7 +367,7 @@ function CustomerMembershipPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,2fr)]">
-        <section className="space-y-3 gc-card-compact">
+        <section className="space-y-4 gc-card-compact">
           <header className="flex items-center justify-between gap-2">
             <h2 className="gc-section-kicker">Membership Plans</h2>
             <span className="text-xs text-slate-500">{plans.length} plans</span>
@@ -313,68 +381,115 @@ function CustomerMembershipPage() {
             <p className="text-sm text-slate-500">No active plans available.</p>
           )}
 
-          <div className="grid gap-2 sm:grid-cols-3">
-            {Object.entries(planTypeMeta).map(([key, meta]) => {
-              const count = plansByCategory[key]?.length ?? 0
-              const selected = activeCategory === key
+          <div className="grid gap-4 xl:grid-cols-3">
+            {planColumns.map(({ key, meta, plans: categoryPlans, activePlan, selected }) => {
+              const Icon = meta.icon
               return (
-                <button
+                <article
                   key={key}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategory(key)
-                    setSelectedPlanId(null)
-                    resetCouponSelection()
-                  }}
-                  className={`rounded-xl border px-3 py-2 text-left transition ${
+                  className={`flex min-h-[400px] flex-col rounded-[28px] border bg-gradient-to-br p-5 shadow-sm transition ${
                     selected
-                      ? 'border-gym-300 bg-gym-50'
-                      : 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50/60'
+                      ? `${meta.border} ${meta.accent} ring-2 ring-offset-2 ring-gym-200`
+                      : `border-slate-200 ${meta.accent} hover:border-gym-200`
                   }`}
                 >
-                  <p className="text-xs font-semibold text-slate-900">{meta.label}</p>
-                  <p className="mt-1 text-[11px] text-slate-500">{count} plan(s)</p>
-                </button>
-              )
-            })}
-          </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!categoryPlans.length) return
+                      setSelectedCategory(key)
+                      setSelectedPlanId(activePlan?.planId ?? categoryPlans[0]?.planId ?? null)
+                      resetCouponSelection()
+                    }}
+                    className="w-full text-left"
+                    disabled={!categoryPlans.length}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="gc-section-kicker">{meta.label}</p>
+                        <h3 className="mt-2 text-2xl font-bold text-slate-900">{meta.label}</h3>
+                        <p className="mt-2 text-sm text-slate-600">{meta.headline}</p>
+                      </div>
+                      <span className={`rounded-2xl p-3 ${selected ? meta.button : 'bg-white text-slate-700'} shadow-sm`}>
+                        <Icon size={20} />
+                      </span>
+                    </div>
+                  </button>
 
-          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
-            {visiblePlans.map((plan) => {
-              const selected = activeSelectedPlanId === plan.planId
-              return (
-                <button
-                  key={plan.planId}
-                  type="button"
-                  onClick={() => {
-                    setSelectedPlanId(plan.planId)
-                    resetCouponSelection()
-                  }}
-                  className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                    selected
-                      ? 'border-gym-300 bg-gym-50'
-                      : 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50/60'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-slate-900">{plan.name}</p>
+                  <div className="mt-5 rounded-2xl border border-white/70 bg-white/80 p-4 backdrop-blur">
+                    <label
+                      htmlFor={`membership-duration-${key}`}
+                      className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400"
+                    >
+                      Choose duration
+                    </label>
+                    <select
+                      id={`membership-duration-${key}`}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-gym-500 focus:outline-none"
+                      value={activePlan?.planId ?? ''}
+                      onChange={(event) => {
+                        const nextPlanId = Number(event.target.value)
+                        setSelectedCategory(key)
+                        setSelectedPlanId(Number.isNaN(nextPlanId) ? null : nextPlanId)
+                        resetCouponSelection()
+                      }}
+                      disabled={!categoryPlans.length}
+                    >
+                      {!categoryPlans.length && <option value="">No plans available</option>}
+                      {categoryPlans.map((plan) => (
+                        <option key={plan.planId} value={plan.planId}>
+                          {formatDurationLabel(plan.durationDays)} - {Number(plan.price || 0).toLocaleString('en-US')} VND
+                        </option>
+                      ))}
+                    </select>
+
+                    {activePlan ? (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-semibold text-slate-900">{activePlan.name}</span>
+                          {selected ? (
+                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.button}`}>
+                              Selected
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Price</p>
+                            <p className={`mt-1 font-bold ${meta.tone}`}>
+                              {Number(activePlan.price || 0).toLocaleString('en-US')} VND
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Access</p>
+                            <p className="mt-1 font-semibold text-slate-900">
+                              {activePlan.allowsCoachBooking ? 'Gym + Coach' : 'Gym access'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm text-slate-500">This membership type is not configured yet.</p>
+                    )}
                   </div>
-                    <p className="text-sm font-bold text-gym-600">
-                      {Number(plan.price || 0).toLocaleString('en-US')} <span className="text-xs text-slate-500">VND</span>
-                    </p>
+
+                  <div className="mt-5 flex-1 rounded-2xl border border-slate-200 bg-white/85 p-4">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={16} className={meta.tone} />
+                      <p className="text-sm font-semibold text-slate-900">Benefits</p>
+                    </div>
+                    <ul className="mt-3 space-y-3 text-sm text-slate-600">
+                      {meta.benefits.map((benefit) => (
+                        <li key={benefit} className="flex gap-2">
+                          <span className={`mt-1 h-2 w-2 rounded-full ${selected ? meta.button : 'bg-slate-300'}`} />
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">
-                    Duration: {plan.durationDays} day(s) - Coach booking: {plan.allowsCoachBooking ? 'Yes' : 'No'}
-                  </p>
-                </button>
+                </article>
               )
             })}
-            {!plansQuery.isLoading && visiblePlans.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
-                No plans in this category.
-              </p>
-            )}
           </div>
         </section>
 
@@ -396,28 +511,50 @@ function CustomerMembershipPage() {
           )}
 
           {!currentMembershipQuery.isLoading && currentMembership && Object.keys(currentMembership).length > 0 && (
-            <article className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-900">{currentMembership.plan?.name || 'Membership'}</p>
-                <span
-                  className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                    currentMembership.status === 'ACTIVE'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : currentMembership.status === 'PENDING' || currentMembership.status === 'SCHEDULED'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  {currentMembership.status}
-                </span>
-              </div>
-              <p className="text-xs text-slate-600">
-                Start: {currentMembership.startDate || '-'} - End: {currentMembership.endDate || '-'}
-              </p>
-              <p className={`text-xs font-medium ${validForCheckin ? 'text-emerald-600' : 'text-amber-700'}`}>
-                {validForCheckin ? 'Valid for QR check-in.' : invalidReason || 'Not valid for check-in yet.'}
-              </p>
-            </article>
+            <div className="space-y-3">
+              <article className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">{currentMembership.plan?.name || 'Membership'}</p>
+                  <span
+                    className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                      currentMembership.status === 'ACTIVE'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : currentMembership.status === 'PENDING' || currentMembership.status === 'SCHEDULED'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {currentMembership.status}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Start: {currentMembership.startDate || '-'} - End: {currentMembership.endDate || '-'}
+                </p>
+                <p className={`text-xs font-medium ${validForCheckin ? 'text-emerald-600' : 'text-amber-700'}`}>
+                  {validForCheckin ? 'Valid for QR check-in.' : invalidReason || 'Not valid for check-in yet.'}
+                </p>
+              </article>
+
+              {queuedMembership && Object.keys(queuedMembership).length > 0 && (
+                <article className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Queued next membership</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{queuedMembership.plan?.name || 'Membership'}</p>
+                    </div>
+                    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                      {queuedMembership.status || 'SCHEDULED'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Starts: {queuedMembership.startDate || '-'} - Ends: {queuedMembership.endDate || '-'}
+                  </p>
+                  <p className="text-xs font-medium text-amber-700">
+                    Your payment was recorded. This plan will appear as active when the current membership period ends.
+                  </p>
+                </article>
+              )}
+            </div>
           )}
 
           <article className="space-y-3 rounded-xl border border-slate-100 bg-white p-4">

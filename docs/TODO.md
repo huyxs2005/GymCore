@@ -43,7 +43,7 @@
 - [x] Implement `/promotions/apply` as a pre-check preview endpoint (no order/payment creation), including:
   - coupon validity preview
   - discount preview
-  - membership `BonusDurationDays` preview
+  - membership bonus-month preview
   - response contract for frontend apply-coupon UI
 
 ## Membership C-Section Merge (origin/membership -> beta-test-0.2)
@@ -70,13 +70,10 @@
 - [x] Run full regression checks after merge:
   - backend `.\mvnw.cmd test`
   - frontend `npm run test -- --run`
-  - automated service smoke coverage: membership purchase/renew/upgrade + PayOS return/webhook
+  - automated service smoke coverage: membership purchase/renew/upgrade + PayOS return handling
 
-## Deferred (By Decision)
-- [ ] Optional/later: expose and test PayOS webhook endpoint publicly (tunnel/deployment) for real signed callback verification.
-
-## Coupon Redesign Plan
-- [ ] Redefine coupon behavior before further schema/app work.
+## Coupon Redesign (Completed)
+- [x] Redefine coupon behavior before further schema/app work.
   - Coupon must target exactly one checkout domain: `ORDER` or `MEMBERSHIP`.
   - Product coupon supports discount only.
   - Membership coupon supports:
@@ -86,9 +83,8 @@
   - Customer must not be able to stack multiple coupons in one checkout.
   - One checkout can reference at most one claim / one promotion.
 
-- [ ] Update DB design to match the new coupon plan.
+- [x] Update DB design to match the new coupon plan.
   - Replace day-based bonus logic with month-based membership extension.
-  - Review whether `BonusDurationDays` should become `BonusDurationMonths`, or whether a compatibility migration is needed.
   - Keep explicit `ApplyTarget` on promotions.
   - Add DB constraints so:
     - order-target coupons cannot carry membership bonus months
@@ -96,14 +92,14 @@
     - coupon still must provide at least one benefit
     - one payment/order/membership checkout cannot store more than one coupon claim
 
-- [ ] Update backend coupon logic after the DB redesign.
+- [x] Update backend coupon logic after the DB redesign.
   - Read persisted coupon target from DB instead of inferring from bonus fields.
   - Product checkout must only accept `ORDER` coupons.
   - Membership checkout must only accept `MEMBERSHIP` coupons.
   - Membership checkout must apply bonus months, not bonus days.
   - Keep claim usage one-time and non-stackable across all checkout flows.
 
-- [ ] Update frontend admin/customer flows after the DB redesign.
+- [x] Update frontend admin/customer flows after the DB redesign.
   - Admin coupon CRUD must expose explicit coupon target.
   - Admin UI must support membership coupon combinations:
     - discount only
@@ -113,7 +109,7 @@
   - Customer membership checkout must show only valid membership coupons.
   - Checkout UI must allow selecting only one coupon at a time.
 
-- [ ] Add regression coverage for the redesigned coupon rules.
+- [x] Add regression coverage for the redesigned coupon rules.
   - Backend tests for product discount coupons.
   - Backend tests for membership discount-only coupons.
   - Backend tests for membership extra-month-only coupons.
@@ -121,8 +117,8 @@
   - Backend tests that stacked coupons are rejected.
   - Frontend tests for single-coupon checkout behavior in both shop and membership pages.
 
-## Coupon Redesign Implementation Queue
-- [ ] Backend: migrate `PromotionService` from `BonusDurationDays` to `ApplyTarget` + `BonusDurationMonths`.
+## Coupon Redesign Implementation Queue (Completed)
+- [x] Backend: migrate `PromotionService` from bonus days to `ApplyTarget` + `BonusDurationMonths`.
   - `backend/src/main/java/com/gymcore/backend/modules/promotion/service/PromotionService.java`
   - Update admin create/update coupon SQL to write:
     - `ApplyTarget`
@@ -137,13 +133,13 @@
     - `ORDER` coupon cannot have bonus months
     - `MEMBERSHIP` coupon may have discount only, months only, or both
 
-- [ ] Backend: update product checkout to honor explicit coupon target.
+- [x] Backend: update product checkout to honor explicit coupon target.
   - `backend/src/main/java/com/gymcore/backend/modules/product/service/ProductSalesService.java`
-  - Replace old `BonusDurationDays` membership-only rejection with `ApplyTarget != 'ORDER'`.
+  - Replace old bonus-day membership-only rejection with `ApplyTarget != 'ORDER'`.
   - Keep product checkout non-stackable: accept only one `promoCode`.
   - Keep order/payment storing only one `ClaimID`.
 
-- [ ] Backend: add membership coupon support to PayOS membership checkout.
+- [x] Backend: add membership coupon support to PayOS membership checkout.
   - `backend/src/main/java/com/gymcore/backend/modules/membership/service/MembershipService.java`
   - Add `promoCode` handling for:
     - purchase
@@ -159,9 +155,9 @@
   - Update pending-checkout reuse logic so different coupon selections do not incorrectly reuse the same pending payment link.
   - After payment success, mark membership coupon usage against `UsedOnMembershipID` correctly.
 
-- [ ] Frontend: update admin coupon management UI to match the new schema.
+- [x] Frontend: update admin coupon management UI to match the new schema.
   - `frontend/src/pages/admin/AdminPromotionsPage.jsx`
-  - Replace `BonusDurationDays` form/input/display with:
+  - Replace old bonus-day form/input/display with:
     - `ApplyTarget`
     - `BonusDurationMonths`
   - Add target selector:
@@ -172,14 +168,14 @@
     - membership extra months
     - membership discount + extra months
 
-- [ ] Frontend: update customer shop coupon flow to use explicit product coupons only.
+- [x] Frontend: update customer shop coupon flow to use explicit product coupons only.
   - `frontend/src/pages/customer/CustomerShopPage.jsx`
   - Filter wallet coupons by `ApplyTarget === 'ORDER'`.
-  - Remove remaining `BonusDurationDays` logic.
+  - Remove remaining bonus-day logic.
   - Keep one selected coupon in cart drawer only.
   - Keep direct PayOS redirect flow unchanged.
 
-- [ ] Frontend: add membership coupon picker and preview to membership checkout.
+- [x] Frontend: add membership coupon picker and preview to membership checkout.
   - `frontend/src/pages/customer/CustomerMembershipPage.jsx`
   - Load wallet claims.
   - Filter to `ApplyTarget === 'MEMBERSHIP'`.
@@ -190,36 +186,25 @@
     - final amount
   - Send selected `promoCode` into membership purchase / renew / upgrade API calls.
 
-- [ ] Frontend: update promotions display text to month-based membership bonuses.
+- [x] Frontend: update promotions display text to month-based membership bonuses.
   - `frontend/src/pages/customer/CustomerPromotionsPage.jsx`
-  - Replace old `+N DAYS` wording with `+N MONTH` / `+N MONTHS`.
+  - Replace old day-based wording with `+N MONTH` / `+N MONTHS`.
   - Optionally show target-aware text so customers know whether a coupon is for product checkout or membership checkout.
 
-- [ ] Tests: refresh backend coverage after schema contract change.
+- [x] Tests: refresh backend coverage after schema contract change.
   - `backend/src/test/java/com/gymcore/backend/modules/promotion/service/PromotionServiceTest.java`
   - `backend/src/test/java/com/gymcore/backend/modules/product/service/ProductSalesServiceCheckoutTest.java`
   - `backend/src/test/java/com/gymcore/backend/modules/membership/service/MembershipServiceCustomerFlowTest.java`
-  - Replace all `BonusDurationDays` assumptions.
+  - Replace all old bonus-day assumptions.
   - Add membership checkout coupon coverage end-to-end.
 
-- [ ] Tests: add or update frontend coverage for the redesigned coupon UX.
+- [x] Tests: add or update frontend coverage for the redesigned coupon UX.
   - `frontend/src/pages/customer/CustomerShopPage.test.jsx`
-  - Add a new membership-page test file if still missing:
-    - `frontend/src/pages/customer/CustomerMembershipPage.test.jsx`
+  - `frontend/src/pages/customer/CustomerMembershipPage.test.jsx`
   - Update admin promotions tests if added later.
 
-- [ ] Cleanup pass after implementation.
-  - Replace stale docs references still mentioning `BonusDurationDays`.
-  - Re-run:
-    - `docs/GymCore.txt`
-    - `docs/alter.txt`
-    - `docs/InsertValues.txt`
-    - `docs/InsertTestingValues.txt`
-  - Run full regression:
-    - backend `.\mvnw.cmd test`
-    - frontend `npm run lint`
-    - frontend `npm run test:run`
-    - frontend `npm run build`
+## Docs Cleanup
+- [x] Remove remaining stale bonus-day wording from docs and project memory so all project docs reflect the month-based coupon model consistently.
 
 ## Engineering Recommendations
 - [x] Replace placeholder `"status": "TODO"` responses with explicit, stable response states.

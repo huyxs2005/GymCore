@@ -462,6 +462,9 @@ class MembershipServiceCustomerFlowTest {
         when(jdbcTemplate.query(contains("p.CreatedAt < DATEADD"), any(RowMapper.class), eq(5), eq(5)))
                 .thenReturn(List.of());
 
+        when(jdbcTemplate.query(contains("AND cm.Status = 'SCHEDULED'"), any(RowMapper.class), eq(5)))
+                .thenReturn(List.of());
+
         when(jdbcTemplate.query(contains("OUTER APPLY"), any(RowMapper.class), eq(5)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
@@ -512,6 +515,84 @@ class MembershipServiceCustomerFlowTest {
         assertEquals("MEMBERBOOST", coupon.get("promoCode"));
         assertEquals("MEMBERSHIP", coupon.get("applyTarget"));
         assertEquals(1, coupon.get("bonusDurationMonths"));
+    }
+
+    @Test
+    void customerGetCurrentMembership_shouldExposeQueuedMembershipWhenActiveMembershipExists() throws Exception {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+
+        when(jdbcTemplate.query(contains("p.CreatedAt < DATEADD"), any(RowMapper.class), eq(5), eq(5)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    String sql = invocation.getArgument(0, String.class);
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    Map<String, Object> row = new LinkedHashMap<>();
+
+                    if (sql.contains("ORDER BY cm.StartDate ASC")) {
+                        row.put("CustomerMembershipID", 212);
+                        row.put("Status", "SCHEDULED");
+                        row.put("StartDate", LocalDate.now().plusDays(20));
+                        row.put("EndDate", LocalDate.now().plusDays(49));
+                        row.put("MembershipCreatedAt", Timestamp.from(Instant.now()));
+                        row.put("MembershipPlanID", 3);
+                        row.put("PlanName", "Gym + Coach - 1 Month");
+                        row.put("PlanType", "GYM_PLUS_COACH");
+                        row.put("Price", new BigDecimal("1200000"));
+                        row.put("DurationDays", 30);
+                        row.put("AllowsCoachBooking", true);
+                        row.put("PaymentID", 312);
+                        row.put("PaymentStatus", "SUCCESS");
+                        row.put("PaymentMethod", "PAYOS");
+                        row.put("PayOS_Status", "SUCCESS");
+                        row.put("PayOS_CheckoutUrl", "https://payos.vn/checkout/312");
+                        row.put("OriginalAmount", new BigDecimal("1200000"));
+                        row.put("DiscountAmount", BigDecimal.ZERO);
+                        row.put("PaymentAmount", new BigDecimal("1200000"));
+                        row.put("PaymentCreatedAt", Timestamp.from(Instant.now()));
+                        return List.of(mapper.mapRow(resultSet(row), 0));
+                    }
+
+                    row.put("CustomerMembershipID", 211);
+                    row.put("Status", "ACTIVE");
+                    row.put("StartDate", LocalDate.now().minusDays(5));
+                    row.put("EndDate", LocalDate.now().plusDays(19));
+                    row.put("MembershipCreatedAt", Timestamp.from(Instant.now()));
+                    row.put("MembershipPlanID", 2);
+                    row.put("PlanName", "Gym Only - 1 Month");
+                    row.put("PlanType", "GYM_ONLY");
+                    row.put("Price", new BigDecimal("500000"));
+                    row.put("DurationDays", 30);
+                    row.put("AllowsCoachBooking", false);
+                    row.put("PaymentID", 311);
+                    row.put("PaymentStatus", "PAID");
+                    row.put("PaymentMethod", "PAYOS");
+                    row.put("PayOS_Status", "PAID");
+                    row.put("PayOS_CheckoutUrl", "https://payos.vn/checkout/311");
+                    row.put("OriginalAmount", new BigDecimal("500000"));
+                    row.put("DiscountAmount", BigDecimal.ZERO);
+                    row.put("PaymentAmount", new BigDecimal("500000"));
+                    row.put("PaymentCreatedAt", Timestamp.from(Instant.now()));
+                    return List.of(mapper.mapRow(resultSet(row), 0));
+                });
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = membershipService.execute(
+                "customer-get-current-membership",
+                "Bearer customer",
+                Map.of());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) response.get("membership");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> queuedMembership = (Map<String, Object>) response.get("queuedMembership");
+
+        assertEquals("ACTIVE", membership.get("status"));
+        assertEquals("SCHEDULED", queuedMembership.get("status"));
+        assertEquals("Gym + Coach - 1 Month", ((Map<?, ?>) queuedMembership.get("plan")).get("name"));
     }
 
     @Test

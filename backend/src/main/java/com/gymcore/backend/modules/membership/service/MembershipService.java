@@ -139,7 +139,13 @@ public class MembershipService {
                     pay.PaymentMethod AS PaymentMethod,
                     pay.PayOS_Status,
                     pay.PayOS_CheckoutUrl,
+                    pay.OriginalAmount AS OriginalAmount,
+                    pay.DiscountAmount AS DiscountAmount,
                     pay.Amount AS PaymentAmount,
+                    pay.ClaimID AS ClaimID,
+                    pay.PromoCode AS PromoCode,
+                    pay.ApplyTarget AS ApplyTarget,
+                    pay.BonusDurationMonths AS BonusDurationMonths,
                     pay.CreatedAt AS PaymentCreatedAt
                 FROM dbo.CustomerMemberships cm
                 JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
@@ -165,13 +171,17 @@ public class MembershipService {
                     ORDER BY p.PaymentID DESC
                 ) pay
                 WHERE cm.CustomerID = ?
-                  AND cm.Status IN ('ACTIVE', 'EXPIRED')
+                  AND (
+                      cm.Status IN ('ACTIVE', 'SCHEDULED', 'EXPIRED')
+                      OR cm.EndDate < CAST(GETDATE() AS DATE)
+                  )
                 ORDER BY
                     CASE
                         WHEN cm.EndDate >= CAST(GETDATE() AS DATE) AND cm.Status = 'ACTIVE' THEN 1
-                        WHEN cm.EndDate < CAST(GETDATE() AS DATE) THEN 2
-                        WHEN cm.Status = 'EXPIRED' THEN 2
-                        ELSE 3
+                        WHEN cm.Status = 'SCHEDULED' THEN 2
+                        WHEN cm.EndDate < CAST(GETDATE() AS DATE) THEN 3
+                        WHEN cm.Status = 'EXPIRED' THEN 3
+                        ELSE 4
                     END,
                     cm.EndDate DESC,
                     cm.CustomerMembershipID DESC
@@ -185,7 +195,81 @@ public class MembershipService {
             response.put("reason", "Customer does not have a membership.");
             return response;
         }
-        return rows.get(0);
+
+        Map<String, Object> response = new LinkedHashMap<>(rows.get(0));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) response.get("membership");
+        if (membership != null && "ACTIVE".equalsIgnoreCase(String.valueOf(membership.get("status")))) {
+            Map<String, Object> queuedMembership = findQueuedMembership(user.userId());
+            if (!queuedMembership.isEmpty()) {
+                response.put("queuedMembership", queuedMembership);
+            }
+        }
+        return response;
+    }
+
+    private Map<String, Object> findQueuedMembership(int customerId) {
+        String sql = """
+                SELECT TOP (1)
+                    cm.CustomerMembershipID,
+                    cm.Status,
+                    cm.StartDate,
+                    cm.EndDate,
+                    cm.CreatedAt AS MembershipCreatedAt,
+                    mp.MembershipPlanID,
+                    mp.PlanName,
+                    mp.PlanType,
+                    mp.Price,
+                    mp.DurationDays,
+                    mp.AllowsCoachBooking,
+                    pay.PaymentID,
+                    pay.Status AS PaymentStatus,
+                    pay.PaymentMethod AS PaymentMethod,
+                    pay.PayOS_Status,
+                    pay.PayOS_CheckoutUrl,
+                    pay.OriginalAmount AS OriginalAmount,
+                    pay.DiscountAmount AS DiscountAmount,
+                    pay.Amount AS PaymentAmount,
+                    pay.ClaimID AS ClaimID,
+                    pay.PromoCode AS PromoCode,
+                    pay.ApplyTarget AS ApplyTarget,
+                    pay.BonusDurationMonths AS BonusDurationMonths,
+                    pay.CreatedAt AS PaymentCreatedAt
+                FROM dbo.CustomerMemberships cm
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                OUTER APPLY (
+                    SELECT TOP (1)
+                        p.PaymentID,
+                        p.Status,
+                        p.PaymentMethod,
+                        p.PayOS_Status,
+                        p.PayOS_CheckoutUrl,
+                        p.OriginalAmount,
+                        p.DiscountAmount,
+                        p.Amount,
+                        p.ClaimID,
+                        promo.PromoCode,
+                        promo.ApplyTarget,
+                        promo.BonusDurationMonths,
+                        p.CreatedAt
+                    FROM dbo.Payments p
+                    LEFT JOIN dbo.UserPromotionClaims c ON c.ClaimID = p.ClaimID
+                    LEFT JOIN dbo.Promotions promo ON promo.PromotionID = c.PromotionID
+                    WHERE p.CustomerMembershipID = cm.CustomerMembershipID
+                    ORDER BY p.PaymentID DESC
+                ) pay
+                WHERE cm.CustomerID = ?
+                  AND cm.Status = 'SCHEDULED'
+                ORDER BY cm.StartDate ASC, cm.CustomerMembershipID DESC
+                """;
+
+        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapMembershipStatusRow(rs), customerId);
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) rows.get(0).get("membership");
+        return membership == null ? Map.of() : membership;
     }
 
     private Map<String, Object> customerCreateCheckout(

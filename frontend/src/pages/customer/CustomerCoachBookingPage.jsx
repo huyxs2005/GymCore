@@ -90,8 +90,9 @@ function buildCoachBookingMembershipGate(response) {
   const membership = payload?.membership ?? {}
   const plan = membership?.plan ?? {}
   const status = String(membership?.status || '').toUpperCase()
+  const planType = String(plan?.planType || '').toUpperCase()
   const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
-  const eligible = status === 'ACTIVE' && allowsCoachBooking
+  const eligible = status === 'ACTIVE' && allowsCoachBooking && planType === 'GYM_PLUS_COACH'
 
   let reason = payload?.reason || ''
   if (!eligible) {
@@ -99,7 +100,7 @@ function buildCoachBookingMembershipGate(response) {
       reason = 'You need an active Gym + Coach membership before you can book a coach.'
     } else if (status !== 'ACTIVE') {
       reason = 'Your membership is not active yet. Coach booking becomes available only when your Gym + Coach plan is active.'
-    } else if (!allowsCoachBooking) {
+    } else if (!allowsCoachBooking || planType !== 'GYM_PLUS_COACH') {
       reason = 'Your current membership does not include coach booking. Upgrade to a Gym + Coach plan to continue.'
     }
   }

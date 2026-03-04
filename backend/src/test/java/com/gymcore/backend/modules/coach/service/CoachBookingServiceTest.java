@@ -458,6 +458,8 @@ class CoachBookingServiceTest {
         assertEquals(501, fullMatches.getFirst().get("coachId"));
         assertEquals(1, partialMatches.size());
         assertEquals(502, partialMatches.getFirst().get("coachId"));
+        verify(jdbcTemplate).queryForObject(contains("mp.PlanType = 'GYM_PLUS_COACH'"), any(RowMapper.class),
+                eq(10), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
@@ -567,6 +569,8 @@ class CoachBookingServiceTest {
         assertEquals("APPROVED", result.get("status"));
         assertEquals(expectedStartDate.toString(), result.get("startDate"));
         assertEquals(endDate.toString(), result.get("endDate"));
+        verify(jdbcTemplate).query(contains("mp.PlanType = 'GYM_PLUS_COACH'"), any(RowMapper.class),
+                eq(10), eq(77), eq(expectedStartDate), eq(endDate));
         verify(jdbcTemplate).update(contains("UPDATE dbo.PTRecurringRequests SET StartDate = ?"), eq(expectedStartDate), eq(900));
     }
 

@@ -103,6 +103,7 @@ describe('CustomerCoachBookingPage', () => {
           status: 'ACTIVE',
           plan: {
             name: 'Gym + Coach - 6 Months',
+            planType: 'GYM_PLUS_COACH',
             allowsCoachBooking: true,
           },
         },
@@ -324,6 +325,7 @@ describe('CustomerCoachBookingPage', () => {
           status: 'ACTIVE',
           plan: {
             name: 'Gym Only - 1 Month',
+            planType: 'GYM_ONLY',
             allowsCoachBooking: false,
           },
         },
@@ -346,6 +348,31 @@ describe('CustomerCoachBookingPage', () => {
 
     expect(await screen.findByText(/Coach booking is locked for your current membership/i)).toBeInTheDocument()
     expect(coachBookingApi.matchCoaches).not.toHaveBeenCalled()
+  })
+
+  it('blocks coach booking when membership is active but not Gym + Coach', async () => {
+    membershipApi.getCurrentMembership.mockResolvedValueOnce({
+      data: {
+        membership: {
+          status: 'ACTIVE',
+          plan: {
+            name: 'Legacy Coach Access',
+            planType: 'GYM_ONLY',
+            allowsCoachBooking: true,
+          },
+        },
+        validForCheckin: true,
+        reason: null,
+      },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /Open Schedule Planner/i }))
+
+    expect(await screen.findByText(/Coach booking is locked for your current membership/i)).toBeInTheDocument()
+    expect(screen.getByText(/Upgrade to a Gym \+ Coach plan to continue/i)).toBeInTheDocument()
   })
 
   it('blocks the planner when a PT request is already pending approval', async () => {

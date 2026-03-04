@@ -71,6 +71,7 @@ function CustomerCurrentMembershipPage() {
   })
 
   const membership = currentMembershipQuery.data?.data?.membership ?? {}
+  const queuedMembership = currentMembershipQuery.data?.data?.queuedMembership ?? null
   const validForCheckin = Boolean(currentMembershipQuery.data?.data?.validForCheckin)
   const invalidReason = currentMembershipQuery.data?.data?.reason || ''
   const hasMembership = Object.keys(membership).length > 0
@@ -191,6 +192,50 @@ function CustomerCurrentMembershipPage() {
                 </p>
               </div>
             </article>
+
+            {queuedMembership && Object.keys(queuedMembership).length > 0 ? (
+              <article className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Queued next membership</p>
+                    <h3 className="mt-2 text-xl font-bold text-slate-900">
+                      {queuedMembership?.plan?.name || 'Queued membership'}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {queuedMembership?.startDate || '-'} to {queuedMembership?.endDate || '-'}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {queuedMembership?.status || 'SCHEDULED'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-amber-200 bg-white/80 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Plan type</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {planTypeLabel[String(queuedMembership?.plan?.planType || '').toUpperCase()] || 'Membership'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-white/80 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Price paid</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {formatCurrency(queuedMembership?.payment?.amount ?? queuedMembership?.plan?.price)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-white/80 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Starts in</p>
+                    <p className="mt-2 text-sm font-semibold text-amber-700">
+                      {Number(queuedMembership?.daysUntilActive || 0)} day(s)
+                    </p>
+                  </div>
+                </div>
+
+                <p className="mt-4 text-sm text-amber-800">
+                  Your payment was confirmed. This membership is queued and will activate automatically when your current membership ends.
+                </p>
+              </article>
+            ) : null}
 
             {payment ? (
               <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

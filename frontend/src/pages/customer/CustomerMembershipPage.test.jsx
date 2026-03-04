@@ -47,12 +47,28 @@ describe('CustomerMembershipPage', () => {
       data: {
         plans: [
           {
+            planId: 1,
+            name: 'Day Pass',
+            planType: 'DAY_PASS',
+            price: 1000,
+            durationDays: 1,
+            allowsCoachBooking: false,
+          },
+          {
             planId: 2,
             name: 'Gym Only - 1 Month',
             planType: 'GYM_ONLY',
             price: 2000,
             durationDays: 30,
             allowsCoachBooking: false,
+          },
+          {
+            planId: 3,
+            name: 'Gym + Coach - 1 Month',
+            planType: 'GYM_PLUS_COACH',
+            price: 3000,
+            durationDays: 30,
+            allowsCoachBooking: true,
           },
         ],
       },
@@ -102,6 +118,8 @@ describe('CustomerMembershipPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<CustomerMembershipPage />)
 
+    await user.click(screen.getByRole('button', { name: /Gym Only Standard membership for consistent self-training/i }))
+
     expect(await screen.findByLabelText(/Apply membership coupon/i)).toBeInTheDocument()
     expect(await screen.findByRole('option', { name: /MEMBERBOOST/i })).toBeInTheDocument()
 
@@ -146,5 +164,73 @@ describe('CustomerMembershipPage', () => {
     await user.selectOptions(screen.getByLabelText(/Apply membership coupon/i), 'MEMBERBOOST')
 
     expect(await screen.findByText(/Membership coupon is not valid for this plan./i)).toBeInTheDocument()
+  })
+
+  it('shows a queued membership card when the next paid plan is scheduled', async () => {
+    membershipApi.getCurrentMembership.mockResolvedValueOnce({
+      data: {
+        membership: {
+          status: 'ACTIVE',
+          startDate: '2026-03-01',
+          endDate: '2026-03-30',
+          plan: {
+            name: 'Gym Only - 1 Month',
+            planType: 'GYM_ONLY',
+            price: 2000,
+            durationDays: 30,
+            allowsCoachBooking: false,
+          },
+        },
+        queuedMembership: {
+          status: 'SCHEDULED',
+          startDate: '2026-03-31',
+          endDate: '2026-04-29',
+          plan: {
+            name: 'Gym + Coach - 1 Month',
+            planType: 'GYM_PLUS_COACH',
+            price: 3000,
+            durationDays: 30,
+            allowsCoachBooking: true,
+          },
+        },
+        validForCheckin: true,
+        reason: null,
+      },
+    })
+
+    renderWithQuery(<CustomerMembershipPage />)
+
+    expect(await screen.findByText('Queued next membership')).toBeInTheDocument()
+    expect(screen.getAllByText('Gym + Coach - 1 Month').length).toBeGreaterThan(0)
+    expect(screen.getByText(/This plan will appear as active/i)).toBeInTheDocument()
+  })
+
+  it('renders three membership type cards with benefits and allows selecting duration from the card', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(<CustomerMembershipPage />)
+
+    await screen.findByText('Gym + Coach - 1 Month')
+
+    expect(screen.getByRole('button', { name: /Day Pass Quick access for a single training day/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Gym Only Standard membership for consistent self-training/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Gym \+ Coach Premium plan with personal training booking access/i })).toBeInTheDocument()
+    expect(screen.getByText('One-day front desk check-in access')).toBeInTheDocument()
+    expect(screen.getByText('Full gym floor access for the selected duration')).toBeInTheDocument()
+    expect(screen.getByText('Unlocks coach matching and PT booking requests')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Gym \+ Coach Premium plan with personal training booking access/i }))
+    await user.selectOptions(document.getElementById('membership-duration-GYM_PLUS_COACH'), '3')
+
+    await user.click(screen.getByRole('button', { name: /^Checkout$/i }))
+
+    await waitFor(() => {
+      expect(membershipApi.purchase).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planId: 3,
+          paymentMethod: 'PAYOS',
+        }),
+      )
+    })
   })
 })

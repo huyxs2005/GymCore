@@ -54,11 +54,11 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - `CustomerMemberships.Status` includes `SCHEDULED`.
     - Unique filtered indexes enforce max one `ACTIVE` and one `SCHEDULED` per customer.
     - Daily job `sp_RunDailyMembershipJobs` activates due `SCHEDULED` memberships.
-  - Promotions support `BonusDurationDays` (for coupon discount + extra days at the same time).
+  - Promotions support `BonusDurationMonths` (for membership coupon discount + extra months at the same time).
   - Promotions now include explicit `ApplyTarget` in DB docs/migrations:
     - `ORDER` for product checkout coupons
     - `MEMBERSHIP` for membership checkout coupons
-    - membership-target coupons may still include discount-only or discount + bonus days
+    - membership-target coupons may include discount-only, bonus-month-only, or discount + bonus months
   - Membership plan strictness:
     - Only `GYM_PLUS_COACH` can have `AllowsCoachBooking = 1`.
     - `GYM_ONLY` and `DAY_PASS` must have `AllowsCoachBooking = 0`.
@@ -81,7 +81,7 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - `docs/InsertTestingValues.txt` = optional example/testing seed (cart/orders/promotions/PT/check-in and more), idempotent.
   - Seeds multiple membership durations (day pass / 1m / 6m / 12m / 24m for gym-only and gym+coach).
   - Seeds one queued `SCHEDULED` membership sample for membership-switch testing.
-  - Seeds promotion `SUMMERPLUS30` (5% + 30 bonus days) example.
+  - Seeds promotion `SUMMERPLUS1M` (5% + 1 bonus month) example.
   - Seeds coach weekly availability rows for testing flow.
   - Seeded plan/product demo prices were reduced to low values for easier local testing (1k/2k/3k scale and incremental tiers).
 - Seeded login passwords:

@@ -71,6 +71,22 @@ describe('CustomerCurrentMembershipPage', () => {
             },
           },
         },
+        queuedMembership: {
+          status: 'SCHEDULED',
+          startDate: '2026-08-29',
+          endDate: '2026-09-27',
+          daysUntilActive: 1,
+          plan: {
+            name: 'Gym Only - 1 Month',
+            planType: 'GYM_ONLY',
+            price: 2000,
+            durationDays: 30,
+            allowsCoachBooking: false,
+          },
+          payment: {
+            amount: 2000,
+          },
+        },
         validForCheckin: true,
         reason: null,
       },
@@ -88,6 +104,8 @@ describe('CustomerCurrentMembershipPage', () => {
     expect(screen.getByText('SUMMERPLUS1M')).toBeInTheDocument()
     expect(screen.getByText(/225 VND off/i)).toBeInTheDocument()
     expect(screen.getByText(/\+1 bonus month/i)).toBeInTheDocument()
+    expect(screen.getByText('Queued next membership')).toBeInTheDocument()
+    expect(screen.getByText('Gym Only - 1 Month')).toBeInTheDocument()
   })
 
   it('renders an empty-state CTA when the customer has no membership yet', async () => {

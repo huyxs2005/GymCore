@@ -1537,7 +1537,9 @@ public class CoachBookingService {
                     FROM dbo.CustomerMemberships cm
                     JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
                     WHERE cm.CustomerID = ? AND cm.Status = 'ACTIVE'
-                      AND ? >= cm.StartDate AND ? <= cm.EndDate AND mp.AllowsCoachBooking = 1
+                      AND ? >= cm.StartDate AND ? <= cm.EndDate
+                      AND mp.PlanType = 'GYM_PLUS_COACH'
+                      AND mp.AllowsCoachBooking = 1
                     ORDER BY cm.EndDate ASC
                     """,
                     (rs, i) -> new MembershipForPt(rs.getInt("CustomerMembershipID"),
@@ -1557,7 +1559,9 @@ public class CoachBookingService {
                 FROM dbo.CustomerMemberships cm
                 JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
                 WHERE cm.CustomerID = ? AND cm.CustomerMembershipID = ? AND cm.Status = 'ACTIVE'
-                  AND ? >= cm.StartDate AND ? <= cm.EndDate AND mp.AllowsCoachBooking = 1
+                  AND ? >= cm.StartDate AND ? <= cm.EndDate
+                  AND mp.PlanType = 'GYM_PLUS_COACH'
+                  AND mp.AllowsCoachBooking = 1
                 """,
                 (rs, i) -> new MembershipForPt(rs.getInt("CustomerMembershipID"), rs.getBoolean("AllowsCoachBooking")),
                 customerId, customerMembershipId, startDate, endDate);
