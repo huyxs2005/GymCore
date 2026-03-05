@@ -43,8 +43,11 @@ function formatCouponBenefit(coupon, payment) {
   return parts.join(' + ') || 'Coupon applied'
 }
 
-function buildHighlights(membership, validForCheckin) {
-  const allowsCoachBooking = Boolean(membership?.plan?.allowsCoachBooking)
+function buildHighlights(membership, validForCheckin, queuedMembership = null) {
+  const currentAllows = Boolean(membership?.plan?.allowsCoachBooking)
+  const queuedAllows = Boolean(queuedMembership?.plan?.allowsCoachBooking)
+  const allowsCoachBooking = currentAllows || queuedAllows
+
   return [
     {
       label: 'Front desk check-in',
@@ -78,9 +81,9 @@ function CustomerCurrentMembershipPage() {
   const plan = membership?.plan ?? {}
   const payment = membership?.payment ?? null
   const coupon = payment?.coupon ?? null
-  const highlights = buildHighlights(membership, validForCheckin)
+  const highlights = buildHighlights(membership, validForCheckin, queuedMembership)
   const status = String(membership?.status || '').toUpperCase()
-  const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
+  const allowsCoachBooking = Boolean(membership?.plan?.allowsCoachBooking) || Boolean(queuedMembership?.plan?.allowsCoachBooking)
 
   return (
     <WorkspaceScaffold
@@ -310,11 +313,10 @@ function CustomerCurrentMembershipPage() {
 
                 <Link
                   to="/customer/coach-booking"
-                  className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${
-                    allowsCoachBooking
-                      ? 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50'
-                      : 'border-slate-200 bg-slate-100 opacity-70'
-                  }`}
+                  className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${allowsCoachBooking
+                    ? 'border-slate-200 bg-slate-50 hover:border-gym-200 hover:bg-gym-50'
+                    : 'border-slate-200 bg-slate-100 opacity-70'
+                    }`}
                 >
                   <span className="rounded-xl bg-white p-2 text-gym-700 shadow-sm">
                     <Dumbbell size={16} />

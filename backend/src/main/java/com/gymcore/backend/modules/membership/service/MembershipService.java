@@ -49,9 +49,12 @@ public class MembershipService {
             case "customer-get-plans" -> customerGetPlans();
             case "customer-get-plan-detail" -> customerGetPlanDetail(safePayload);
             case "customer-get-current-membership" -> customerGetCurrentMembership(authorizationHeader);
-            case "customer-purchase-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.PURCHASE);
-            case "customer-renew-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.RENEW);
-            case "customer-upgrade-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE);
+            case "customer-purchase-membership" ->
+                customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.PURCHASE);
+            case "customer-renew-membership" ->
+                customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.RENEW);
+            case "customer-upgrade-membership" ->
+                customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE);
             case "customer-confirm-payment-return" -> customerConfirmPaymentReturn(authorizationHeader, safePayload);
             case "payment-webhook" -> handlePaymentWebhook(safePayload);
             case "admin-get-plans" -> adminGetPlans(authorizationHeader);
@@ -187,7 +190,8 @@ public class MembershipService {
                     cm.CustomerMembershipID DESC
                 """;
 
-        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapMembershipStatusRow(rs), user.userId());
+        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapMembershipStatusRow(rs),
+                user.userId());
         if (rows.isEmpty()) {
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("membership", Map.of());
@@ -263,7 +267,8 @@ public class MembershipService {
                 ORDER BY cm.StartDate ASC, cm.CustomerMembershipID DESC
                 """;
 
-        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapMembershipStatusRow(rs), customerId);
+        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapMembershipStatusRow(rs),
+                customerId);
         if (rows.isEmpty()) {
             return Map.of();
         }
@@ -398,7 +403,8 @@ public class MembershipService {
 
         Integer paymentId = resolvePaymentIdFromReturnPayload(safePayload);
         if (paymentId == null || paymentId <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to resolve payment ID from PayOS return.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unable to resolve payment ID from PayOS return.");
         }
 
         Integer ownershipCount = jdbcTemplate.queryForObject("""
@@ -431,12 +437,15 @@ public class MembershipService {
     }
 
     /**
-     * Handle PayOS webhook callback for both membership payments and product orders.
+     * Handle PayOS webhook callback for both membership payments and product
+     * orders.
      *
      * Expected minimal payload:
      * - paymentId: numeric PaymentID in our database, or an encoded PayOS orderCode
-     * - status / payosStatus: PayOS status string, we treat "PAID" or "SUCCESS" as success.
-     * - headers: HttpHeaders from the original request, used for signature verification.
+     * - status / payosStatus: PayOS status string, we treat "PAID" or "SUCCESS" as
+     * success.
+     * - headers: HttpHeaders from the original request, used for signature
+     * verification.
      */
     private Map<String, Object> handlePaymentWebhook(Map<String, Object> payload) {
         Object headersRaw = payload.get("headers");
@@ -481,7 +490,8 @@ public class MembershipService {
             markMembershipClaimUsageIfNeeded(paymentId);
             notifySuccessfulPayment(paymentId);
         } catch (Exception exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.", exception);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.",
+                    exception);
         }
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -524,15 +534,17 @@ public class MembershipService {
             return;
         }
 
-        jdbcTemplate.update("""
-                UPDATE dbo.CustomerMemberships
-                SET Status = 'EXPIRED',
-                    EndDate = CASE WHEN EndDate > CAST(SYSDATETIME() AS DATE) THEN CAST(SYSDATETIME() AS DATE) ELSE EndDate END,
-                    UpdatedAt = SYSDATETIME()
-                WHERE CustomerID = ?
-                  AND Status = 'ACTIVE'
-                  AND CustomerMembershipID <> ?
-                """, candidate.customerId(), candidate.customerMembershipId());
+        jdbcTemplate.update(
+                """
+                        UPDATE dbo.CustomerMemberships
+                        SET Status = 'EXPIRED',
+                            EndDate = CASE WHEN EndDate > CAST(SYSDATETIME() AS DATE) THEN CAST(SYSDATETIME() AS DATE) ELSE EndDate END,
+                            UpdatedAt = SYSDATETIME()
+                        WHERE CustomerID = ?
+                          AND Status = 'ACTIVE'
+                          AND CustomerMembershipID <> ?
+                        """,
+                candidate.customerId(), candidate.customerMembershipId());
 
         jdbcTemplate.update("""
                 UPDATE dbo.CustomerMemberships
@@ -787,11 +799,13 @@ public class MembershipService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Plan name must not exceed 100 characters.");
         }
 
-        String rawType = asNullableString(firstNonNull(payload.get("planType"), isCreate ? null : currentPlan.planType()));
+        String rawType = asNullableString(
+                firstNonNull(payload.get("planType"), isCreate ? null : currentPlan.planType()));
         String planType = normalizePlanType(rawType);
 
         BigDecimal price = resolvePrice(firstNonNull(payload.get("price"), isCreate ? null : currentPlan.price()));
-        int durationDays = resolveDurationDays(firstNonNull(payload.get("durationDays"), isCreate ? null : currentPlan.durationDays()));
+        int durationDays = resolveDurationDays(
+                firstNonNull(payload.get("durationDays"), isCreate ? null : currentPlan.durationDays()));
         boolean active = resolveActive(firstNonNull(payload.get("isActive"), payload.get("active"),
                 isCreate ? Boolean.TRUE : currentPlan.active()));
 
@@ -1184,13 +1198,11 @@ public class MembershipService {
         LocalDate today = LocalDate.now();
 
         if (mode == CheckoutMode.PURCHASE) {
-            if (activeMembership != null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Customer already has an ACTIVE membership. Use renew or upgrade.");
-            }
             if (scheduledMembership != null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Customer already has a queued membership.");
+                return scheduledMembership.endDate().plusDays(1);
+            }
+            if (activeMembership != null) {
+                return activeMembership.endDate().plusDays(1);
             }
             return today;
         }
@@ -1215,7 +1227,8 @@ public class MembershipService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cannot upgrade while another membership is queued.");
         }
-        // Upgrade starts now; webhook will switch ACTIVE membership immediately after success.
+        // Upgrade starts now; webhook will switch ACTIVE membership immediately after
+        // success.
         return today;
     }
 
@@ -1251,7 +1264,8 @@ public class MembershipService {
         }, keyHolder);
         Number key = keyHolder.getKey();
         if (key == null) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create membership checkout.");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to create membership checkout.");
         }
         return key.intValue();
     }
@@ -1260,10 +1274,12 @@ public class MembershipService {
             BigDecimal discountAmount, BigDecimal amount, String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
-            var statement = connection.prepareStatement("""
-                    INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, PaymentMethod, CustomerMembershipID, ClaimID)
-                    VALUES (?, ?, ?, 'PENDING', ?, ?, ?)
-                    """, new String[] { "PaymentID" });
+            var statement = connection.prepareStatement(
+                    """
+                            INSERT INTO dbo.Payments (OriginalAmount, DiscountAmount, Amount, Status, PaymentMethod, CustomerMembershipID, ClaimID)
+                            VALUES (?, ?, ?, 'PENDING', ?, ?, ?)
+                            """,
+                    new String[] { "PaymentID" });
             statement.setBigDecimal(1, originalAmount);
             statement.setBigDecimal(2, discountAmount);
             statement.setBigDecimal(3, amount);
@@ -1414,8 +1430,16 @@ public class MembershipService {
         if (status == null) {
             return "Customer does not have a valid membership.";
         }
-        return switch (status.toUpperCase()) {
-            case "SCHEDULED" -> "Membership not active yet. It is scheduled to start on " + dateToString(startDate) + ".";
+        String upStatus = status.toUpperCase();
+        LocalDate today = LocalDate.now();
+
+        if ("ACTIVE".equals(upStatus) && startDate != null && today.isBefore(startDate)) {
+            return "Membership is active but starts on " + dateToString(startDate) + ".";
+        }
+
+        return switch (upStatus) {
+            case "SCHEDULED" ->
+                "Membership not active yet. It is scheduled to start on " + dateToString(startDate) + ".";
             case "PENDING" -> "Membership payment is pending and not active yet.";
             case "EXPIRED" -> "Membership expired on " + dateToString(endDate) + ".";
             case "CANCELLED" -> "Membership has been cancelled.";
@@ -1672,16 +1696,14 @@ public class MembershipService {
             String planType,
             BigDecimal price,
             int durationDays,
-            boolean allowsCoachBooking
-    ) {
+            boolean allowsCoachBooking) {
     }
 
     private record MembershipSnapshot(
             int customerMembershipId,
             String status,
             LocalDate startDate,
-            LocalDate endDate
-    ) {
+            LocalDate endDate) {
     }
 
     private record CheckoutContact(String buyerName, String buyerPhone, String buyerEmail) {
@@ -1699,16 +1721,14 @@ public class MembershipService {
             BigDecimal amount,
             String paymentMethod,
             String checkoutUrl,
-            Timestamp paymentCreatedAt
-    ) {
+            Timestamp paymentCreatedAt) {
     }
 
     private record CouponApplication(
             int claimId,
             String promoCode,
             BigDecimal discountAmount,
-            int bonusDurationMonths
-    ) {
+            int bonusDurationMonths) {
     }
 
     private record PendingCheckoutRef(int paymentId, int customerMembershipId) {
@@ -1724,8 +1744,7 @@ public class MembershipService {
             BigDecimal price,
             int durationDays,
             boolean allowsCoachBooking,
-            boolean active
-    ) {
+            boolean active) {
     }
 
     private record PlanDraft(
@@ -1734,8 +1753,7 @@ public class MembershipService {
             BigDecimal price,
             int durationDays,
             boolean allowsCoachBooking,
-            boolean active
-    ) {
+            boolean active) {
     }
 
     private enum CheckoutMode {

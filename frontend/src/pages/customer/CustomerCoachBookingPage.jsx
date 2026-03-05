@@ -87,27 +87,44 @@ function formatHumanDate(value) {
 
 function buildCoachBookingMembershipGate(response) {
   const payload = response?.data ?? response ?? {}
-  const membership = payload?.membership ?? {}
-  const plan = membership?.plan ?? {}
-  const status = String(membership?.status || '').toUpperCase()
-  const planType = String(plan?.planType || '').toUpperCase()
-  const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
-  const eligible = status === 'ACTIVE' && allowsCoachBooking && planType === 'GYM_PLUS_COACH'
+  const currentMembership = payload?.membership ?? {}
+  const queuedMembership = payload?.queuedMembership ?? {}
+
+  const checkEligibility = (m) => {
+    const plan = m?.plan ?? {}
+    const status = String(m?.status || '').toUpperCase()
+    const planType = String(plan?.planType || '').toUpperCase()
+    const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
+    return (status === 'ACTIVE' || status === 'SCHEDULED') && allowsCoachBooking && planType === 'GYM_PLUS_COACH'
+  }
+
+  const currentEligible = checkEligibility(currentMembership)
+  const queuedEligible = checkEligibility(queuedMembership)
+
+  const eligible = currentEligible || queuedEligible
+  const effectiveMembership = currentEligible ? currentMembership : (queuedEligible ? queuedMembership : currentMembership)
 
   let reason = payload?.reason || ''
   if (!eligible) {
-    if (!membership || Object.keys(membership).length === 0) {
+    if (!currentMembership || Object.keys(currentMembership).length === 0) {
       reason = 'You need an active Gym + Coach membership before you can book a coach.'
-    } else if (status !== 'ACTIVE') {
-      reason = 'Your membership is not active yet. Coach booking becomes available only when your Gym + Coach plan is active.'
-    } else if (!allowsCoachBooking || planType !== 'GYM_PLUS_COACH') {
-      reason = 'Your current membership does not include coach booking. Upgrade to a Gym + Coach plan to continue.'
+    } else {
+      const status = String(currentMembership?.status || '').toUpperCase()
+      const plan = currentMembership?.plan ?? {}
+      const planType = String(plan?.planType || '').toUpperCase()
+      const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
+
+      if (status !== 'ACTIVE' && status !== 'SCHEDULED') {
+        reason = 'Your membership is not active yet. Coach booking becomes available only when your Gym + Coach plan is active or scheduled.'
+      } else if (!allowsCoachBooking || planType !== 'GYM_PLUS_COACH') {
+        reason = 'Your current membership does not include coach booking. Upgrade to a Gym + Coach plan to continue.'
+      }
     }
   }
 
   return {
     eligible,
-    membership,
+    membership: effectiveMembership,
     reason,
   }
 }

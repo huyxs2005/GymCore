@@ -528,27 +528,29 @@ public class CoachBookingService {
 
         List<Map<String, Object>> deniedRequests;
         if (hasPtRequestDenyReasonColumn()) {
-            deniedRequests = jdbcTemplate.query("""
-                    SELECT r.PTRequestID, r.CoachID, r.StartDate, r.EndDate, r.Status, r.CreatedAt, r.UpdatedAt, r.DenyReason,
-                           u.FullName AS CoachName, u.Phone AS CoachPhone
-                    FROM dbo.PTRecurringRequests r
-                    JOIN dbo.Users u ON u.UserID = r.CoachID
-                    WHERE r.CustomerID = ? AND r.Status = 'DENIED'
-                    ORDER BY COALESCE(r.UpdatedAt, r.CreatedAt) DESC
-                    """, (rs, i) -> {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("ptRequestId", rs.getInt("PTRequestID"));
-                m.put("coachId", rs.getInt("CoachID"));
-                m.put("coachName", rs.getString("CoachName"));
-                m.put("coachPhone", rs.getString("CoachPhone"));
-                m.put("startDate", dateToString(rs.getDate("StartDate").toLocalDate()));
-                m.put("endDate", dateToString(rs.getDate("EndDate").toLocalDate()));
-                m.put("status", rs.getString("Status"));
-                m.put("denyReason", rs.getString("DenyReason"));
-                m.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
-                m.put("updatedAt", timestampToIso(rs.getTimestamp("UpdatedAt")));
-                return m;
-            }, customer.userId());
+            deniedRequests = jdbcTemplate.query(
+                    """
+                            SELECT r.PTRequestID, r.CoachID, r.StartDate, r.EndDate, r.Status, r.CreatedAt, r.UpdatedAt, r.DenyReason,
+                                   u.FullName AS CoachName, u.Phone AS CoachPhone
+                            FROM dbo.PTRecurringRequests r
+                            JOIN dbo.Users u ON u.UserID = r.CoachID
+                            WHERE r.CustomerID = ? AND r.Status = 'DENIED'
+                            ORDER BY COALESCE(r.UpdatedAt, r.CreatedAt) DESC
+                            """,
+                    (rs, i) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("ptRequestId", rs.getInt("PTRequestID"));
+                        m.put("coachId", rs.getInt("CoachID"));
+                        m.put("coachName", rs.getString("CoachName"));
+                        m.put("coachPhone", rs.getString("CoachPhone"));
+                        m.put("startDate", dateToString(rs.getDate("StartDate").toLocalDate()));
+                        m.put("endDate", dateToString(rs.getDate("EndDate").toLocalDate()));
+                        m.put("status", rs.getString("Status"));
+                        m.put("denyReason", rs.getString("DenyReason"));
+                        m.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
+                        m.put("updatedAt", timestampToIso(rs.getTimestamp("UpdatedAt")));
+                        return m;
+                    }, customer.userId());
         } else {
             deniedRequests = jdbcTemplate.query("""
                     SELECT r.PTRequestID, r.CoachID, r.StartDate, r.EndDate, r.Status, r.CreatedAt, r.UpdatedAt,
@@ -662,7 +664,8 @@ public class CoachBookingService {
                 UPDATE dbo.PTSessions SET CancelReason = ?, UpdatedAt = SYSDATETIME()
                 WHERE PTSessionID = ? AND CustomerID = ?
                 """, encodeRescheduleRequest(newDate, newTimeSlotId, reason), sessionId, customer.userId());
-        notifyCoachAboutRescheduleRequest(sessionId, customer.userId(), coachId, requestedSlotSummary(newDate, newTimeSlotId));
+        notifyCoachAboutRescheduleRequest(sessionId, customer.userId(), coachId,
+                requestedSlotSummary(newDate, newTimeSlotId));
         return Map.of(
                 "sessionId", sessionId,
                 "status", "PENDING_COACH_APPROVAL",
@@ -776,7 +779,8 @@ public class CoachBookingService {
             out.put("requestedTimeSlotId", requestedTimeSlotId);
             out.put("reason", meta.note());
 
-            Map<String, Object> currentSlot = timeSlotMap.getOrDefault(requireInteger(row, "currentTimeSlotId"), Map.of());
+            Map<String, Object> currentSlot = timeSlotMap.getOrDefault(requireInteger(row, "currentTimeSlotId"),
+                    Map.of());
             Map<String, Object> requestedSlot = timeSlotMap.getOrDefault(requestedTimeSlotId, Map.of());
             out.put("currentSlot", currentSlot);
             out.put("requestedSlot", requestedSlot);
@@ -819,7 +823,8 @@ public class CoachBookingService {
 
         RescheduleMeta meta = parseRescheduleMeta(asText(row.get("cancelReason")));
         if (meta == null || !"PENDING".equals(meta.state())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending reschedule request for this session.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No pending reschedule request for this session.");
         }
 
         LocalDate requestedDate = meta.requestedDate();
@@ -828,20 +833,24 @@ public class CoachBookingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Requested date is already in the past.");
         }
         if (!isCoachWeeklyAvailable(coach.userId(), requestedDate.getDayOfWeek().getValue(), requestedTimeSlotId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Requested slot is not in coach weekly availability.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Requested slot is not in coach weekly availability.");
         }
         if (hasCoachConflict(coach.userId(), requestedDate, requestedTimeSlotId, sessionId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Requested slot now conflicts with another PT session.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Requested slot now conflicts with another PT session.");
         }
 
         jdbcTemplate.update("""
                 UPDATE dbo.PTSessions
                 SET SessionDate = ?, TimeSlotID = ?, DayOfWeek = ?, CancelReason = NULL, UpdatedAt = SYSDATETIME()
                 WHERE PTSessionID = ? AND CoachID = ?
-                """, requestedDate, requestedTimeSlotId, requestedDate.getDayOfWeek().getValue(), sessionId, coach.userId());
+                """, requestedDate, requestedTimeSlotId, requestedDate.getDayOfWeek().getValue(), sessionId,
+                coach.userId());
 
         notifyCustomerAboutRescheduleDecision(sessionId, "APPROVED",
-                "Your coach approved the reschedule request. New slot: " + requestedSlotSummary(requestedDate, requestedTimeSlotId));
+                "Your coach approved the reschedule request. New slot: "
+                        + requestedSlotSummary(requestedDate, requestedTimeSlotId));
 
         return Map.of(
                 "ptSessionId", sessionId,
@@ -874,17 +883,20 @@ public class CoachBookingService {
         }
         RescheduleMeta meta = parseRescheduleMeta(asText(row.get("cancelReason")));
         if (meta == null || !"PENDING".equals(meta.state())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending reschedule request for this session.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No pending reschedule request for this session.");
         }
 
         jdbcTemplate.update("""
                 UPDATE dbo.PTSessions
                 SET CancelReason = ?, UpdatedAt = SYSDATETIME()
                 WHERE PTSessionID = ? AND CoachID = ?
-                """, encodeRescheduleDenied(meta.requestedDate(), meta.requestedTimeSlotId(), reason), sessionId, coach.userId());
+                """, encodeRescheduleDenied(meta.requestedDate(), meta.requestedTimeSlotId(), reason), sessionId,
+                coach.userId());
 
         notifyCustomerAboutRescheduleDecision(sessionId, "DENIED",
-                "Your coach denied the reschedule request." + (reason == null || reason.isBlank() ? "" : " Reason: " + reason));
+                "Your coach denied the reschedule request."
+                        + (reason == null || reason.isBlank() ? "" : " Reason: " + reason));
 
         return Map.of(
                 "ptSessionId", sessionId,
@@ -1069,11 +1081,13 @@ public class CoachBookingService {
         String reason = asText(((Map<?, ?>) payload.getOrDefault("body", Map.of())).get("cancelReason"));
         SessionNotificationContext session = loadSessionNotificationContext(sessionId);
 
-        int updated = jdbcTemplate.update("""
-                UPDATE dbo.PTSessions
-                SET Status = 'CANCELLED', CancelReason = ?, UpdatedAt = SYSDATETIME()
-                WHERE PTSessionID = ? AND CoachID = ? AND Status = 'SCHEDULED' AND SessionDate >= CAST(GETDATE() AS DATE)
-                """, reason != null ? reason : "Cancelled by coach", sessionId, coach.userId());
+        int updated = jdbcTemplate.update(
+                """
+                        UPDATE dbo.PTSessions
+                        SET Status = 'CANCELLED', CancelReason = ?, UpdatedAt = SYSDATETIME()
+                        WHERE PTSessionID = ? AND CoachID = ? AND Status = 'SCHEDULED' AND SessionDate >= CAST(GETDATE() AS DATE)
+                        """,
+                reason != null ? reason : "Cancelled by coach", sessionId, coach.userId());
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Session not found, already cancelled, or cannot be cancelled.");
@@ -1536,7 +1550,7 @@ public class CoachBookingService {
                     SELECT TOP 1 cm.CustomerMembershipID, mp.AllowsCoachBooking
                     FROM dbo.CustomerMemberships cm
                     JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
-                    WHERE cm.CustomerID = ? AND cm.Status = 'ACTIVE'
+                    WHERE cm.CustomerID = ? AND cm.Status IN ('ACTIVE', 'SCHEDULED')
                       AND ? >= cm.StartDate AND ? <= cm.EndDate
                       AND mp.PlanType = 'GYM_PLUS_COACH'
                       AND mp.AllowsCoachBooking = 1
@@ -1558,7 +1572,7 @@ public class CoachBookingService {
                 SELECT cm.CustomerMembershipID, mp.AllowsCoachBooking
                 FROM dbo.CustomerMemberships cm
                 JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
-                WHERE cm.CustomerID = ? AND cm.CustomerMembershipID = ? AND cm.Status = 'ACTIVE'
+                WHERE cm.CustomerID = ? AND cm.CustomerMembershipID = ? AND cm.Status IN ('ACTIVE', 'SCHEDULED')
                   AND ? >= cm.StartDate AND ? <= cm.EndDate
                   AND mp.PlanType = 'GYM_PLUS_COACH'
                   AND mp.AllowsCoachBooking = 1
@@ -1852,7 +1866,8 @@ public class CoachBookingService {
                 ORDER BY cwa.DayOfWeek, ts.SlotIndex
                 """, availabilityWithoutIsAvailableRowMapper(), coachId);
 
-        // Default behavior: if coach has no configured rows, treat all 8 slots x 7 days as available.
+        // Default behavior: if coach has no configured rows, treat all 8 slots x 7 days
+        // as available.
         if (!rows.isEmpty()) {
             return rows;
         }
@@ -1964,7 +1979,8 @@ public class CoachBookingService {
         };
     }
 
-    private void notifyPtRequestCreated(int requestId, int customerId, int coachId, LocalDate startDate, LocalDate endDate) {
+    private void notifyPtRequestCreated(int requestId, int customerId, int coachId, LocalDate startDate,
+            LocalDate endDate) {
         String customerName = loadUserFullName(customerId);
         notificationService.notifyUser(
                 coachId,
@@ -2175,4 +2191,3 @@ public class CoachBookingService {
             String coachName, String sessionDate, String timeLabel) {
     }
 }
-
