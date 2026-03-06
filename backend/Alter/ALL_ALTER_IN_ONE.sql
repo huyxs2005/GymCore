@@ -22,6 +22,58 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Orders') AND name = 'ShippingEmail')
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingEmail NVARCHAR(255) NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'OrderInvoices' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    CREATE TABLE dbo.OrderInvoices (
+        InvoiceID INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceCode NVARCHAR(40) NOT NULL UNIQUE,
+        OrderID INT NOT NULL UNIQUE,
+        PaymentID INT NOT NULL UNIQUE,
+        CustomerID INT NOT NULL,
+        RecipientEmail NVARCHAR(255) NULL,
+        RecipientName NVARCHAR(255) NULL,
+        ShippingPhone NVARCHAR(50) NULL,
+        ShippingAddress NVARCHAR(MAX) NULL,
+        PaymentMethod NVARCHAR(50) NULL,
+        Currency NVARCHAR(10) NOT NULL CONSTRAINT DF_OrderInvoices_Currency DEFAULT 'VND',
+        Subtotal DECIMAL(18,2) NOT NULL,
+        DiscountAmount DECIMAL(18,2) NOT NULL,
+        TotalAmount DECIMAL(18,2) NOT NULL,
+        PaidAt DATETIME2 NOT NULL,
+        EmailSentAt DATETIME2 NULL,
+        EmailSendError NVARCHAR(1000) NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_OrderInvoices_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_OrderInvoices_UpdatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderInvoices_Order FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+        CONSTRAINT FK_OrderInvoices_Payment FOREIGN KEY (PaymentID) REFERENCES dbo.Payments(PaymentID),
+        CONSTRAINT FK_OrderInvoices_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'OrderInvoiceItems' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    CREATE TABLE dbo.OrderInvoiceItems (
+        InvoiceItemID INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceID INT NOT NULL,
+        ProductID INT NULL,
+        ProductName NVARCHAR(255) NOT NULL,
+        Quantity INT NOT NULL,
+        UnitPrice DECIMAL(18,2) NOT NULL,
+        LineTotal DECIMAL(18,2) NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_OrderInvoiceItems_CreatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderInvoiceItems_Invoice FOREIGN KEY (InvoiceID) REFERENCES dbo.OrderInvoices(InvoiceID),
+        CONSTRAINT FK_OrderInvoiceItems_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+    );
+END
+GO
+
 USE GymCore;
 GO
 

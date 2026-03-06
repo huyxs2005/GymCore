@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShoppingCart, CreditCard, History, Star, StarHalf, StarOff } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
@@ -10,6 +10,7 @@ import { promotionApi } from '../../features/promotion/api/promotionApi'
 
 function CustomerShopPage() {
   const queryClient = useQueryClient()
+  const processedPaymentReturnRef = useRef('')
   const [selectedProductId, setSelectedProductId] = useState(null)
   const [productSearch, setProductSearch] = useState('')
   const [reviewText, setReviewText] = useState('')
@@ -24,9 +25,11 @@ function CustomerShopPage() {
     promoCode: '',
   })
   const [showSuccessMessage, setShowSuccessMessage] = useState(() => {
-    const status = new URLSearchParams(window.location.search).get('status')
-    const normalizedStatus = status ? status.trim().toUpperCase() : ''
-    return normalizedStatus === 'PAID' || normalizedStatus === 'SUCCESS'
+    const params = new URLSearchParams(window.location.search)
+    const status = (params.get('status') || '').trim().toUpperCase()
+    const code = (params.get('code') || '').trim().toUpperCase()
+    const success = (params.get('success') || '').trim().toUpperCase()
+    return status === 'PAID' || status === 'SUCCESS' || status === 'COMPLETED' || code === '00' || success === 'TRUE'
   })
 
   const productsQuery = useQuery({
@@ -149,29 +152,63 @@ function CustomerShopPage() {
     checkoutMutation.mutate(shippingInfo)
     setShowShippingModal(false)
   }
+  useEffect(() => {
+    if (!showSuccessMessage) {
+      return undefined
+    }
+    const timer = setTimeout(() => {
+      setShowSuccessMessage(false)
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [showSuccessMessage])
 
   // Effect to handle post-payment redirect
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
+    const rawSearch = window.location.search
+    const urlParams = new URLSearchParams(rawSearch)
     const status = (urlParams.get('status') || '').trim().toUpperCase()
-    if (status === 'PAID' || status === 'SUCCESS') {
+    const code = (urlParams.get('code') || '').trim().toUpperCase()
+    const success = (urlParams.get('success') || '').trim().toUpperCase()
+    const isSuccessfulReturn = status === 'PAID' || status === 'SUCCESS' || status === 'COMPLETED' || code === '00' || success === 'TRUE'
+
+    if (isSuccessfulReturn) {
+      if (processedPaymentReturnRef.current === rawSearch) {
+        return undefined
+      }
+      processedPaymentReturnRef.current = rawSearch
+
       const paymentReturnPayload = Object.fromEntries(urlParams.entries())
       orderApi
         .confirmPaymentReturn(paymentReturnPayload)
-        .catch(() => null)
+        .then((response) => {
+          const invoiceError = response?.data?.invoiceError
+          const invoiceCreated = response?.data?.invoiceCreated
+          const invoiceEmailSent = response?.data?.invoiceEmailSent
+          if (invoiceError) {
+            alert(`Payment confirmed, but invoice email failed: ${invoiceError}`)
+            return
+          }
+          if (invoiceCreated === false || invoiceEmailSent === false) {
+            alert('Payment was confirmed, but the invoice email was not sent. Please check backend mail configuration.')
+          }
+        })
+        .catch((error) => {
+          processedPaymentReturnRef.current = ''
+          const message = error?.response?.data?.message || error?.message || 'Payment confirmation failed.'
+          alert(message)
+        })
         .finally(() => {
           queryClient.invalidateQueries({ queryKey: ['orders'] })
           queryClient.invalidateQueries({ queryKey: ['cart'] })
         })
-      const timer = setTimeout(() => {
-        setShowSuccessMessage(false)
-        window.history.replaceState({}, document.title, window.location.pathname)
-      }, 3000)
-      return () => clearTimeout(timer)
-    } else if (status === 'CANCELLED') {
-      // Just clear the URL if cancelled
+      return undefined
+    }
+    if (status === 'CANCELLED') {
+      processedPaymentReturnRef.current = ''
       window.history.replaceState({}, document.title, window.location.pathname)
     }
+    return undefined
   }, [queryClient])
 
   const handleSubmitReview = (event) => {
@@ -668,3 +705,9 @@ function ProductRating({ rating, count, size = 'md' }) {
 }
 
 export default CustomerShopPage
+
+
+
+
+
+

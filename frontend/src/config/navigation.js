@@ -15,6 +15,7 @@ export const coachNav = [
 export const receptionNav = [
   { to: '/reception/checkin', label: 'Check-in Scanner' },
   { to: '/reception/customers', label: 'Customer Lookup' },
+  { to: '/reception/invoices', label: 'Invoices' },
 ]
 
 export const adminNav = [
@@ -23,6 +24,7 @@ export const adminNav = [
   { to: '/admin/memberships', label: 'Memberships' },
   { to: '/admin/coach-insights', label: 'Coach Insights' },
   { to: '/admin/products', label: 'Products' },
+  { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/promotions', label: 'Promotions' },
   { to: '/admin/reports', label: 'Reports' },
 ]

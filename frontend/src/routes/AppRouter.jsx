@@ -22,6 +22,7 @@ import AdminUsersPage from '../pages/admin/AdminUsersPage'
 import AdminMembershipsPage from '../pages/admin/AdminMembershipsPage'
 import AdminCoachInsightsPage from '../pages/admin/AdminCoachInsightsPage'
 import AdminProductsPage from '../pages/admin/AdminProductsPage'
+import AdminInvoicesPage from '../pages/admin/AdminInvoicesPage'
 import AdminPromotionsPage from '../pages/admin/AdminPromotionsPage'
 import AdminReportsPage from '../pages/admin/AdminReportsPage'
 import NotFoundPage from '../pages/NotFoundPage'
@@ -73,12 +74,14 @@ function AppRouter() {
 
       <Route path="/reception/checkin" element={withRole(['RECEPTIONIST'], <ReceptionCheckinPage />)} />
       <Route path="/reception/customers" element={withRole(['RECEPTIONIST'], <ReceptionCustomersPage />)} />
+      <Route path="/reception/invoices" element={withRole(['RECEPTIONIST'], <AdminInvoicesPage />)} />
 
       <Route path="/admin/dashboard" element={withRole(['ADMIN'], <AdminDashboardPage />)} />
       <Route path="/admin/users" element={withRole(['ADMIN'], <AdminUsersPage />)} />
       <Route path="/admin/memberships" element={withRole(['ADMIN'], <AdminMembershipsPage />)} />
       <Route path="/admin/coach-insights" element={withRole(['ADMIN'], <AdminCoachInsightsPage />)} />
       <Route path="/admin/products" element={withRole(['ADMIN'], <AdminProductsPage />)} />
+      <Route path="/admin/invoices" element={withRole(['ADMIN'], <AdminInvoicesPage />)} />
       <Route path="/admin/promotions" element={withRole(['ADMIN'], <AdminPromotionsPage />)} />
       <Route path="/admin/reports" element={withRole(['ADMIN'], <AdminReportsPage />)} />
 

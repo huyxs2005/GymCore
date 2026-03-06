@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -138,5 +138,21 @@ public class ProductSalesController {
                         @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
                 return ApiResponse.ok("Admin product reviews retrieved",
                                 productSalesService.execute("admin-get-product-reviews", authorization, null));
+        }
+
+        @GetMapping("/admin/invoices")
+        public ApiResponse<Map<String, Object>> getAdminInvoices(
+                        @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+                return ApiResponse.ok("Admin invoices retrieved",
+                                productSalesService.execute("admin-get-invoices", authorization, null));
+        }
+
+        @GetMapping("/admin/invoices/{invoiceId}")
+        public ApiResponse<Map<String, Object>> getAdminInvoiceDetail(
+                        @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+                        @PathVariable Integer invoiceId) {
+                return ApiResponse.ok("Admin invoice detail retrieved",
+                                productSalesService.execute("admin-get-invoice-detail", authorization,
+                                                Map.of("invoiceId", invoiceId)));
         }
 }

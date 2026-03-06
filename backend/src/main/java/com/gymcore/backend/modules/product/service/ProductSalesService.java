@@ -3,8 +3,10 @@ package com.gymcore.backend.modules.product.service;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService.UserInfo;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,21 +16,27 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ProductSalesService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProductSalesService.class);
+
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
     private final PayOsService payOsService;
+    private final OrderInvoiceMailService orderInvoiceMailService;
 
     public ProductSalesService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
-            PayOsService payOsService) {
+            PayOsService payOsService, OrderInvoiceMailService orderInvoiceMailService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.payOsService = payOsService;
+        this.orderInvoiceMailService = orderInvoiceMailService;
     }
 
     public Map<String, Object> execute(String action, String authorizationHeader, Map<String, Object> payload) {
@@ -56,7 +64,7 @@ public class ProductSalesService {
             case "customer-get-my-orders" ->
                 customerGetMyOrders(authorizationHeader);
 
-            // Admin: products + reviews
+            // Admin: products + reviews + invoices
             case "admin-get-products" -> adminGetProducts(authorizationHeader);
             case "admin-create-product" ->
                 adminCreateProduct(authorizationHeader, safePayload);
@@ -64,10 +72,18 @@ public class ProductSalesService {
                 adminUpdateProduct(authorizationHeader, safePayload);
             case "admin-get-product-reviews" ->
                 adminGetProductReviews(authorizationHeader);
+            case "admin-get-invoices" ->
+                adminGetInvoices(authorizationHeader);
+            case "admin-get-invoice-detail" ->
+                adminGetInvoiceDetail(authorizationHeader, safePayload);
 
             default ->
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported product action: " + action);
         };
+    }
+
+    public Map<String, Object> handleSuccessfulProductPayment(int paymentId) {
+        return ensureOrderInvoiceAndSendEmail(paymentId);
     }
 
     // CUSTOMER: PRODUCTS
@@ -370,7 +386,7 @@ public class ProductSalesService {
         BigDecimal total = subtotal.subtract(discount);
 
         // Create order with shipping info
-        int orderId = insertOrder(customerId, subtotal, discount, total, fullName, phone, address, paymentMethod);
+        int orderId = insertOrder(customerId, subtotal, discount, total, fullName, phone, email, address, paymentMethod);
 
         // Upsert order items to match current cart
         jdbcTemplate.update("DELETE FROM dbo.OrderItems WHERE OrderID = ?", orderId);
@@ -430,8 +446,10 @@ public class ProductSalesService {
                        o.Subtotal,
                        o.DiscountApplied,
                        o.TotalAmount,
-                       o.Status
+                       o.Status,
+                       i.InvoiceCode
                 FROM dbo.Orders o
+                LEFT JOIN dbo.OrderInvoices i ON i.OrderID = o.OrderID
                 WHERE o.CustomerID = ?
                 ORDER BY o.OrderDate DESC, o.OrderID DESC
                 """;
@@ -446,6 +464,7 @@ public class ProductSalesService {
             order.put("discount", rs.getBigDecimal("DiscountApplied"));
             order.put("totalAmount", rs.getBigDecimal("TotalAmount"));
             order.put("status", rs.getString("Status"));
+            order.put("invoiceCode", rs.getString("InvoiceCode"));
             order.put("currency", "VND");
 
             String itemsSql = """
@@ -522,6 +541,13 @@ public class ProductSalesService {
         response.put("handled", true);
         response.put("paymentId", paymentId);
         response.put("status", "SUCCESS");
+        try {
+            response.putAll(ensureOrderInvoiceAndSendEmail(paymentId));
+        } catch (Exception exception) {
+            log.warn("Payment {} confirmed but invoice processing failed: {}", paymentId, exception.getMessage());
+            response.put("invoiceCreated", false);
+            response.put("invoiceError", exception.getMessage());
+        }
         return response;
     }
 
@@ -641,6 +667,150 @@ public class ProductSalesService {
         });
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("reviews", reviews);
+        return response;
+    }
+    private Map<String, Object> adminGetInvoices(String authorizationHeader) {
+        currentUserService.requireAdminOrReceptionist(authorizationHeader);
+        String sql = """
+                SELECT i.InvoiceID,
+                       i.InvoiceCode,
+                       i.OrderID,
+                       i.PaymentID,
+                       i.CustomerID,
+                       u.FullName AS CustomerAccountName,
+                       u.Email AS CustomerAccountEmail,
+                       i.RecipientName,
+                       i.RecipientEmail,
+                       i.PaymentMethod,
+                       i.Subtotal,
+                       i.DiscountAmount,
+                       i.TotalAmount,
+                       i.Currency,
+                       i.PaidAt,
+                       i.EmailSentAt,
+                       i.EmailSendError,
+                       itemSummary.ItemCount
+                FROM dbo.OrderInvoices i
+                LEFT JOIN dbo.Users u ON u.UserID = i.CustomerID
+                OUTER APPLY (
+                    SELECT COUNT(1) AS ItemCount
+                    FROM dbo.OrderInvoiceItems items
+                    WHERE items.InvoiceID = i.InvoiceID
+                ) itemSummary
+                ORDER BY i.PaidAt DESC, i.InvoiceID DESC
+                """;
+
+        List<Map<String, Object>> invoices = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Map<String, Object> invoice = new LinkedHashMap<>();
+            invoice.put("invoiceId", rs.getInt("InvoiceID"));
+            invoice.put("invoiceCode", rs.getString("InvoiceCode"));
+            invoice.put("orderId", rs.getInt("OrderID"));
+            invoice.put("paymentId", rs.getInt("PaymentID"));
+            invoice.put("customerId", rs.getInt("CustomerID"));
+            invoice.put("customerAccountName", rs.getString("CustomerAccountName"));
+            invoice.put("customerAccountEmail", rs.getString("CustomerAccountEmail"));
+            invoice.put("recipientName", rs.getString("RecipientName"));
+            invoice.put("recipientEmail", rs.getString("RecipientEmail"));
+            invoice.put("paymentMethod", rs.getString("PaymentMethod"));
+            invoice.put("subtotal", rs.getBigDecimal("Subtotal"));
+            invoice.put("discountAmount", rs.getBigDecimal("DiscountAmount"));
+            invoice.put("totalAmount", rs.getBigDecimal("TotalAmount"));
+            invoice.put("currency", rs.getString("Currency"));
+            invoice.put("paidAt", rs.getTimestamp("PaidAt"));
+            invoice.put("emailSentAt", rs.getTimestamp("EmailSentAt"));
+            invoice.put("emailSendError", rs.getString("EmailSendError"));
+            invoice.put("itemCount", rs.getInt("ItemCount"));
+            return invoice;
+        });
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("invoices", invoices);
+        return response;
+    }
+
+    private Map<String, Object> adminGetInvoiceDetail(String authorizationHeader, Map<String, Object> payload) {
+        currentUserService.requireAdminOrReceptionist(authorizationHeader);
+        int invoiceId = requirePositiveInt(payload.get("invoiceId"), "Invoice ID is required.");
+
+        List<Map<String, Object>> invoices = jdbcTemplate.query("""
+                SELECT i.InvoiceID,
+                       i.InvoiceCode,
+                       i.OrderID,
+                       i.PaymentID,
+                       i.CustomerID,
+                       u.FullName AS CustomerAccountName,
+                       u.Email AS CustomerAccountEmail,
+                       i.RecipientName,
+                       i.RecipientEmail,
+                       i.ShippingPhone,
+                       i.ShippingAddress,
+                       i.PaymentMethod,
+                       i.Subtotal,
+                       i.DiscountAmount,
+                       i.TotalAmount,
+                       i.Currency,
+                       i.PaidAt,
+                       i.EmailSentAt,
+                       i.EmailSendError,
+                       i.CreatedAt,
+                       i.UpdatedAt
+                FROM dbo.OrderInvoices i
+                LEFT JOIN dbo.Users u ON u.UserID = i.CustomerID
+                WHERE i.InvoiceID = ?
+                """, (rs, rowNum) -> {
+            Map<String, Object> invoice = new LinkedHashMap<>();
+            invoice.put("invoiceId", rs.getInt("InvoiceID"));
+            invoice.put("invoiceCode", rs.getString("InvoiceCode"));
+            invoice.put("orderId", rs.getInt("OrderID"));
+            invoice.put("paymentId", rs.getInt("PaymentID"));
+            invoice.put("customerId", rs.getInt("CustomerID"));
+            invoice.put("customerAccountName", rs.getString("CustomerAccountName"));
+            invoice.put("customerAccountEmail", rs.getString("CustomerAccountEmail"));
+            invoice.put("recipientName", rs.getString("RecipientName"));
+            invoice.put("recipientEmail", rs.getString("RecipientEmail"));
+            invoice.put("shippingPhone", rs.getString("ShippingPhone"));
+            invoice.put("shippingAddress", rs.getString("ShippingAddress"));
+            invoice.put("paymentMethod", rs.getString("PaymentMethod"));
+            invoice.put("subtotal", rs.getBigDecimal("Subtotal"));
+            invoice.put("discountAmount", rs.getBigDecimal("DiscountAmount"));
+            invoice.put("totalAmount", rs.getBigDecimal("TotalAmount"));
+            invoice.put("currency", rs.getString("Currency"));
+            invoice.put("paidAt", rs.getTimestamp("PaidAt"));
+            invoice.put("emailSentAt", rs.getTimestamp("EmailSentAt"));
+            invoice.put("emailSendError", rs.getString("EmailSendError"));
+            invoice.put("createdAt", rs.getTimestamp("CreatedAt"));
+            invoice.put("updatedAt", rs.getTimestamp("UpdatedAt"));
+            return invoice;
+        }, invoiceId);
+
+        if (invoices.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found.");
+        }
+
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                SELECT InvoiceItemID,
+                       ProductID,
+                       ProductName,
+                       Quantity,
+                       UnitPrice,
+                       LineTotal
+                FROM dbo.OrderInvoiceItems
+                WHERE InvoiceID = ?
+                ORDER BY InvoiceItemID
+                """, (rs, rowNum) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("invoiceItemId", rs.getInt("InvoiceItemID"));
+            item.put("productId", rs.getObject("ProductID"));
+            item.put("productName", rs.getString("ProductName"));
+            item.put("quantity", rs.getInt("Quantity"));
+            item.put("unitPrice", rs.getBigDecimal("UnitPrice"));
+            item.put("lineTotal", rs.getBigDecimal("LineTotal"));
+            return item;
+        }, invoiceId);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("invoice", invoices.get(0));
+        response.put("items", items);
         return response;
     }
 
@@ -802,13 +972,13 @@ public class ProductSalesService {
     }
 
     private int insertOrder(int customerId, BigDecimal subtotal, BigDecimal discount, BigDecimal total,
-            String fullName, String phone, String address, String paymentMethod) {
+            String fullName, String phone, String email, String address, String paymentMethod) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var ps = connection.prepareStatement("""
                     INSERT INTO dbo.Orders (CustomerID, Subtotal, DiscountApplied, TotalAmount, Status,
-                                         ShippingFullName, ShippingPhone, ShippingAddress, PaymentMethod)
-                    VALUES (?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
+                                         ShippingFullName, ShippingPhone, ShippingEmail, ShippingAddress, PaymentMethod)
+                    VALUES (?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
                     """, new String[] { "OrderID" });
             ps.setInt(1, customerId);
             ps.setBigDecimal(2, subtotal);
@@ -816,8 +986,9 @@ public class ProductSalesService {
             ps.setBigDecimal(4, total);
             ps.setString(5, fullName);
             ps.setString(6, phone);
-            ps.setString(7, address);
-            ps.setString(8, paymentMethod);
+            ps.setString(7, email);
+            ps.setString(8, address);
+            ps.setString(9, paymentMethod);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -894,6 +1065,256 @@ public class ProductSalesService {
         }
     }
 
+    private Map<String, Object> ensureOrderInvoiceAndSendEmail(int paymentId) {
+        Integer invoiceId = findInvoiceIdByPaymentId(paymentId);
+        if (invoiceId == null) {
+            invoiceId = createInvoiceSnapshot(paymentId);
+        }
+        if (invoiceId == null) {
+            return Map.of("invoiceCreated", false);
+        }
+
+        InvoiceEnvelope envelope = loadInvoiceEnvelope(invoiceId);
+        if (envelope == null) {
+            return Map.of("invoiceCreated", false);
+        }
+
+        boolean emailSent = envelope.emailSentAt() != null;
+        if (!emailSent) {
+            emailSent = attemptInvoiceEmail(invoiceId, envelope.mailModel());
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("invoiceCreated", true);
+        response.put("invoiceCode", envelope.mailModel().invoiceCode());
+        response.put("invoiceEmailSent", emailSent);
+        return response;
+    }
+
+    private Integer createInvoiceSnapshot(int paymentId) {
+        Integer existingInvoiceId = findInvoiceIdByPaymentId(paymentId);
+        if (existingInvoiceId != null) {
+            return existingInvoiceId;
+        }
+
+        InvoiceSource source = loadInvoiceSource(paymentId);
+        if (source == null) {
+            return null;
+        }
+
+        List<OrderInvoiceMailService.InvoiceLineItem> items = loadInvoiceLineItems(source.orderId());
+        if (items.isEmpty()) {
+            return null;
+        }
+
+        String invoiceCode = generateInvoiceCode(source.paidAt(), paymentId);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        try {
+            jdbcTemplate.update(connection -> {
+                var ps = connection.prepareStatement("""
+                        INSERT INTO dbo.OrderInvoices (
+                            InvoiceCode, OrderID, PaymentID, CustomerID, RecipientEmail, RecipientName,
+                            ShippingPhone, ShippingAddress, PaymentMethod, Currency, Subtotal,
+                            DiscountAmount, TotalAmount, PaidAt
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'VND', ?, ?, ?, ?)
+                        """, new String[] { "InvoiceID" });
+                ps.setString(1, invoiceCode);
+                ps.setInt(2, source.orderId());
+                ps.setInt(3, source.paymentId());
+                ps.setInt(4, source.customerId());
+                ps.setString(5, source.recipientEmail());
+                ps.setString(6, source.recipientName());
+                ps.setString(7, source.shippingPhone());
+                ps.setString(8, source.shippingAddress());
+                ps.setString(9, source.paymentMethod());
+                ps.setBigDecimal(10, source.subtotal());
+                ps.setBigDecimal(11, source.discountAmount());
+                ps.setBigDecimal(12, source.totalAmount());
+                ps.setTimestamp(13, Timestamp.valueOf(source.paidAt()));
+                return ps;
+            }, keyHolder);
+        } catch (DataAccessException exception) {
+            Integer concurrentInvoiceId = findInvoiceIdByPaymentId(paymentId);
+            if (concurrentInvoiceId != null) {
+                return concurrentInvoiceId;
+            }
+            throw exception;
+        }
+
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create invoice.");
+        }
+        int invoiceId = key.intValue();
+
+        for (OrderInvoiceMailService.InvoiceLineItem item : items) {
+            jdbcTemplate.update("""
+                    INSERT INTO dbo.OrderInvoiceItems (InvoiceID, ProductID, ProductName, Quantity, UnitPrice, LineTotal)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    invoiceId,
+                    null,
+                    item.productName(),
+                    item.quantity(),
+                    item.unitPrice(),
+                    item.lineTotal());
+        }
+        return invoiceId;
+    }
+
+    private InvoiceSource loadInvoiceSource(int paymentId) {
+        List<InvoiceSource> sources = jdbcTemplate.query("""
+                SELECT p.PaymentID,
+                       p.PaidAt,
+                       o.OrderID,
+                       o.CustomerID,
+                       COALESCE(o.ShippingEmail, u.Email) AS RecipientEmail,
+                       COALESCE(o.ShippingFullName, u.FullName) AS RecipientName,
+                       o.ShippingPhone,
+                       o.ShippingAddress,
+                       o.PaymentMethod,
+                       o.Subtotal,
+                       o.DiscountApplied,
+                       o.TotalAmount
+                FROM dbo.Payments p
+                JOIN dbo.Orders o ON o.OrderID = p.OrderID
+                LEFT JOIN dbo.Users u ON u.UserID = o.CustomerID
+                WHERE p.PaymentID = ?
+                  AND p.Status = 'SUCCESS'
+                """, (rs, rowNum) -> new InvoiceSource(
+                rs.getInt("OrderID"),
+                rs.getInt("PaymentID"),
+                rs.getInt("CustomerID"),
+                rs.getString("RecipientEmail"),
+                rs.getString("RecipientName"),
+                rs.getString("ShippingPhone"),
+                rs.getString("ShippingAddress"),
+                rs.getString("PaymentMethod"),
+                rs.getBigDecimal("Subtotal"),
+                rs.getBigDecimal("DiscountApplied"),
+                rs.getBigDecimal("TotalAmount"),
+                rs.getTimestamp("PaidAt") == null ? LocalDateTime.now() : rs.getTimestamp("PaidAt").toLocalDateTime()),
+                paymentId);
+        return sources.isEmpty() ? null : sources.get(0);
+    }
+
+    private List<OrderInvoiceMailService.InvoiceLineItem> loadInvoiceLineItems(int orderId) {
+        return jdbcTemplate.query("""
+                SELECT COALESCE(p.ProductName, CONCAT('Product #', oi.ProductID)) AS ProductName,
+                       oi.Quantity,
+                       oi.UnitPrice
+                FROM dbo.OrderItems oi
+                LEFT JOIN dbo.Products p ON p.ProductID = oi.ProductID
+                WHERE oi.OrderID = ?
+                ORDER BY oi.ProductID
+                """, (rs, rowNum) -> {
+            BigDecimal unitPrice = rs.getBigDecimal("UnitPrice");
+            int quantity = rs.getInt("Quantity");
+            return new OrderInvoiceMailService.InvoiceLineItem(
+                    rs.getString("ProductName"),
+                    quantity,
+                    unitPrice,
+                    unitPrice.multiply(BigDecimal.valueOf(quantity)));
+        }, orderId);
+    }
+
+    private Integer findInvoiceIdByPaymentId(int paymentId) {
+        List<Integer> ids = jdbcTemplate.query("""
+                SELECT InvoiceID
+                FROM dbo.OrderInvoices
+                WHERE PaymentID = ?
+                """, (rs, rowNum) -> rs.getInt("InvoiceID"), paymentId);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private InvoiceEnvelope loadInvoiceEnvelope(int invoiceId) {
+        List<InvoiceEnvelope> envelopes = jdbcTemplate.query("""
+                SELECT InvoiceID,
+                       InvoiceCode,
+                       OrderID,
+                       PaymentID,
+                       RecipientEmail,
+                       RecipientName,
+                       ShippingPhone,
+                       ShippingAddress,
+                       PaymentMethod,
+                       Subtotal,
+                       DiscountAmount,
+                       TotalAmount,
+                       PaidAt,
+                       EmailSentAt
+                FROM dbo.OrderInvoices
+                WHERE InvoiceID = ?
+                """, (rs, rowNum) -> {
+            List<OrderInvoiceMailService.InvoiceLineItem> items = jdbcTemplate.query("""
+                    SELECT ProductName, Quantity, UnitPrice, LineTotal
+                    FROM dbo.OrderInvoiceItems
+                    WHERE InvoiceID = ?
+                    ORDER BY InvoiceItemID
+                    """, (itemRs, itemRowNum) -> new OrderInvoiceMailService.InvoiceLineItem(
+                    itemRs.getString("ProductName"),
+                    itemRs.getInt("Quantity"),
+                    itemRs.getBigDecimal("UnitPrice"),
+                    itemRs.getBigDecimal("LineTotal")), rs.getInt("InvoiceID"));
+
+            return new InvoiceEnvelope(
+                    rs.getInt("InvoiceID"),
+                    rs.getTimestamp("EmailSentAt"),
+                    new OrderInvoiceMailService.InvoiceMailModel(
+                            rs.getString("InvoiceCode"),
+                            rs.getInt("OrderID"),
+                            rs.getInt("PaymentID"),
+                            rs.getString("RecipientEmail"),
+                            rs.getString("RecipientName"),
+                            rs.getString("ShippingPhone"),
+                            rs.getString("ShippingAddress"),
+                            rs.getString("PaymentMethod"),
+                            rs.getBigDecimal("Subtotal"),
+                            rs.getBigDecimal("DiscountAmount"),
+                            rs.getBigDecimal("TotalAmount"),
+                            rs.getTimestamp("PaidAt") == null ? LocalDateTime.now() : rs.getTimestamp("PaidAt").toLocalDateTime(),
+                            items));
+        }, invoiceId);
+        return envelopes.isEmpty() ? null : envelopes.get(0);
+    }
+
+    private boolean attemptInvoiceEmail(int invoiceId, OrderInvoiceMailService.InvoiceMailModel model) {
+        if (model.recipientEmail() == null || model.recipientEmail().isBlank()) {
+            updateInvoiceEmailStatus(invoiceId, null, "Recipient email is missing.");
+            return false;
+        }
+
+        try {
+            orderInvoiceMailService.sendProductInvoice(model);
+            updateInvoiceEmailStatus(invoiceId, Timestamp.valueOf(LocalDateTime.now()), null);
+            return true;
+        } catch (Exception exception) {
+            log.warn("Failed to send invoice email for invoice {}: {}", model.invoiceCode(), exception.getMessage());
+            updateInvoiceEmailStatus(invoiceId, null, exception.getMessage());
+            return false;
+        }
+    }
+
+    private void updateInvoiceEmailStatus(int invoiceId, Timestamp emailSentAt, String errorMessage) {
+        jdbcTemplate.update("""
+                UPDATE dbo.OrderInvoices
+                SET EmailSentAt = ?,
+                    EmailSendError = ?,
+                    UpdatedAt = SYSDATETIME()
+                WHERE InvoiceID = ?
+                """, emailSentAt, errorMessage, invoiceId);
+    }
+
+    private String generateInvoiceCode(LocalDateTime paidAt, int paymentId) {
+        LocalDateTime baseTime = paidAt == null ? LocalDateTime.now() : paidAt;
+        return "INV-%04d%02d%02d-%06d".formatted(
+                baseTime.getYear(),
+                baseTime.getMonthValue(),
+                baseTime.getDayOfMonth(),
+                paymentId);
+    }
+
     private BigDecimal parseNullableDecimal(Object value) {
         if (value == null) {
             return null;
@@ -944,4 +1365,34 @@ public class ProductSalesService {
         }
         return rating;
     }
+
+    private record InvoiceSource(
+            int orderId,
+            int paymentId,
+            int customerId,
+            String recipientEmail,
+            String recipientName,
+            String shippingPhone,
+            String shippingAddress,
+            String paymentMethod,
+            BigDecimal subtotal,
+            BigDecimal discountAmount,
+            BigDecimal totalAmount,
+            LocalDateTime paidAt) {
+    }
+
+    private record InvoiceEnvelope(
+            int invoiceId,
+            Timestamp emailSentAt,
+            OrderInvoiceMailService.InvoiceMailModel mailModel) {
+    }
 }
+
+
+
+
+
+
+
+
+

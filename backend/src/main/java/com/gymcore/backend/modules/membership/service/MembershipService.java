@@ -1,8 +1,11 @@
 package com.gymcore.backend.modules.membership.service;
 
 import com.gymcore.backend.modules.product.service.PayOsService;
+import com.gymcore.backend.modules.product.service.ProductSalesService;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -12,12 +15,17 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MembershipService {
 
+    private static final Logger log = LoggerFactory.getLogger(MembershipService.class);
+
     private final JdbcTemplate jdbcTemplate;
     private final PayOsService payOsService;
+    private final ProductSalesService productSalesService;
 
-    public MembershipService(JdbcTemplate jdbcTemplate, PayOsService payOsService) {
+    public MembershipService(JdbcTemplate jdbcTemplate, PayOsService payOsService,
+            ProductSalesService productSalesService) {
         this.jdbcTemplate = jdbcTemplate;
         this.payOsService = payOsService;
+        this.productSalesService = productSalesService;
     }
 
     public Map<String, Object> execute(String action, Object payload) {
@@ -82,6 +90,12 @@ public class MembershipService {
                     WHERE PaymentID = ? AND Status = 'PENDING'
                     """, normalizedSuccessStatus(status), paymentId);
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
+            try {
+                productSalesService.handleSuccessfulProductPayment(paymentId);
+            } catch (Exception invoiceException) {
+                log.warn("Webhook confirmed payment {} but invoice processing failed: {}",
+                        paymentId, invoiceException.getMessage());
+            }
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.", exception);
         }
