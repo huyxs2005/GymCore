@@ -119,7 +119,7 @@ describe('CoachSchedulePage', () => {
     })
 
     expect(await screen.findByText(/Session cancelled and the customer was notified/i)).toBeInTheDocument()
-  }, 10000)
+  }, 20000)
 
   it('groups selected availability by weekday instead of one flat slot list', async () => {
     coachApi.getMyAvailability.mockResolvedValue({

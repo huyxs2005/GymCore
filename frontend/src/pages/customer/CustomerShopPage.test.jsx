@@ -1,18 +1,32 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CustomerShopPage from './CustomerShopPage'
+
+const mockSessionUser = {
+  userId: 5,
+  fullName: 'Customer Minh',
+  email: 'customer@gymcore.local',
+  phone: '0900000004',
+  role: 'CUSTOMER',
+}
 
 vi.mock('../../components/frame/WorkspaceScaffold', () => ({
   default: ({ children }) => <div>{children}</div>,
 }))
 
+vi.mock('../../features/auth/useSession', () => ({
+  useSession: () => ({
+    user: mockSessionUser,
+    isAuthenticated: true,
+  }),
+}))
+
 vi.mock('../../features/product/api/productApi', () => ({
   productApi: {
     getProducts: vi.fn(),
-    getProductDetail: vi.fn(),
-    createReview: vi.fn(),
   },
 }))
 
@@ -20,141 +34,161 @@ vi.mock('../../features/product/api/cartApi', () => ({
   cartApi: {
     getCart: vi.fn(),
     addItem: vi.fn(),
-    updateItem: vi.fn(),
-    removeItem: vi.fn(),
   },
 }))
 
 vi.mock('../../features/product/api/orderApi', () => ({
   orderApi: {
-    getMyOrders: vi.fn(),
-    checkout: vi.fn(),
     confirmPaymentReturn: vi.fn(),
   },
 }))
 
-vi.mock('../../features/promotion/api/promotionApi', () => ({
-  promotionApi: {
-    getMyClaims: vi.fn(),
-    applyCoupon: vi.fn(),
-  },
+vi.mock('../../features/product/utils/cartAnimation', () => ({
+  triggerAddToCartAnimation: vi.fn(),
 }))
 
 const { productApi } = await import('../../features/product/api/productApi')
 const { cartApi } = await import('../../features/product/api/cartApi')
 const { orderApi } = await import('../../features/product/api/orderApi')
-const { promotionApi } = await import('../../features/promotion/api/promotionApi')
+const { triggerAddToCartAnimation } = await import('../../features/product/utils/cartAnimation')
 
 function renderWithQuery(ui) {
+  function LocationProbe() {
+    const location = useLocation()
+    return <div data-testid="location-probe">{location.pathname}</div>
+  }
+
   const client = new QueryClient({
     defaultOptions: {
-      queries: {
-        retry: false,
-      },
+      queries: { retry: false },
     },
   })
 
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/customer/shop']}>
+        <Routes>
+          <Route path="/customer/shop" element={<>{ui}<LocationProbe /></>} />
+          <Route path="/customer/cart" element={<div data-testid="location-probe">/customer/cart</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
 }
 
 describe('CustomerShopPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.spyOn(window, 'alert').mockImplementation(() => {})
+    window.history.replaceState({}, document.title, '/customer/shop')
 
-    productApi.getProducts.mockResolvedValue({ data: { products: [] } })
+    productApi.getProducts.mockResolvedValue({
+      categories: [
+        { productCategoryId: 1, name: 'Protein' },
+        { productCategoryId: 2, name: 'Creatine' },
+      ],
+      products: [
+        {
+          productId: 1,
+          name: 'Whey Protein',
+          shortDescription: 'Recovery shake',
+          description: 'Protein powder',
+          price: 2000,
+          averageRating: 4.5,
+          reviewCount: 3,
+          thumbnailUrl: 'https://cdn.example/whey.jpg',
+          categories: [{ productCategoryId: 1, name: 'Protein' }],
+        },
+        {
+          productId: 2,
+          name: 'Creatine Monohydrate',
+          shortDescription: 'Strength support',
+          description: 'Creatine powder',
+          price: 1000,
+          averageRating: 4.2,
+          reviewCount: 2,
+          thumbnailUrl: 'https://cdn.example/creatine.jpg',
+          categories: [{ productCategoryId: 2, name: 'Creatine' }],
+        },
+      ],
+    })
     cartApi.getCart.mockResolvedValue({
-      data: {
-        items: [
-          {
-            productId: 1,
-            name: 'Whey Protein',
-            price: 2000,
-            quantity: 2,
-            lineTotal: 4000,
-          },
-        ],
-        subtotal: 4000,
-        currency: 'VND',
-      },
+      items: [
+        {
+          productId: 1,
+          name: 'Whey Protein',
+          price: 2000,
+          quantity: 2,
+          lineTotal: 4000,
+        },
+      ],
+      subtotal: 4000,
+      currency: 'VND',
     })
-    orderApi.getMyOrders.mockResolvedValue({ data: { orders: [] } })
-    orderApi.checkout.mockResolvedValue({ data: {} })
-    promotionApi.getMyClaims.mockResolvedValue({
-      data: {
-        claims: [
-          {
-            ClaimID: 11,
-            PromoCode: 'WELCOME10',
-            ApplyTarget: 'ORDER',
-            DiscountPercent: 10,
-            DiscountAmount: 0,
-            BonusDurationMonths: 0,
-            UsedAt: null,
-          },
-          {
-            ClaimID: 12,
-            PromoCode: 'SUMMERPLUS1M',
-            ApplyTarget: 'MEMBERSHIP',
-            DiscountPercent: 5,
-            DiscountAmount: 0,
-            BonusDurationMonths: 1,
-            UsedAt: null,
-          },
-        ],
-      },
-    })
-    promotionApi.applyCoupon.mockResolvedValue({
-      data: {
-        estimatedDiscount: 400,
-        estimatedFinalAmount: 3600,
-      },
-    })
+    cartApi.addItem.mockResolvedValue({ added: true })
+    orderApi.confirmPaymentReturn.mockResolvedValue({})
   })
 
-  it('checks out directly from the cart card with coupon selection and no modal step', async () => {
+  it('renders the catalog and links products to dedicated detail pages plus the cart page', async () => {
+    renderWithQuery(<CustomerShopPage />)
+
+    expect(await screen.findByText(/Catalog/i)).toBeInTheDocument()
+    const wheyLinks = await screen.findAllByRole('link', { name: /Whey Protein/i })
+    const detailLinks = await screen.findAllByText(/View details/i)
+    expect(screen.getByRole('link', { name: /View buying history/i })).toHaveAttribute('href', '/customer/orders')
+    expect(screen.getByRole('link', { name: /View cart/i })).toHaveAttribute('href', '/customer/cart')
+    expect(wheyLinks[0]).toHaveAttribute('href', '/customer/shop/1')
+    expect(detailLinks[0].closest('a')).toHaveAttribute('href', '/customer/shop/1')
+    expect(screen.getAllByRole('link', { name: /Creatine Monohydrate/i })[0]).toHaveAttribute('href', '/customer/shop/2')
+  })
+
+  it('filters products by category in the catalog page', async () => {
     const user = userEvent.setup()
     renderWithQuery(<CustomerShopPage />)
 
-    await act(async () => {
-      window.dispatchEvent(new Event('gymcore:open-cart'))
-    })
+    expect((await screen.findAllByRole('link', { name: /Whey Protein/i })).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: 'Creatine' }))
 
-    expect(await screen.findByText(/Your Cart/i)).toBeInTheDocument()
-    expect(screen.queryByText(/Checkout Options/i)).not.toBeInTheDocument()
-
-    await user.selectOptions(screen.getByLabelText(/Apply coupon/i), 'WELCOME10')
-
-    await waitFor(() => {
-      expect(promotionApi.applyCoupon).toHaveBeenCalledWith({
-        promoCode: 'WELCOME10',
-        target: 'ORDER',
-        subtotal: 4000,
-      })
-    })
-
-    await user.click(screen.getByRole('button', { name: /Checkout with PayOS/i }))
-
-    await waitFor(() => {
-      expect(orderApi.checkout.mock.calls[0][0]).toEqual({
-        paymentMethod: 'PAYOS',
-        promoCode: 'WELCOME10',
-      })
-    })
-
-    expect(screen.queryByText(/Confirm Order/i)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /Creatine Monohydrate/i }).length).toBeGreaterThan(0)
+    expect(screen.queryAllByRole('link', { name: /Whey Protein/i })).toHaveLength(0)
   })
 
-  it('keeps membership-only coupons out of the product coupon selector and explains why', async () => {
+  it('adds an item to cart from the catalog and triggers the cart animation', async () => {
+    const user = userEvent.setup()
     renderWithQuery(<CustomerShopPage />)
 
-    await act(async () => {
-      window.dispatchEvent(new Event('gymcore:open-cart'))
-    })
+    const addButtons = await screen.findAllByRole('button', { name: /Add to cart/i })
+    await user.click(addButtons[0])
 
-    expect(await screen.findByText(/Your Cart/i)).toBeInTheDocument()
-    expect(screen.getByText(/1 coupon\(s\) are membership-only and cannot be used for product checkout./i)).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /WELCOME10/i })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /SUMMERPLUS1M/i })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(cartApi.addItem.mock.calls[0][0]).toEqual({ productId: 1, quantity: 1 })
+      expect(triggerAddToCartAnimation).toHaveBeenCalled()
+    })
+  })
+
+  it('supports buy now from the catalog and routes to the cart page', async () => {
+    const user = userEvent.setup()
+    renderWithQuery(<CustomerShopPage />)
+
+    const buyNowButtons = await screen.findAllByRole('button', { name: /Buy now/i })
+    await user.click(buyNowButtons[0])
+
+    await waitFor(() => {
+      expect(cartApi.addItem.mock.calls[0][0]).toEqual({ productId: 1, quantity: 1 })
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/customer/cart')
+    })
+  })
+
+  it('handles payment return success on the shop page if PayOS returns there', async () => {
+    window.history.replaceState({}, document.title, '/customer/shop?status=PAID&orderCode=12345')
+
+    renderWithQuery(<CustomerShopPage />)
+
+    await waitFor(() => {
+      expect(orderApi.confirmPaymentReturn).toHaveBeenCalledWith({
+        status: 'PAID',
+        orderCode: '12345',
+      })
+    })
   })
 })

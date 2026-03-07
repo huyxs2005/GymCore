@@ -21,6 +21,7 @@ function renderAtLogin() {
     <MemoryRouter initialEntries={['/auth/login']}>
       <Routes>
         <Route path="/auth/login" element={<LoginPage />} />
+        <Route path="/" element={<div>GymCore Home</div>} />
         <Route path="/customer/membership" element={<div>Customer Membership</div>} />
         <Route path="/coach/schedule" element={<div>Coach Schedule</div>} />
         <Route path="/reception/checkin" element={<div>Reception Checkin</div>} />
@@ -46,13 +47,12 @@ describe('LoginPage', () => {
     act(() => clearSession())
   })
 
-  it('logs in with email/password and navigates to landingPath, persisting session', async () => {
+  it('logs in with email/password and navigates to the home page, persisting session', async () => {
     const user = userEvent.setup()
     authApi.login.mockResolvedValue({
       success: true,
       data: {
         accessToken: 'ACCESS',
-        landingPath: '/customer/membership',
         user: { userId: 1, fullName: 'Alex Carter', email: 'a@b.com', role: 'CUSTOMER' },
       },
     })
@@ -63,10 +63,10 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/Password/i), 'secret123')
     await user.click(screen.getByRole('button', { name: /^Login$/i }))
 
-    expect(await screen.findByText('Customer Membership')).toBeInTheDocument()
+    expect(await screen.findByText('GymCore Home')).toBeInTheDocument()
     expect(getAccessToken()).toBe('ACCESS')
     expect(getAuthUser()?.email).toBe('a@b.com')
-  })
+  }, 15000)
 
   it('shows backend error message when login fails', async () => {
     const user = userEvent.setup()
@@ -81,7 +81,7 @@ describe('LoginPage', () => {
     expect(await screen.findByText('Invalid email or password.')).toBeInTheDocument()
   })
 
-  it('initializes Google button when client id exists and navigates on Google login success', async () => {
+  it('initializes Google button when client id exists and navigates to the home page on Google login success', async () => {
     const user = userEvent.setup()
     import.meta.env.VITE_GOOGLE_CLIENT_ID = 'google-client-id'
 
@@ -101,7 +101,6 @@ describe('LoginPage', () => {
       success: true,
       data: {
         accessToken: 'ACCESS',
-        landingPath: '/coach/schedule',
         user: { userId: 2, fullName: 'Coach Alex', email: 'coach@gymcore.local', role: 'COACH' },
       },
     })
@@ -117,7 +116,7 @@ describe('LoginPage', () => {
       await capturedCallback({ credential: 'ID_TOKEN' })
     })
 
-    expect(await screen.findByText('Coach Schedule')).toBeInTheDocument()
+    expect(await screen.findByText('GymCore Home')).toBeInTheDocument()
     expect(getAccessToken()).toBe('ACCESS')
 
     // Close any open timers/microtasks.

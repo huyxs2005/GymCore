@@ -31,7 +31,7 @@ function CustomerPromotionsPage() {
     },
   })
 
-  const posts = postsData?.data?.posts || []
+  const posts = postsData?.posts || []
   const formatPostBenefit = (post) => {
     const discountPercent = Number(post.DiscountPercent || 0)
     const discountAmount = Number(post.DiscountAmount || 0)

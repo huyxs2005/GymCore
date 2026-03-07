@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
@@ -28,5 +29,16 @@ public class GlobalApiExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiResponse<Map<String, Object>>> handleConstraintViolation(ConstraintViolationException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error("Request validation failed.", Map.of()));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleMaxUploadSizeExceeded(
+            MaxUploadSizeExceededException exception) {
+        return ResponseEntity.status(413).body(ApiResponse.error("Uploaded file is too large.", Map.of()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleUnexpectedException(Exception exception) {
+        return ResponseEntity.internalServerError().body(ApiResponse.error("Unexpected server error.", Map.of()));
     }
 }

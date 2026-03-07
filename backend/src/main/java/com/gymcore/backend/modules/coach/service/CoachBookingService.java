@@ -1356,18 +1356,58 @@ public class CoachBookingService {
         String dateOfBirth = asText(body.get("dateOfBirth"));
         String gender = asText(body.get("gender"));
 
+        Integer coachCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?",
+                Integer.class,
+                coachId);
+        if (coachCount == null || coachCount == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found.");
+        }
+        if (body.containsKey("fullName") && fullName == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coach full name is required.");
+        }
+        if (body.containsKey("phone") && phone == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coach phone number is required.");
+        }
+        if (body.containsKey("bio") && bio == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coach bio is required.");
+        }
+        if (experienceYears != null && experienceYears < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Years of experience cannot be negative.");
+        }
+
+        LocalDate parsedDateOfBirth = null;
+        if (dateOfBirth != null) {
+            try {
+                parsedDateOfBirth = LocalDate.parse(dateOfBirth);
+            } catch (Exception exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Date of birth must use YYYY-MM-DD format.");
+            }
+        }
+
         if (fullName != null)
             jdbcTemplate.update("UPDATE dbo.Users SET FullName = ?, UpdatedAt = SYSDATETIME() WHERE UserID = ?",
                     fullName, coachId);
         if (phone != null)
             jdbcTemplate.update("UPDATE dbo.Users SET Phone = ?, UpdatedAt = SYSDATETIME() WHERE UserID = ?", phone,
                     coachId);
-        jdbcTemplate.update("""
+        int updatedRows = jdbcTemplate.update("""
                 UPDATE dbo.Coaches SET ExperienceYears = COALESCE(?, ExperienceYears), Bio = COALESCE(?, Bio),
-                       DateOfBirth = CASE WHEN ? IS NOT NULL THEN CAST(? AS DATE) ELSE DateOfBirth END,
+                       DateOfBirth = CASE WHEN ? IS NOT NULL THEN ? ELSE DateOfBirth END,
                        Gender = COALESCE(?, Gender)
                 WHERE CoachID = ?
-                """, experienceYears, bio, dateOfBirth, dateOfBirth, gender, coachId);
+                """,
+                experienceYears,
+                bio,
+                parsedDateOfBirth == null ? null : java.sql.Date.valueOf(parsedDateOfBirth),
+                parsedDateOfBirth == null ? null : java.sql.Date.valueOf(parsedDateOfBirth),
+                gender,
+                coachId);
+        if (updatedRows == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found.");
+        }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("coachId", coachId);
         result.put("message", "Profile updated.");

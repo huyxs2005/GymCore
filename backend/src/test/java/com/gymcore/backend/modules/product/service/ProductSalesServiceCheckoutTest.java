@@ -35,6 +35,7 @@ class ProductSalesServiceCheckoutTest {
     private CurrentUserService currentUserService;
     private PayOsService payOsService;
     private UserNotificationService notificationService;
+    private OrderInvoiceService orderInvoiceService;
     private ProductSalesService service;
 
     @BeforeEach
@@ -43,7 +44,13 @@ class ProductSalesServiceCheckoutTest {
         currentUserService = Mockito.mock(CurrentUserService.class);
         payOsService = Mockito.mock(PayOsService.class);
         notificationService = Mockito.mock(UserNotificationService.class);
-        service = new ProductSalesService(jdbcTemplate, currentUserService, payOsService, notificationService);
+        orderInvoiceService = Mockito.mock(OrderInvoiceService.class);
+        service = new ProductSalesService(
+                jdbcTemplate,
+                currentUserService,
+                payOsService,
+                notificationService,
+                orderInvoiceService);
     }
 
     @Test
@@ -73,7 +80,8 @@ class ProductSalesServiceCheckoutTest {
                     "ProductID", 7,
                     "Quantity", 1,
                     "ProductName", "Creatine Monohydrate",
-                    "Price", new BigDecimal("350000"))));
+                    "Price", new BigDecimal("350000"),
+                    "ThumbnailUrl", "https://cdn.example/creatine.jpg")));
             return null;
         }).when(jdbcTemplate).query(contains("FROM dbo.CartItems"), any(PreparedStatementSetter.class),
                 any(RowCallbackHandler.class));
@@ -100,6 +108,83 @@ class ProductSalesServiceCheckoutTest {
     }
 
     @Test
+    void checkout_shouldCreatePickupOrderWithoutAddress() throws Exception {
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+
+        when(jdbcTemplate.queryForObject(contains("SELECT CartID"), eq(Integer.class), eq(5)))
+                .thenReturn(1);
+
+        when(jdbcTemplate.queryForObject(contains("SELECT FullName, Phone, Email"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return mapper.mapRow(resultSet(Map.of(
+                            "FullName", "Customer Minh",
+                            "Phone", "0900000004",
+                            "Email", "customer@gymcore.local")), 0);
+                });
+
+        Mockito.doAnswer(invocation -> {
+            RowCallbackHandler rowCallbackHandler = invocation.getArgument(2);
+            rowCallbackHandler.processRow(resultSet(Map.of(
+                    "ProductID", 7,
+                    "Quantity", 1,
+                    "ProductName", "Creatine Monohydrate",
+                    "Price", new BigDecimal("350000"),
+                    "ThumbnailUrl", "https://cdn.example/creatine.jpg")));
+            return null;
+        }).when(jdbcTemplate).query(contains("FROM dbo.CartItems"), any(PreparedStatementSetter.class),
+                any(RowCallbackHandler.class));
+
+        final int[] insertCount = { 0 };
+        when(jdbcTemplate.update(any(org.springframework.jdbc.core.PreparedStatementCreator.class), any(org.springframework.jdbc.support.KeyHolder.class)))
+                .thenAnswer(invocation -> {
+                    org.springframework.jdbc.support.KeyHolder keyHolder = invocation.getArgument(1);
+                    insertCount[0]++;
+                    if (insertCount[0] == 1) {
+                        keyHolder.getKeyList().add(Map.of("OrderID", 17));
+                    } else {
+                        keyHolder.getKeyList().add(Map.of("PaymentID", 900));
+                    }
+                    return 1;
+                });
+
+        when(payOsService.createPaymentLink(
+                eq(900),
+                eq(new BigDecimal("350000")),
+                eq("Order #17"),
+                eq("Customer Minh"),
+                eq("0900000004"),
+                eq("customer@gymcore.local"),
+                eq("PICKUP_AT_STORE"),
+                any()))
+                .thenReturn(new PayOsService.PayOsLink("PAYOS-LINK-17", "https://payos.example/17", "PENDING"));
+
+        when(jdbcTemplate.update(
+                contains("UPDATE dbo.Payments"),
+                eq("PAYOS-LINK-17"),
+                eq("https://payos.example/17"),
+                eq("PENDING"),
+                eq(900)))
+                .thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = service.execute(
+                "customer-checkout",
+                "Bearer customer",
+                Map.of(
+                        "paymentMethod", "PAYOS",
+                        "fullName", "Customer Minh",
+                        "email", "customer@gymcore.local"));
+
+        assertEquals(17, response.get("orderId"));
+        assertEquals(900, response.get("paymentId"));
+        assertEquals("https://payos.example/17", response.get("checkoutUrl"));
+        assertEquals("PICKUP_AT_STORE", response.get("fulfillmentMethod"));
+    }
+
+    @Test
     void confirmPaymentReturn_shouldDecodeEncodedPayOsOrderCode() {
         when(currentUserService.requireCustomer("Bearer customer"))
                 .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
@@ -113,6 +198,8 @@ class ProductSalesServiceCheckoutTest {
                 .thenReturn(1);
 
         when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(555))).thenReturn(1);
+        when(orderInvoiceService.handleSuccessfulProductPayment(555))
+                .thenReturn(Map.of("invoiceCreated", true, "invoiceEmailSent", true, "invoiceCode", "INV-555"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> response = service.execute(
@@ -122,6 +209,8 @@ class ProductSalesServiceCheckoutTest {
 
         assertTrue(Boolean.TRUE.equals(response.get("handled")));
         assertEquals(555, response.get("paymentId"));
+        assertEquals("INV-555", response.get("invoiceCode"));
+        verify(orderInvoiceService).handleSuccessfulProductPayment(555);
     }
 
     private ResultSet resultSet(Map<String, Object> values) throws Exception {

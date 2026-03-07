@@ -16,6 +16,8 @@ import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.ReportService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 class PromotionServiceTest {
@@ -41,6 +45,61 @@ class PromotionServiceTest {
         reportService = Mockito.mock(ReportService.class);
         notificationService = Mockito.mock(UserNotificationService.class);
         service = new PromotionService(jdbcTemplate, currentUserService, reportService, notificationService);
+        ReflectionTestUtils.setField(service, "promotionImageDir", "uploads/promotions-test");
+        ReflectionTestUtils.setField(service, "promotionImageMaxBytes", 5L * 1024 * 1024);
+    }
+
+    @Test
+    void uploadPromotionBanner_shouldStoreManagedBanner() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        byte[] png = new byte[] {
+                (byte) 0x89, 0x50, 0x4E, 0x47,
+                0x0D, 0x0A, 0x1A, 0x0A,
+                0x00, 0x00, 0x00, 0x00
+        };
+        MockMultipartFile file = new MockMultipartFile("file", "banner.png", "image/png", png);
+
+        Map<String, Object> response = service.uploadPromotionBanner("Bearer admin", file);
+
+        assertTrue(String.valueOf(response.get("imageUrl")).startsWith("/uploads/promotions/banners/"));
+    }
+
+    @Test
+    void uploadPromotionBanner_shouldRejectFileLargerThanConfiguredLimit() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "banner.png",
+                "image/png",
+                new byte[(5 * 1024 * 1024) + 1]);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.uploadPromotionBanner("Bearer admin", file));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Promotion banner file is too large. Maximum size is 5 MB.", exception.getReason());
+    }
+
+    @Test
+    void deleteUploadedPromotionBanner_shouldDeleteUnreferencedManagedFile() throws Exception {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+        when(jdbcTemplate.queryForObject(org.mockito.ArgumentMatchers.contains("FROM dbo.PromotionPosts"), eq(Integer.class), eq("/uploads/promotions/banners/to-delete.png")))
+                .thenReturn(0);
+
+        Path baseDir = Path.of("uploads/promotions-test").toAbsolutePath().normalize();
+        Path bannerDir = baseDir.resolve("banners");
+        Files.createDirectories(bannerDir);
+        Files.writeString(bannerDir.resolve("to-delete.png"), "x");
+
+        Map<String, Object> response = service.deleteUploadedPromotionBanner("Bearer admin", "/uploads/promotions/banners/to-delete.png");
+
+        assertEquals(Boolean.TRUE, response.get("deleted"));
+        assertTrue(Files.notExists(bannerDir.resolve("to-delete.png")));
     }
 
     @Test
@@ -181,6 +240,121 @@ class PromotionServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(String.valueOf(exception.getReason()).contains("discount or bonus duration"));
+        verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.Promotions"), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminCreateCoupon_shouldRejectDiscountPercentAbove100() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                service.execute("admin-create-coupon", "Bearer admin", Map.of(
+                        "promoCode", "OVER100",
+                        "description", "Invalid percent",
+                        "applyTarget", "ORDER",
+                        "discountPercent", "101",
+                        "discountAmount", "",
+                        "bonusDurationMonths", 0,
+                        "validFrom", "2026-01-01",
+                        "validTo", "2026-12-31",
+                        "isActive", 1)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Discount percent must be between 0 and 100.", exception.getReason());
+        verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.Promotions"), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminCreateCoupon_shouldRejectDiscountAmountExceedingSupportedRange() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                service.execute("admin-create-coupon", "Bearer admin", Map.of(
+                        "promoCode", "HUGEAMOUNT",
+                        "description", "Invalid amount",
+                        "applyTarget", "MEMBERSHIP",
+                        "discountPercent", "",
+                        "discountAmount", "234242343242",
+                        "bonusDurationMonths", 1,
+                        "validFrom", "2026-01-01",
+                        "validTo", "2026-12-31",
+                        "isActive", 1)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Discount amount exceeds the maximum supported value.", exception.getReason());
+        verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.Promotions"), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminCreateCoupon_shouldRejectDiscountAmountWithTooManyDecimals() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                service.execute("admin-create-coupon", "Bearer admin", Map.of(
+                        "promoCode", "BADSCALE",
+                        "description", "Invalid decimals",
+                        "applyTarget", "ORDER",
+                        "discountPercent", "",
+                        "discountAmount", "100.123",
+                        "bonusDurationMonths", 0,
+                        "validFrom", "2026-01-01",
+                        "validTo", "2026-12-31",
+                        "isActive", 1)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Discount amount must have at most 2 decimal places.", exception.getReason());
+        verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.Promotions"), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminCreateCoupon_shouldRejectInvalidBonusDurationMonths() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                service.execute("admin-create-coupon", "Bearer admin", Map.of(
+                        "promoCode", "BADMONTHS",
+                        "description", "Invalid months",
+                        "applyTarget", "MEMBERSHIP",
+                        "discountPercent", "",
+                        "discountAmount", "",
+                        "bonusDurationMonths", "012321312323424e",
+                        "validFrom", "2026-01-01",
+                        "validTo", "2026-12-31",
+                        "isActive", 1)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Bonus duration months must be an integer.", exception.getReason());
+        verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.Promotions"), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminCreateCoupon_shouldRejectInvalidDateWindow() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                service.execute("admin-create-coupon", "Bearer admin", Map.of(
+                        "promoCode", "BADDATE",
+                        "description", "Invalid dates",
+                        "applyTarget", "ORDER",
+                        "discountPercent", "10",
+                        "discountAmount", "",
+                        "bonusDurationMonths", 0,
+                        "validFrom", "2026-12-31",
+                        "validTo", "2026-01-01",
+                        "isActive", 1)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Valid to must be on or after valid from.", exception.getReason());
         verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.Promotions"), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
     }

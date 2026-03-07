@@ -42,6 +42,33 @@ END;
 GO
 
 --- =========================================================
+--- Section 1a: Orders - add shipping snapshot fields
+--- =========================================================
+IF COL_LENGTH('dbo.Orders', 'ShippingFullName') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingFullName NVARCHAR(255) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Orders', 'ShippingPhone') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingPhone NVARCHAR(50) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Orders', 'ShippingEmail') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingEmail NVARCHAR(255) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Orders', 'ShippingAddress') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingAddress NVARCHAR(MAX) NULL;
+END;
+GO
+
+--- =========================================================
 --- Section 1b: Orders/Payments payment method normalization
 --- Business rule: only PAYOS or CASH
 --- =========================================================
@@ -55,6 +82,183 @@ IF COL_LENGTH('dbo.Payments', 'PaymentMethod') IS NULL
 BEGIN
     ALTER TABLE dbo.Payments ADD PaymentMethod NVARCHAR(50) NULL;
 END;
+GO
+
+--- =========================================================
+--- Section 1c: Product invoice snapshot tables + backfill
+--- =========================================================
+IF OBJECT_ID('dbo.Users', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Users was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.Products', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Products was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.OrderItems', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.OrderItems was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.OrderInvoices', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OrderInvoices (
+        InvoiceID INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceCode NVARCHAR(40) NOT NULL UNIQUE,
+        OrderID INT NOT NULL UNIQUE,
+        PaymentID INT NOT NULL UNIQUE,
+        CustomerID INT NOT NULL,
+        RecipientEmail NVARCHAR(255) NULL,
+        RecipientName NVARCHAR(255) NULL,
+        ShippingPhone NVARCHAR(50) NULL,
+        ShippingAddress NVARCHAR(MAX) NULL,
+        PaymentMethod NVARCHAR(50) NULL,
+        Currency NVARCHAR(10) NOT NULL
+            CONSTRAINT DF_OrderInvoices_Currency DEFAULT N'VND',
+        Subtotal DECIMAL(18,2) NOT NULL,
+        DiscountAmount DECIMAL(18,2) NOT NULL,
+        TotalAmount DECIMAL(18,2) NOT NULL,
+        PaidAt DATETIME2 NOT NULL,
+        EmailSentAt DATETIME2 NULL,
+        EmailSendError NVARCHAR(1000) NULL,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderInvoices_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderInvoices_UpdatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderInvoices_Order
+            FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+        CONSTRAINT FK_OrderInvoices_Payment
+            FOREIGN KEY (PaymentID) REFERENCES dbo.Payments(PaymentID),
+        CONSTRAINT FK_OrderInvoices_Customer
+            FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID)
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.OrderInvoiceItems', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OrderInvoiceItems (
+        InvoiceItemID INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceID INT NOT NULL,
+        ProductID INT NULL,
+        ProductName NVARCHAR(255) NOT NULL,
+        Quantity INT NOT NULL,
+        UnitPrice DECIMAL(18,2) NOT NULL,
+        LineTotal DECIMAL(18,2) NOT NULL,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderInvoiceItems_CreatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderInvoiceItems_Invoice
+            FOREIGN KEY (InvoiceID) REFERENCES dbo.OrderInvoices(InvoiceID),
+        CONSTRAINT FK_OrderInvoiceItems_Product
+            FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.OrderInvoices')
+      AND name = 'IX_OrderInvoices_Customer_PaidAt'
+)
+BEGIN
+    CREATE INDEX IX_OrderInvoices_Customer_PaidAt
+    ON dbo.OrderInvoices(CustomerID, PaidAt DESC);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.OrderInvoiceItems')
+      AND name = 'IX_OrderInvoiceItems_InvoiceID'
+)
+BEGIN
+    CREATE INDEX IX_OrderInvoiceItems_InvoiceID
+    ON dbo.OrderInvoiceItems(InvoiceID);
+END;
+GO
+
+INSERT INTO dbo.OrderInvoices (
+    InvoiceCode,
+    OrderID,
+    PaymentID,
+    CustomerID,
+    RecipientEmail,
+    RecipientName,
+    ShippingPhone,
+    ShippingAddress,
+    PaymentMethod,
+    Currency,
+    Subtotal,
+    DiscountAmount,
+    TotalAmount,
+    PaidAt
+)
+SELECT
+    CONCAT(
+        N'INV-',
+        CONVERT(NVARCHAR(8), CAST(COALESCE(p.PaidAt, o.OrderDate, o.CreatedAt, SYSDATETIME()) AS DATE), 112),
+        N'-',
+        RIGHT(REPLICATE(N'0', 6) + CAST(p.PaymentID AS NVARCHAR(20)), 6)
+    ) AS InvoiceCode,
+    o.OrderID,
+    p.PaymentID,
+    o.CustomerID,
+    COALESCE(o.ShippingEmail, u.Email) AS RecipientEmail,
+    COALESCE(o.ShippingFullName, u.FullName) AS RecipientName,
+    o.ShippingPhone,
+    o.ShippingAddress,
+    o.PaymentMethod,
+    N'VND' AS Currency,
+    CAST(o.Subtotal AS DECIMAL(18,2)) AS Subtotal,
+    CAST(o.DiscountApplied AS DECIMAL(18,2)) AS DiscountAmount,
+    CAST(o.TotalAmount AS DECIMAL(18,2)) AS TotalAmount,
+    COALESCE(CAST(p.PaidAt AS DATETIME2), CAST(o.OrderDate AS DATETIME2), CAST(o.CreatedAt AS DATETIME2), SYSDATETIME()) AS PaidAt
+FROM dbo.Payments p
+JOIN dbo.Orders o ON o.OrderID = p.OrderID
+LEFT JOIN dbo.Users u ON u.UserID = o.CustomerID
+WHERE p.OrderID IS NOT NULL
+  AND p.Status = N'SUCCESS'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM dbo.OrderInvoices i
+      WHERE i.PaymentID = p.PaymentID
+  );
+GO
+
+INSERT INTO dbo.OrderInvoiceItems (
+    InvoiceID,
+    ProductID,
+    ProductName,
+    Quantity,
+    UnitPrice,
+    LineTotal
+)
+SELECT
+    i.InvoiceID,
+    oi.ProductID,
+    COALESCE(pr.ProductName, N'Unknown product') AS ProductName,
+    oi.Quantity,
+    CAST(oi.UnitPrice AS DECIMAL(18,2)) AS UnitPrice,
+    CAST(oi.Quantity * oi.UnitPrice AS DECIMAL(18,2)) AS LineTotal
+FROM dbo.OrderInvoices i
+JOIN dbo.OrderItems oi ON oi.OrderID = i.OrderID
+LEFT JOIN dbo.Products pr ON pr.ProductID = oi.ProductID
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.OrderInvoiceItems ii
+    WHERE ii.InvoiceID = i.InvoiceID
+      AND ISNULL(ii.ProductID, -1) = ISNULL(oi.ProductID, -1)
+      AND ii.ProductName = COALESCE(pr.ProductName, N'Unknown product')
+      AND ii.Quantity = oi.Quantity
+      AND ii.UnitPrice = CAST(oi.UnitPrice AS DECIMAL(18,2))
+);
 GO
 
 /* Normalize existing Orders.PaymentMethod text */
@@ -522,6 +726,162 @@ BEGIN
 END;
 GO
 
+/* =========================================================
+   Section 3.5: Product shop upgrade (gym scope)
+   - richer product content
+   - categories
+   - image gallery
+   - inventory
+========================================================= */
+IF COL_LENGTH('dbo.Products', 'ShortDescription') IS NULL
+BEGIN
+    ALTER TABLE dbo.Products ADD ShortDescription NVARCHAR(220) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Products', 'UsageInstructions') IS NULL
+BEGIN
+    ALTER TABLE dbo.Products ADD UsageInstructions NVARCHAR(1200) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Products', 'ThumbnailUrl') IS NULL
+BEGIN
+    ALTER TABLE dbo.Products ADD ThumbnailUrl NVARCHAR(500) NULL;
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductCategories', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductCategories (
+        ProductCategoryID INT IDENTITY(1,1) PRIMARY KEY,
+        CategoryName NVARCHAR(100) NOT NULL UNIQUE,
+        Description NVARCHAR(300) NULL,
+        SortOrder INT NOT NULL CONSTRAINT DF_ProductCategories_SortOrder DEFAULT 0,
+        IsActive BIT NOT NULL CONSTRAINT DF_ProductCategories_IsActive DEFAULT 1,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_ProductCategories_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NULL,
+        CONSTRAINT CK_ProductCategories_SortOrder CHECK (SortOrder >= 0)
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductCategoryMap', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductCategoryMap (
+        ProductID INT NOT NULL,
+        ProductCategoryID INT NOT NULL,
+        PRIMARY KEY (ProductID, ProductCategoryID),
+        CONSTRAINT FK_ProductCategoryMap_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+        CONSTRAINT FK_ProductCategoryMap_Category FOREIGN KEY (ProductCategoryID) REFERENCES dbo.ProductCategories(ProductCategoryID)
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.ProductCategoryMap')
+      AND name = 'IX_ProductCategoryMap_Category'
+)
+BEGIN
+    CREATE INDEX IX_ProductCategoryMap_Category
+    ON dbo.ProductCategoryMap(ProductCategoryID, ProductID);
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductImages', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductImages (
+        ProductImageID INT IDENTITY(1,1) PRIMARY KEY,
+        ProductID INT NOT NULL,
+        ImageUrl NVARCHAR(500) NOT NULL,
+        AltText NVARCHAR(150) NULL,
+        DisplayOrder INT NOT NULL CONSTRAINT DF_ProductImages_DisplayOrder DEFAULT 1,
+        IsPrimary BIT NOT NULL CONSTRAINT DF_ProductImages_IsPrimary DEFAULT 0,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_ProductImages_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NULL,
+        CONSTRAINT FK_ProductImages_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+        CONSTRAINT CK_ProductImages_DisplayOrder CHECK (DisplayOrder > 0)
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductImages', 'U') IS NOT NULL
+BEGIN
+    ;WITH PrimaryImageDuplicates AS (
+        SELECT
+            ProductImageID,
+            ROW_NUMBER() OVER (
+                PARTITION BY ProductID
+                ORDER BY CASE WHEN IsPrimary = 1 THEN 0 ELSE 1 END, DisplayOrder, ProductImageID
+            ) AS RowNum
+        FROM dbo.ProductImages
+        WHERE IsPrimary = 1
+    )
+    UPDATE pi
+    SET IsPrimary = 0
+    FROM dbo.ProductImages pi
+    JOIN PrimaryImageDuplicates d
+      ON d.ProductImageID = pi.ProductImageID
+    WHERE d.RowNum > 1;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.ProductImages')
+      AND name = 'UX_ProductImages_OnePrimary'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_ProductImages_OnePrimary
+    ON dbo.ProductImages(ProductID)
+    WHERE IsPrimary = 1;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.ProductImages')
+      AND name = 'IX_ProductImages_Product_Order'
+)
+BEGIN
+    CREATE INDEX IX_ProductImages_Product_Order
+    ON dbo.ProductImages(ProductID, DisplayOrder, ProductImageID);
+END;
+GO
+
+UPDATE dbo.Products
+SET ThumbnailUrl = COALESCE(ThumbnailUrl, ImageUrl)
+WHERE ThumbnailUrl IS NULL
+  AND ImageUrl IS NOT NULL;
+GO
+
+INSERT INTO dbo.ProductImages (ProductID, ImageUrl, AltText, DisplayOrder, IsPrimary)
+SELECT
+    p.ProductID,
+    COALESCE(p.ThumbnailUrl, p.ImageUrl) AS ImageUrl,
+    p.ProductName,
+    1,
+    1
+FROM dbo.Products p
+WHERE COALESCE(p.ThumbnailUrl, p.ImageUrl) IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM dbo.ProductImages pi
+      WHERE pi.ProductID = p.ProductID
+        AND pi.IsPrimary = 1
+  );
+GO
+
+IF OBJECT_ID('dbo.ProductInventory', 'U') IS NOT NULL
+BEGIN
+    DROP TABLE dbo.ProductInventory;
+END;
+GO
+
 --- =========================================================
 --- Section 4: Payment confirmation procedures for PayOS flow
 --- =========================================================
@@ -638,3 +998,4 @@ GO
 --- Coupon and product seed/test records are maintained in:
 --- - docs/InsertValues.txt
 --- - docs/InsertTestingValues.txt
+

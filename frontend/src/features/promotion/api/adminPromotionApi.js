@@ -13,6 +13,17 @@ export const adminPromotionApi = {
   createPost(payload) {
     return apiClient.post('/v1/admin/promotions/posts', payload).then((response) => response.data)
   },
+  uploadBanner(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiClient.post('/v1/admin/promotions/banners', formData)
+      .then((response) => response.data?.data ?? response.data)
+  },
+  deleteUploadedBanner(imageUrl) {
+    return apiClient.delete('/v1/admin/promotions/banners', {
+      params: { imageUrl },
+    }).then((response) => response.data?.data ?? response.data)
+  },
   updatePost(postId, payload) {
     return apiClient.put(`/v1/admin/promotions/posts/${postId}`, payload).then((response) => response.data)
   },

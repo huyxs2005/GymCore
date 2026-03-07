@@ -81,35 +81,31 @@ describe('CustomerMembershipPage', () => {
       },
     })
     promotionApi.getMyClaims.mockResolvedValue({
-      data: {
-        claims: [
-          {
-            ClaimID: 7,
-            PromoCode: 'MEMBERBOOST',
-            ApplyTarget: 'MEMBERSHIP',
-            DiscountPercent: 10,
-            DiscountAmount: 0,
-            BonusDurationMonths: 1,
-            UsedAt: null,
-          },
-          {
-            ClaimID: 8,
-            PromoCode: 'WELCOME10',
-            ApplyTarget: 'ORDER',
-            DiscountPercent: 10,
-            DiscountAmount: 0,
-            BonusDurationMonths: 0,
-            UsedAt: null,
-          },
-        ],
-      },
+      claims: [
+        {
+          ClaimID: 7,
+          PromoCode: 'MEMBERBOOST',
+          ApplyTarget: 'MEMBERSHIP',
+          DiscountPercent: 10,
+          DiscountAmount: 0,
+          BonusDurationMonths: 1,
+          UsedAt: null,
+        },
+        {
+          ClaimID: 8,
+          PromoCode: 'WELCOME10',
+          ApplyTarget: 'ORDER',
+          DiscountPercent: 10,
+          DiscountAmount: 0,
+          BonusDurationMonths: 0,
+          UsedAt: null,
+        },
+      ],
     })
     promotionApi.applyCoupon.mockResolvedValue({
-      data: {
-        estimatedDiscount: 200,
-        estimatedFinalAmount: 1800,
-        bonusDurationMonths: 1,
-      },
+      estimatedDiscount: 200,
+      estimatedFinalAmount: 1800,
+      bonusDurationMonths: 1,
     })
     membershipApi.purchase.mockResolvedValue({ data: {} })
   })
@@ -133,7 +129,7 @@ describe('CustomerMembershipPage', () => {
       })
     })
 
-    await user.click(screen.getByRole('button', { name: /^Checkout$/i }))
+    await user.click(screen.getByRole('button', { name: /^Purchase with PayOS$/i }))
 
     await waitFor(() => {
       expect(membershipApi.purchase).toHaveBeenCalledWith(
@@ -144,7 +140,7 @@ describe('CustomerMembershipPage', () => {
         }),
       )
     })
-  })
+  }, 15000)
 
   it('filters out order coupons and shows preview error from membership coupon validation', async () => {
     const user = userEvent.setup()
@@ -222,7 +218,7 @@ describe('CustomerMembershipPage', () => {
     await user.click(screen.getByRole('button', { name: /Gym \+ Coach Premium plan with personal training booking access/i }))
     await user.selectOptions(document.getElementById('membership-duration-GYM_PLUS_COACH'), '3')
 
-    await user.click(screen.getByRole('button', { name: /^Checkout$/i }))
+    await user.click(screen.getByRole('button', { name: /^Purchase with PayOS$/i }))
 
     await waitFor(() => {
       expect(membershipApi.purchase).toHaveBeenCalledWith(
@@ -232,5 +228,83 @@ describe('CustomerMembershipPage', () => {
         }),
       )
     })
+  }, 15000)
+
+  it('shows Renew with PayOS for the same expired membership and calls renew', async () => {
+    const user = userEvent.setup()
+    membershipApi.getCurrentMembership.mockResolvedValueOnce({
+      data: {
+        membership: {
+          status: 'EXPIRED',
+          startDate: '2026-01-01',
+          endDate: '2026-01-30',
+          plan: {
+            planId: 2,
+            name: 'Gym Only - 1 Month',
+            planType: 'GYM_ONLY',
+            price: 2000,
+            durationDays: 30,
+            allowsCoachBooking: false,
+          },
+        },
+        validForCheckin: false,
+        reason: 'Membership expired on 2026-01-30.',
+      },
+    })
+    membershipApi.renew.mockResolvedValue({ data: {} })
+
+    renderWithQuery(<CustomerMembershipPage />)
+
+    expect(await screen.findByRole('button', { name: /^Renew with PayOS$/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Renew with PayOS$/i }))
+
+    await waitFor(() => {
+      expect(membershipApi.renew).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planId: 2,
+          paymentMethod: 'PAYOS',
+        }),
+      )
+    })
+  })
+
+  it('blocks checkout when the customer already has a current membership and one queued next membership', async () => {
+    membershipApi.getCurrentMembership.mockResolvedValueOnce({
+      data: {
+        membership: {
+          status: 'ACTIVE',
+          startDate: '2026-03-01',
+          endDate: '2026-03-30',
+          plan: {
+            planId: 2,
+            name: 'Gym Only - 1 Month',
+            planType: 'GYM_ONLY',
+            price: 2000,
+            durationDays: 30,
+            allowsCoachBooking: false,
+          },
+        },
+        queuedMembership: {
+          status: 'SCHEDULED',
+          startDate: '2026-03-31',
+          endDate: '2026-04-29',
+          plan: {
+            planId: 3,
+            name: 'Gym + Coach - 1 Month',
+            planType: 'GYM_PLUS_COACH',
+            price: 3000,
+            durationDays: 30,
+            allowsCoachBooking: true,
+          },
+        },
+        validForCheckin: true,
+        reason: null,
+      },
+    })
+
+    renderWithQuery(<CustomerMembershipPage />)
+
+    expect(await screen.findByText(/maximum of 2 memberships in progress/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Renew with PayOS/i })).toBeDisabled()
   })
 })

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authApi } from '../../features/auth/api/authApi'
-import { persistSession, roleLandingPath } from '../../features/auth/session'
+import { persistSession } from '../../features/auth/session'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -20,8 +20,7 @@ function LoginPage() {
       }
 
       persistSession(data)
-      const destination = data.landingPath || roleLandingPath(data.user.role)
-      navigate(destination, { replace: true })
+      navigate('/', { replace: true })
     },
     [navigate],
   )

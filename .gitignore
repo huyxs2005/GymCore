@@ -3,3 +3,5 @@ node_modules/
 .env.*
 !.env.example
 backend/uploads/
+backend/hs_err_pid*.log
+backend/replay_pid*.log

@@ -38,10 +38,12 @@ function shouldUseRoleHeader(pathname) {
 
 function CustomerShopCartButton({ visible, onOpenCart }) {
   const [pulse, setPulse] = useState(false)
+  const { user } = useSession()
+  const userId = user?.userId ?? null
   const { data } = useQuery({
-    queryKey: ['cart'],
+    queryKey: ['cart', userId],
     queryFn: cartApi.getCart,
-    enabled: visible,
+    enabled: visible && Boolean(userId),
     refetchInterval: visible ? 30000 : false,
   })
 
@@ -59,7 +61,7 @@ function CustomerShopCartButton({ visible, onOpenCart }) {
 
   if (!visible) return null
 
-  const items = data?.data?.items || []
+  const items = data?.items || []
   const itemCount = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
 
   return (
@@ -141,12 +143,9 @@ function AppShell({ children }) {
             <CustomerShopCartButton
               visible={showShopCartButton}
               onOpenCart={() => {
-                if (pathname.startsWith('/customer/shop')) {
-                  window.dispatchEvent(new Event('gymcore:toggle-cart'))
-                  return
-                }
+                if (pathname === '/customer/cart') return
                 jumpToTop()
-                navigate('/customer/shop?openCart=1')
+                navigate('/customer/cart')
               }}
             />
             <AuthHeaderActions />

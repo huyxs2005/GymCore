@@ -20,7 +20,10 @@ Receptionist
 - View Customer membership plan
 
 Admin
+- View Admin Dashboard
+- View Staff Account List
 - Create Staff Account (Admin/Coach/Receptionist)
+- Update Staff Account
 - Lock Account
 - Unlock Account
 
@@ -85,7 +88,8 @@ Customer
 - Add to Cart
 - Update Cart (qty/remove)
 - Checkout Order on website (PayOS redirect)
-- Pick up purchased products in person at the gym/front desk (no shipping delivery)
+- Enter recipient/contact details for product checkout
+- Pick up purchased products in person at the gym/front desk (no shipping delivery; recipient/shipping snapshot is stored for invoice/contact purposes)
 - View Purchase History
 - Write Product Review (only if purchased)
 
@@ -93,6 +97,10 @@ Admin
 - Add Product
 - Update Product
 - View Product Reviews
+- View Product Invoices
+
+Receptionist
+- View Product Invoices
 
 ________________________________________
 G. Promotions, Coupons, Notifications, Revenue
@@ -112,7 +120,10 @@ Admin
 - Create Promotion Post
 - Update Promotion Post
 - View Revenue Report
-- Export reports to PDF (backend feature)
+  - filter by:
+    - quick range
+    - custom date range
+- Export Revenue Report to Excel
 
 ________________________________________
 H. Workout and Food Info Pages plus AI Assistant
@@ -272,6 +283,11 @@ I5. Check-in and personal health rules
 I6. Product sales, cart, order, payment rules
 - Product purchase flow is online checkout + in-store pickup only.
 - Shipping/delivery is out of scope.
+- Product checkout stores recipient/contact snapshot on the order for invoice and pickup handoff:
+  - full name
+  - phone
+  - email
+  - address
 - Cart item quantity must be > 0.
 - Checkout is blocked when cart is empty.
 - Order statuses: PENDING, PAID, CANCELLED.
@@ -293,6 +309,8 @@ I6. Product sales, cart, order, payment rules
 - API checkout currently accepts PAYOS only (membership and product checkout services normalize/reject non-PAYOS values).
 - Membership checkout channel is PayOS redirect.
 - Product checkout rejects membership-only coupons and accepts at most one coupon claim.
+- Successful product payment creates an invoice snapshot (`OrderInvoices` + `OrderInvoiceItems`) and attempts invoice email delivery.
+- Admin and receptionist can review product invoices and invoice email status from the invoice center.
 - Membership webhook requires valid PayOS signature (missing/invalid signature is rejected).
 - Payment success procedure (`sp_ConfirmPaymentSuccess`) behavior:
   - payment moves PENDING -> SUCCESS,
@@ -384,3 +402,21 @@ I10. Operational SQL run rules (current project standard)
   4) docs/InsertTestingValues.txt (optional)
 - `InsertValues.txt` and `InsertTestingValues.txt` are idempotent seed scripts.
 - `alter.txt` is idempotent compatibility migration script and must not be skipped.
+
+## Product Pickup + Review Management (Mar 7, 2026)
+- Receptionist and admin can confirm paid product pickup from the invoice center by order/invoice record.
+- Receptionist also has a dedicated pickup workspace at `/reception/pickup` with search and pickup-status filtering.
+- Product pickup confirmation records who handed over the order and when it was picked up.
+- Customer order history exposes:
+  - order ID
+  - invoice code
+  - payment timestamp
+  - receipt email state
+  - pickup status
+  - pickup timestamp when completed
+- Customer product reviews now support create, update, and delete.
+- Customers may manage their review from both:
+  - product detail
+  - order history
+- Admin product gallery now uses image upload flow instead of raw URL entry.
+- Admin catalog supports archive/restore, category/status/review filtering, and gallery reorder/remove.

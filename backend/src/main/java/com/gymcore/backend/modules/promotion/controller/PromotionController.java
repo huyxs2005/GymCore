@@ -3,6 +3,10 @@ package com.gymcore.backend.modules.promotion.controller;
 import com.gymcore.backend.common.api.ApiResponse;
 import com.gymcore.backend.modules.promotion.service.PromotionService;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -13,7 +17,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -157,6 +165,22 @@ public class PromotionController {
                                 promotionService.execute("admin-get-posts", authorization, null));
         }
 
+        @PostMapping(value = "/admin/promotions/banners", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ApiResponse<Map<String, Object>> uploadPromotionBanner(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
+                        @RequestPart("file") MultipartFile file) {
+                return ApiResponse.ok("Promotion banner uploaded",
+                                promotionService.uploadPromotionBanner(authorization, file));
+        }
+
+        @DeleteMapping("/admin/promotions/banners")
+        public ApiResponse<Map<String, Object>> deleteUploadedPromotionBanner(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
+                        @RequestParam String imageUrl) {
+                return ApiResponse.ok("Promotion banner deleted",
+                                promotionService.deleteUploadedPromotionBanner(authorization, imageUrl));
+        }
+
         @GetMapping("/admin/promotions/revenue-report")
         public ApiResponse<Map<String, Object>> getRevenueReport(
                         @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
@@ -168,5 +192,19 @@ public class PromotionController {
         public org.springframework.http.ResponseEntity<byte[]> exportRevenuePdf(
                         @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {
                 return promotionService.exportRevenuePdf(authorization);
+        }
+
+        @ExceptionHandler(ResponseStatusException.class)
+        public ResponseEntity<ApiResponse<Map<String, Object>>> handleResponseStatusException(
+                        ResponseStatusException exception) {
+                String message = exception.getReason() != null ? exception.getReason() : "Request failed.";
+                return ResponseEntity.status(exception.getStatusCode()).body(ApiResponse.error(message, Map.of()));
+        }
+
+        @ExceptionHandler(MaxUploadSizeExceededException.class)
+        public ResponseEntity<ApiResponse<Map<String, Object>>> handleMaxUploadSizeExceeded(
+                        MaxUploadSizeExceededException exception) {
+                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                                .body(ApiResponse.error(promotionService.promotionBannerTooLargeMessage(), Map.of()));
         }
 }

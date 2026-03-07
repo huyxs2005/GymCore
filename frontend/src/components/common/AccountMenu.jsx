@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, CreditCard, LogOut, QrCode, User } from 'lucide-react'
+import { Bell, CreditCard, LogOut, Package, QrCode, User } from 'lucide-react'
 import { authApi } from '../../features/auth/api/authApi'
 import { clearSession } from '../../features/auth/session'
 import { useSession } from '../../features/auth/useSession'
@@ -143,6 +143,14 @@ function AccountMenu({ className = '' }) {
                 >
                   <CreditCard size={16} />
                   Current membership
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMenuNavigation('/customer/orders')}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                >
+                  <Package size={16} />
+                  Order history
                 </button>
                 <button
                   type="button"

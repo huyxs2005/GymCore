@@ -3,6 +3,7 @@ package com.gymcore.backend.modules.membership.service;
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService.UserInfo;
+import com.gymcore.backend.modules.product.service.OrderInvoiceService;
 import com.gymcore.backend.modules.product.service.PayOsService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -34,13 +35,16 @@ public class MembershipService {
     private final CurrentUserService currentUserService;
     private final PayOsService payOsService;
     private final UserNotificationService notificationService;
+    private final OrderInvoiceService orderInvoiceService;
 
     public MembershipService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
-            PayOsService payOsService, UserNotificationService notificationService) {
+            PayOsService payOsService, UserNotificationService notificationService,
+            OrderInvoiceService orderInvoiceService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.payOsService = payOsService;
         this.notificationService = notificationService;
+        this.orderInvoiceService = orderInvoiceService;
     }
 
     public Map<String, Object> execute(String action, String authorizationHeader, Object payload) {
@@ -283,11 +287,12 @@ public class MembershipService {
         MembershipPlan plan = requireActivePlan(planId);
         MembershipSnapshot activeMembership = findTopMembership(user.userId(), "ACTIVE");
         MembershipSnapshot scheduledMembership = findTopMembership(user.userId(), "SCHEDULED");
+        MembershipSnapshot expiredMembership = findTopMembership(user.userId(), "EXPIRED");
         String returnUrl = asNullableString(payload.get("returnUrl"));
         String cancelUrl = asNullableString(payload.get("cancelUrl"));
         String promoCode = asNullableString(payload.get("promoCode"));
 
-        LocalDate startDate = resolveStartDate(mode, activeMembership, scheduledMembership);
+        LocalDate startDate = resolveStartDate(mode, activeMembership, scheduledMembership, expiredMembership, planId);
         if (plan.price().compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Membership plan price must be greater than zero for PayOS checkout.");
@@ -298,6 +303,10 @@ public class MembershipService {
         BigDecimal discount = coupon == null ? BigDecimal.ZERO : coupon.discountAmount();
         BigDecimal totalAmount = subtotal.subtract(discount);
         int bonusDurationMonths = coupon == null ? 0 : coupon.bonusDurationMonths();
+        if ("DAY_PASS".equalsIgnoreCase(plan.planType()) && bonusDurationMonths > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Day Pass cannot use bonus membership months.");
+        }
         Integer claimId = coupon == null ? null : coupon.claimId();
         LocalDate endDate = resolveEndDate(startDate, plan.planType(), plan.durationDays(), bonusDurationMonths);
         expireStalePendingCheckouts(user.userId());
@@ -315,7 +324,7 @@ public class MembershipService {
 
         CheckoutContact contact = loadCheckoutContact(user.userId());
 
-        int customerMembershipId = insertCustomerMembership(user.userId(), plan.planId(), startDate, endDate);
+        int customerMembershipId = insertCustomerMembership(plan, user.userId(), startDate, endDate);
         int paymentId = insertPaymentForMembership(customerMembershipId, claimId, subtotal, discount, totalAmount,
                 paymentMethod);
 
@@ -480,6 +489,7 @@ public class MembershipService {
             applyImmediateUpgradeActivationIfNeeded(paymentId);
             markMembershipClaimUsageIfNeeded(paymentId);
             notifySuccessfulPayment(paymentId);
+            orderInvoiceService.handleSuccessfulProductPayment(paymentId);
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to confirm payment.", exception);
         }
@@ -1117,6 +1127,7 @@ public class MembershipService {
 
     private void cancelPendingCheckout(int customerMembershipId, int paymentId, String payOsStatusFallback) {
         String safeFallback = asNullableString(payOsStatusFallback) == null ? "CANCELLED" : payOsStatusFallback;
+        normalizePendingDayPassDates(customerMembershipId);
         jdbcTemplate.update("""
                 UPDATE dbo.Payments
                 SET Status = 'CANCELLED',
@@ -1128,6 +1139,20 @@ public class MembershipService {
                 SET Status = 'CANCELLED',
                     UpdatedAt = SYSDATETIME()
                 WHERE CustomerMembershipID = ? AND Status = 'PENDING'
+                """, customerMembershipId);
+    }
+
+    private void normalizePendingDayPassDates(int customerMembershipId) {
+        jdbcTemplate.update("""
+                UPDATE cm
+                SET cm.EndDate = cm.StartDate,
+                    cm.UpdatedAt = SYSDATETIME()
+                FROM dbo.CustomerMemberships cm
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                WHERE cm.CustomerMembershipID = ?
+                  AND cm.Status = 'PENDING'
+                  AND mp.PlanType = 'DAY_PASS'
+                  AND cm.StartDate <> cm.EndDate
                 """, customerMembershipId);
     }
 
@@ -1161,6 +1186,7 @@ public class MembershipService {
         String sql = """
                 SELECT TOP (1)
                     cm.CustomerMembershipID,
+                    cm.MembershipPlanID,
                     cm.Status,
                     cm.StartDate,
                     cm.EndDate
@@ -1171,6 +1197,7 @@ public class MembershipService {
                 """;
         List<MembershipSnapshot> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new MembershipSnapshot(
                 rs.getInt("CustomerMembershipID"),
+                rs.getInt("MembershipPlanID"),
                 rs.getString("Status"),
                 toLocalDate(rs, "StartDate"),
                 toLocalDate(rs, "EndDate")), customerId, status);
@@ -1180,31 +1207,40 @@ public class MembershipService {
     private LocalDate resolveStartDate(
             CheckoutMode mode,
             MembershipSnapshot activeMembership,
-            MembershipSnapshot scheduledMembership) {
+            MembershipSnapshot scheduledMembership,
+            MembershipSnapshot expiredMembership,
+            int requestedPlanId) {
         LocalDate today = LocalDate.now();
 
         if (mode == CheckoutMode.PURCHASE) {
+            if (activeMembership != null && scheduledMembership != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Customer already has the maximum of 2 memberships (current + queued).");
+            }
             if (activeMembership != null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Customer already has an ACTIVE membership. Use renew or upgrade.");
             }
             if (scheduledMembership != null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Customer already has a queued membership.");
+                        "Customer already has the maximum of 2 memberships (current + queued).");
             }
             return today;
         }
 
         if (mode == CheckoutMode.RENEW) {
-            if (activeMembership == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Renew requires an ACTIVE membership.");
-            }
             if (scheduledMembership != null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Customer already has a queued membership.");
+                        "Customer already has the maximum of 2 memberships (current + queued).");
             }
-            return activeMembership.endDate().plusDays(1);
+            if (activeMembership != null) {
+                return activeMembership.endDate().plusDays(1);
+            }
+            if (expiredMembership != null && expiredMembership.membershipPlanId() == requestedPlanId) {
+                return today;
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Renew requires an ACTIVE membership or the same expired plan.");
         }
 
         if (activeMembership == null) {
@@ -1213,7 +1249,7 @@ public class MembershipService {
         }
         if (scheduledMembership != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Cannot upgrade while another membership is queued.");
+                    "Customer already has the maximum of 2 memberships (current + queued).");
         }
         // Upgrade starts now; webhook will switch ACTIVE membership immediately after success.
         return today;
@@ -1236,7 +1272,8 @@ public class MembershipService {
         return endDate;
     }
 
-    private int insertCustomerMembership(int customerId, int planId, LocalDate startDate, LocalDate endDate) {
+    private int insertCustomerMembership(MembershipPlan plan, int customerId, LocalDate startDate, LocalDate endDate) {
+        LocalDate safeEndDate = "DAY_PASS".equalsIgnoreCase(plan.planType()) ? startDate : endDate;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             var statement = connection.prepareStatement("""
@@ -1244,9 +1281,9 @@ public class MembershipService {
                     VALUES (?, ?, 'PENDING', ?, ?)
                     """, new String[] { "CustomerMembershipID" });
             statement.setInt(1, customerId);
-            statement.setInt(2, planId);
+            statement.setInt(2, plan.planId());
             statement.setDate(3, java.sql.Date.valueOf(startDate));
-            statement.setDate(4, java.sql.Date.valueOf(endDate));
+            statement.setDate(4, java.sql.Date.valueOf(safeEndDate));
             return statement;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -1678,6 +1715,7 @@ public class MembershipService {
 
     private record MembershipSnapshot(
             int customerMembershipId,
+            int membershipPlanId,
             String status,
             LocalDate startDate,
             LocalDate endDate

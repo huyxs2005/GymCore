@@ -183,6 +183,23 @@ BEGIN TRY
         SELECT 1 FROM dbo.FitnessGoals g WHERE g.GoalCode = v.GoalCode
     );
 
+    /* Baseline product categories for the gym shop */
+    INSERT INTO dbo.ProductCategories (CategoryName, Description, SortOrder, IsActive)
+    SELECT v.CategoryName, v.Description, v.SortOrder, CAST(1 AS BIT)
+    FROM (VALUES
+        (N'Protein',      N'Protein powders and recovery blends.', 1),
+        (N'Creatine',     N'Creatine supplements for strength and power.', 2),
+        (N'Mass Gainer',  N'High-calorie gainers for weight and muscle growth.', 3),
+        (N'Pre-workout',  N'Energy and focus supplements for training.', 4),
+        (N'BCAA',         N'Intra-workout amino acid recovery products.', 5),
+        (N'Vitamins',     N'Daily support supplements and micronutrients.', 6)
+    ) AS v(CategoryName, Description, SortOrder)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.ProductCategories pc
+        WHERE pc.CategoryName = v.CategoryName
+    );
+
     COMMIT TRAN;
 END TRY
 BEGIN CATCH

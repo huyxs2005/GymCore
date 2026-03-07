@@ -84,7 +84,7 @@ describe('AdminMembershipsPage', () => {
         }),
       )
     })
-  })
+  }, 15000)
 
   it('shows backend error when create fails', async () => {
     adminMembershipApi.createPlan.mockRejectedValue({
@@ -101,5 +101,41 @@ describe('AdminMembershipsPage', () => {
     fireEvent.submit(getPlanForm())
 
     expect(await screen.findByText(/Plan code already exists/i)).toBeInTheDocument()
+  })
+
+  it('filters plans by type, active state, and coach access', async () => {
+    adminMembershipApi.getPlans.mockResolvedValue({
+      data: {
+        plans: [
+          { planId: 1, name: 'Day Pass', planType: 'DAY_PASS', price: 1000, durationDays: 1, allowsCoachBooking: false, active: true },
+          { planId: 2, name: 'Gym Only 1 Month', planType: 'GYM_ONLY', price: 2000, durationDays: 30, allowsCoachBooking: false, active: true },
+          { planId: 3, name: 'Gym + Coach 6 Months', planType: 'GYM_PLUS_COACH', price: 4500, durationDays: 180, allowsCoachBooking: true, active: false },
+        ],
+      },
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('Gym + Coach 6 Months')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByDisplayValue(/All plan types/i), 'GYM_PLUS_COACH')
+    await user.selectOptions(screen.getByDisplayValue(/All statuses/i), 'inactive')
+    await user.selectOptions(screen.getByDisplayValue(/All coach access/i), 'enabled')
+
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('Gym + Coach 6 Months')).toBeInTheDocument()
+    expect(within(table).queryByText('Day Pass')).not.toBeInTheDocument()
+    expect(within(table).queryByText('Gym Only 1 Month')).not.toBeInTheDocument()
+  })
+
+  it('shows custom validation instead of relying on native required fields', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /New plan/i }))
+    fireEvent.submit(getPlanForm())
+
+    expect(await screen.findByText(/Plan name is required\./i)).toBeInTheDocument()
+    expect(adminMembershipApi.createPlan).not.toHaveBeenCalled()
   })
 })

@@ -45,11 +45,10 @@ public class ReportService {
     }
 
     public byte[] exportRevenueToPdf() {
-        Map<String, Object> report = getRevenueReport();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        Document document = new Document(PageSize.A4);
         try {
+            Map<String, Object> report = getRevenueReport();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            Document document = new Document(PageSize.A4);
             PdfWriter.getInstance(document, out);
             document.open();
 
@@ -111,16 +110,14 @@ public class ReportService {
             }
             document.add(membershipTable);
 
-        } catch (Exception exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Failed to export revenue report PDF.", exception);
-        } finally {
             if (document.isOpen()) {
                 document.close();
             }
+            return out.toByteArray();
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to export revenue report PDF.", exception);
         }
-
-        return out.toByteArray();
     }
 
     private void addTableHeader(PdfPTable table, Font font, String... headers) {

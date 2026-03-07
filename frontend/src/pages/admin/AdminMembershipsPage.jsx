@@ -5,6 +5,25 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { adminMembershipApi } from '../../features/membership/api/adminMembershipApi'
 
+const PLAN_TYPE_FILTERS = [
+  { value: 'ALL', label: 'All plan types' },
+  { value: 'DAY_PASS', label: 'Day Pass' },
+  { value: 'GYM_ONLY', label: 'Gym Only' },
+  { value: 'GYM_PLUS_COACH', label: 'Gym + Coach' },
+]
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'active', label: 'Active only' },
+  { value: 'inactive', label: 'Inactive only' },
+]
+
+const COACH_FILTERS = [
+  { value: 'all', label: 'All coach access' },
+  { value: 'enabled', label: 'Coach booking enabled' },
+  { value: 'disabled', label: 'Coach booking disabled' },
+]
+
 function normalizePlanDraft(draft) {
   const planType = (draft.planType || 'GYM_ONLY').toUpperCase()
   if (planType === 'DAY_PASS') {
@@ -20,9 +39,35 @@ function resolveApiMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback
 }
 
+function validatePlanDraft(draft) {
+  const normalized = normalizePlanDraft(draft)
+  if (!String(normalized.name || '').trim()) {
+    return 'Plan name is required.'
+  }
+  if (String(normalized.name).trim().length > 100) {
+    return 'Plan name must not exceed 100 characters.'
+  }
+  if (!['DAY_PASS', 'GYM_ONLY', 'GYM_PLUS_COACH'].includes(normalized.planType)) {
+    return 'Plan type must be DAY_PASS, GYM_ONLY, or GYM_PLUS_COACH.'
+  }
+  if (!Number.isFinite(Number(normalized.price)) || Number(normalized.price) <= 0) {
+    return 'Price must be greater than 0.'
+  }
+  if (!Number.isInteger(Number(normalized.durationDays)) || Number(normalized.durationDays) <= 0) {
+    return 'Duration days must be a positive integer.'
+  }
+  if (normalized.planType === 'DAY_PASS' && Number(normalized.durationDays) !== 1) {
+    return 'Day Pass must use exactly 1 day.'
+  }
+  return ''
+}
+
 function AdminMembershipsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [planTypeFilter, setPlanTypeFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [coachFilter, setCoachFilter] = useState('all')
   const [editingPlan, setEditingPlan] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -48,10 +93,17 @@ function AdminMembershipsPage() {
   const filteredPlans = useMemo(
     () =>
       plans.filter((plan) => {
+        if (planTypeFilter !== 'ALL' && String(plan.planType).toUpperCase() !== planTypeFilter) {
+          return false
+        }
+        if (statusFilter === 'active' && !plan.active) return false
+        if (statusFilter === 'inactive' && plan.active) return false
+        if (coachFilter === 'enabled' && !plan.allowsCoachBooking) return false
+        if (coachFilter === 'disabled' && plan.allowsCoachBooking) return false
         const text = `${plan.name || ''} ${plan.planType || ''}`.toLowerCase()
         return text.includes(search.toLowerCase())
       }),
-    [plans, search],
+    [coachFilter, planTypeFilter, plans, search, statusFilter],
   )
 
   const handleCreate = () => {
@@ -83,6 +135,11 @@ function AdminMembershipsPage() {
   const handleSubmit = (event) => {
     event.preventDefault()
     if (!editingPlan) return
+    const validationError = validatePlanDraft(editingPlan)
+    if (validationError) {
+      setErrorMessage(validationError)
+      return
+    }
     const normalized = normalizePlanDraft(editingPlan)
     const { planId, ...body } = normalized
     upsertMutation.mutate({ planId, body })
@@ -114,6 +171,33 @@ function AdminMembershipsPage() {
                   className="w-32 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none sm:w-52"
                 />
               </div>
+              <select
+                value={planTypeFilter}
+                onChange={(event) => setPlanTypeFilter(event.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+              >
+                {PLAN_TYPE_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+              >
+                {STATUS_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select
+                value={coachFilter}
+                onChange={(event) => setCoachFilter(event.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+              >
+                {COACH_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={handleCreate}
@@ -124,6 +208,12 @@ function AdminMembershipsPage() {
               </button>
             </div>
           </header>
+
+          {plansQuery.error ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">
+              {resolveApiMessage(plansQuery.error, 'Membership plans could not be loaded.')}
+            </div>
+          ) : null}
 
           <div className="max-h-80 overflow-x-auto rounded-xl border border-slate-100">
             <table className="min-w-full divide-y divide-slate-100 text-xs">
@@ -190,7 +280,7 @@ function AdminMembershipsPage() {
 
         {editingPlan && (
           <section className="gc-card-compact">
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form noValidate onSubmit={handleSubmit} className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-900">
                 {editingPlan.planId ? 'Update membership plan' : 'Create membership plan'}
               </h3>
@@ -200,7 +290,6 @@ function AdminMembershipsPage() {
                   <label className="text-xs font-medium text-slate-600">Plan name</label>
                   <input
                     type="text"
-                    required
                     maxLength={100}
                     value={editingPlan.name}
                     onChange={(event) =>
@@ -233,7 +322,6 @@ function AdminMembershipsPage() {
                     type="number"
                     min={1}
                     step="1000"
-                    required
                     value={editingPlan.price}
                     onChange={(event) =>
                       setEditingPlan((prev) => ({ ...prev, price: Number(event.target.value || 0) }))
@@ -246,7 +334,6 @@ function AdminMembershipsPage() {
                   <input
                     type="number"
                     min={1}
-                    required
                     disabled={editingPlan.planType === 'DAY_PASS'}
                     value={editingPlan.planType === 'DAY_PASS' ? 1 : editingPlan.durationDays}
                     onChange={(event) =>

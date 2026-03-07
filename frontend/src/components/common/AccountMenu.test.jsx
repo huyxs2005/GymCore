@@ -42,6 +42,7 @@ describe('AccountMenu', () => {
     expect(screen.getByText('View profile')).toBeInTheDocument()
     expect(screen.getByText('Notifications')).toBeInTheDocument()
     expect(screen.getByText('Current membership')).toBeInTheDocument()
+    expect(screen.getByText('Order history')).toBeInTheDocument()
     expect(screen.getByText('QR code')).toBeInTheDocument()
     expect(screen.getByText('Logout')).toBeInTheDocument()
 
@@ -66,6 +67,7 @@ describe('AccountMenu', () => {
     expect(screen.getByText('View profile')).toBeInTheDocument()
     expect(screen.getByText('Notifications')).toBeInTheDocument()
     expect(screen.queryByText('Current membership')).toBeNull()
+    expect(screen.queryByText('Order history')).toBeNull()
     expect(screen.queryByText('QR code')).toBeNull()
     expect(screen.getByText('Logout')).toBeInTheDocument()
   })

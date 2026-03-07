@@ -68,6 +68,42 @@ class CoachBookingServiceTest {
     }
 
     @Test
+    void adminUpdateCoachProfile_shouldRejectNegativeExperienceYears() {
+        when(authService.requireAuthContext("Bearer admin"))
+                .thenReturn(new AuthService.AuthContext(1, "ADMIN", "Admin GymCore", "admin@gymcore.local"));
+        when(jdbcTemplate.queryForObject("SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?", Integer.class, 20))
+                .thenReturn(1);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
+                "admin-update-coach-profile",
+                Map.of(
+                        "authorizationHeader", "Bearer admin",
+                        "coachId", 20,
+                        "body", Map.of("experienceYears", -1))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(String.valueOf(exception.getReason()).contains("cannot be negative"));
+    }
+
+    @Test
+    void adminUpdateCoachProfile_shouldRejectInvalidDateFormat() {
+        when(authService.requireAuthContext("Bearer admin"))
+                .thenReturn(new AuthService.AuthContext(1, "ADMIN", "Admin GymCore", "admin@gymcore.local"));
+        when(jdbcTemplate.queryForObject("SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?", Integer.class, 20))
+                .thenReturn(1);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
+                "admin-update-coach-profile",
+                Map.of(
+                        "authorizationHeader", "Bearer admin",
+                        "coachId", 20,
+                        "body", Map.of("dateOfBirth", "03/07/2026"))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(String.valueOf(exception.getReason()).contains("YYYY-MM-DD"));
+    }
+
+    @Test
     void customerCreateBookingRequest_shouldRejectWhenPendingPtRequestAlreadyExists() {
         when(authService.requireAuthContext("Bearer customer"))
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));

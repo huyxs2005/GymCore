@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import WeekdayDropdown from '../../components/common/WeekdayDropdown'
+import ConfirmDialog from '../../components/common/ConfirmDialog'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
@@ -156,6 +157,11 @@ function CoachSchedulePage() {
     session: null,
     reason: '',
   })
+  const [confirmAction, setConfirmAction] = useState({
+    open: false,
+    kind: '',
+    sessionId: null,
+  })
 
   const isFirstAvailabilityView = useRef(true)
 
@@ -236,8 +242,23 @@ function CoachSchedulePage() {
     }
   }
 
+  function openConfirmAction(kind, sessionId) {
+    setConfirmAction({
+      open: true,
+      kind,
+      sessionId,
+    })
+  }
+
+  function closeConfirmAction() {
+    setConfirmAction({
+      open: false,
+      kind: '',
+      sessionId: null,
+    })
+  }
+
   async function handleCompleteSession(sessionId) {
-    if (!window.confirm('Mark this session as completed?')) return
     try {
       setLoading(true)
       await coachBookingApi.completeSession(sessionId)
@@ -250,11 +271,11 @@ function CoachSchedulePage() {
       setError(err?.response?.data?.message || 'Could not complete the session.')
     } finally {
       setLoading(false)
+      closeConfirmAction()
     }
   }
 
   async function handleDeleteSession(sessionId) {
-    if (!window.confirm('Delete this cancelled session notice?')) return
     try {
       setLoading(true)
       await coachBookingApi.deleteSession(sessionId)
@@ -265,6 +286,18 @@ function CoachSchedulePage() {
       setError(err?.response?.data?.message || 'Could not delete the session.')
     } finally {
       setLoading(false)
+      closeConfirmAction()
+    }
+  }
+
+  async function confirmScheduleAction() {
+    if (!confirmAction.sessionId) return
+    if (confirmAction.kind === 'complete') {
+      await handleCompleteSession(confirmAction.sessionId)
+      return
+    }
+    if (confirmAction.kind === 'delete') {
+      await handleDeleteSession(confirmAction.sessionId)
     }
   }
 
@@ -814,7 +847,7 @@ function CoachSchedulePage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCompleteSession(session.ptSessionId)}
+                                onClick={() => openConfirmAction('complete', session.ptSessionId)}
                                 className="rounded-lg bg-gym-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-gym-700"
                               >
                                 Complete
@@ -825,7 +858,7 @@ function CoachSchedulePage() {
                           {String(session.status || '').toUpperCase() === 'CANCELLED' && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteSession(session.ptSessionId)}
+                              onClick={() => openConfirmAction('delete', session.ptSessionId)}
                               className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
                             >
                               Delete notice
@@ -891,6 +924,20 @@ function CoachSchedulePage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmAction.open}
+        title={confirmAction.kind === 'complete' ? 'Mark this session as completed?' : 'Delete this cancelled session notice?'}
+        description={
+          confirmAction.kind === 'complete'
+            ? 'This will mark the PT session as completed for the coach and customer schedule.'
+            : 'This removes the cancelled-session notice from the coach schedule view.'
+        }
+        confirmLabel={confirmAction.kind === 'complete' ? 'Mark completed' : 'Delete notice'}
+        pending={loading}
+        onCancel={closeConfirmAction}
+        onConfirm={confirmScheduleAction}
+      />
     </WorkspaceScaffold>
   )
 }

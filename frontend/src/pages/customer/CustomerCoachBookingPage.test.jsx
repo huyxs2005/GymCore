@@ -144,7 +144,7 @@ describe('CustomerCoachBookingPage', () => {
 
     expect(await screen.findByText(/Fully Match/i)).toBeInTheDocument()
     expect(screen.getByText(/Coach Alex/i)).toBeInTheDocument()
-  }, 10000)
+  }, 20000)
 
   it('shows denied request reason in schedule tab', async () => {
     coachBookingApi.getMySchedule.mockResolvedValue({

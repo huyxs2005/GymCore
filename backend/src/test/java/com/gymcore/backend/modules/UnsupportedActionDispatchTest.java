@@ -2,11 +2,13 @@ package com.gymcore.backend.modules;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.mock;
 
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.AdminService;
 import com.gymcore.backend.modules.auth.service.AuthService;
+import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.checkin.service.CheckinHealthService;
 import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import com.gymcore.backend.modules.content.service.ContentService;
@@ -15,17 +17,21 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 class UnsupportedActionDispatchTest {
 
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final AuthService authService = mock(AuthService.class);
+    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final UserNotificationService notificationService = mock(UserNotificationService.class);
 
     @Test
     void userManagementService_shouldRejectUnsupportedAction() {
-        UserManagementService service = new UserManagementService(jdbcTemplate, authService);
+        UserManagementService service =
+                new UserManagementService(jdbcTemplate, authService, currentUserService, passwordEncoder);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));
@@ -69,10 +75,12 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void adminService_shouldRejectUnsupportedAction() {
-        AdminService service = new AdminService(jdbcTemplate);
+        AdminService service = new AdminService(jdbcTemplate, currentUserService);
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
-                () -> service.execute("unknown-action", Map.of()));
+                () -> service.execute("unknown-action", "Bearer admin", Map.of()));
 
         assertEquals(HttpStatus.NOT_IMPLEMENTED, exception.getStatusCode());
         assertEquals("Unsupported admin action: unknown-action", exception.getReason());

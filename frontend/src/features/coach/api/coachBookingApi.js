@@ -83,6 +83,9 @@ export const coachBookingApi = {
   adminGetCoaches() {
     return apiClient.get('/v1/admin/coaches').then((response) => response.data)
   },
+  adminGetCoachDetail(coachId) {
+    return apiClient.get(`/v1/admin/coaches/${coachId}`).then((response) => response.data)
+  },
   adminUpdateCoachProfile(coachId, payload) {
     return apiClient.put(`/v1/admin/coaches/${coachId}`, payload).then((response) => response.data)
   },

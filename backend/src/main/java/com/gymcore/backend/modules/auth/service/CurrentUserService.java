@@ -53,6 +53,14 @@ public class CurrentUserService {
         return user;
     }
 
+    public UserInfo requireAdminOrReceptionist(String authorizationHeader) {
+        UserInfo user = requireUser(authorizationHeader);
+        if (!"ADMIN".equals(user.roleApiName()) && !"RECEPTIONIST".equals(user.roleApiName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin or receptionist role is required.");
+        }
+        return user;
+    }
+
     public UserInfo requireUser(String authorizationHeader) {
         int userId = parseUserIdFromAccessToken(authorizationHeader);
         return loadUserInfo(userId);

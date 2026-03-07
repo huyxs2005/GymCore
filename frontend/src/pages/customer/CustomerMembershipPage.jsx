@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CreditCard, Dumbbell, ShieldCheck, Sparkles, Ticket } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
@@ -75,6 +76,11 @@ function formatDurationLabel(durationDays) {
 
 function inferCheckoutMode(selectedPlan, currentMembership) {
   const membershipStatus = String(currentMembership?.status || '').toUpperCase()
+  const currentPlanId = Number(currentMembership?.plan?.planId || 0)
+  const selectedPlanId = Number(selectedPlan?.planId || 0)
+  if (membershipStatus === 'EXPIRED' && currentPlanId > 0 && currentPlanId === selectedPlanId) {
+    return 'RENEW'
+  }
   if (membershipStatus !== 'ACTIVE') {
     return 'PURCHASE'
   }
@@ -120,6 +126,7 @@ function CustomerMembershipPage() {
   const queryClient = useQueryClient()
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('DAY_PASS')
+  const [selectionTouched, setSelectionTouched] = useState(false)
   const [checkoutWarning, setCheckoutWarning] = useState(null)
   const [selectedPromoCode, setSelectedPromoCode] = useState('')
   const [couponPreview, setCouponPreview] = useState(null)
@@ -149,7 +156,7 @@ function CustomerMembershipPage() {
   const currentMembership = currentMembershipQuery.data?.data?.membership ?? {}
   const queuedMembership = currentMembershipQuery.data?.data?.queuedMembership ?? null
   const membershipCoupons = useMemo(
-    () => (claimsQuery.data?.data?.claims ?? []).filter(
+    () => (claimsQuery.data?.claims ?? []).filter(
       (claim) => !claim.UsedAt && String(claim.ApplyTarget || '').toUpperCase() === 'MEMBERSHIP',
     ),
     [claimsQuery.data],
@@ -157,6 +164,7 @@ function CustomerMembershipPage() {
   const validForCheckin = Boolean(currentMembershipQuery.data?.data?.validForCheckin)
   const invalidReason = currentMembershipQuery.data?.data?.reason || ''
   const hasActiveMembership = String(currentMembership?.status || '').toUpperCase() === 'ACTIVE'
+  const hasQueuedMembership = Boolean(queuedMembership && Object.keys(queuedMembership).length > 0)
 
   const plansByCategory = useMemo(
     () =>
@@ -178,17 +186,24 @@ function CustomerMembershipPage() {
     [plansByCategory],
   )
 
-  const activeCategory = availableCategories.includes(selectedCategory)
-    ? selectedCategory
-    : (availableCategories[0] ?? 'DAY_PASS')
+  const preferredCategory = normalizePlanType(currentMembership?.plan?.planType)
+  const activeCategory = selectionTouched
+    ? (availableCategories.includes(selectedCategory) ? selectedCategory : (availableCategories[0] ?? 'DAY_PASS'))
+    : (availableCategories.includes(preferredCategory)
+        ? preferredCategory
+        : (availableCategories.includes(selectedCategory) ? selectedCategory : (availableCategories[0] ?? 'DAY_PASS')))
 
   const visiblePlans = useMemo(
     () => plansByCategory[activeCategory] ?? [],
     [activeCategory, plansByCategory],
   )
 
-  const activeSelectedPlanId = visiblePlans.some((plan) => plan.planId === selectedPlanId)
+  const preferredPlanId = selectionTouched
     ? selectedPlanId
+    : Number(currentMembership?.plan?.planId || selectedPlanId || 0)
+
+  const activeSelectedPlanId = visiblePlans.some((plan) => plan.planId === preferredPlanId)
+    ? preferredPlanId
     : (visiblePlans[0]?.planId ?? null)
 
   const selectedPlan = useMemo(
@@ -236,12 +251,12 @@ function CustomerMembershipPage() {
       if (checkoutUrl) {
         window.location.href = checkoutUrl
       } else {
-        alert('Checkout URL not found in API response. Please check backend logs.')
+        toast.error('Checkout URL not found in API response. Please check backend logs.')
       }
     },
     onError: (error) => {
       const message = error.response?.data?.message || error.message || 'Membership checkout failed.'
-      alert(message)
+      toast.error(message)
     },
   })
 
@@ -249,7 +264,7 @@ function CustomerMembershipPage() {
     mutationFn: (payload) => promotionApi.applyCoupon(payload),
     onSuccess: (response) => {
       setCouponPreviewError('')
-      setCouponPreview(response?.data ?? null)
+      setCouponPreview(response ?? null)
     },
     onError: (error) => {
       setCouponPreview(null)
@@ -309,6 +324,8 @@ function CustomerMembershipPage() {
   }
 
   const checkoutModePreview = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : null
+  const queueLimitReached = hasActiveMembership && hasQueuedMembership
+  const checkoutActionLabel = checkoutModePreview ? checkoutModeLabel[checkoutModePreview] : 'Checkout'
 
   const resetCouponSelection = () => {
     setSelectedPromoCode('')
@@ -399,6 +416,7 @@ function CustomerMembershipPage() {
                       if (!categoryPlans.length) return
                       setSelectedCategory(key)
                       setSelectedPlanId(activePlan?.planId ?? categoryPlans[0]?.planId ?? null)
+                      setSelectionTouched(true)
                       resetCouponSelection()
                     }}
                     className="w-full text-left"
@@ -431,6 +449,7 @@ function CustomerMembershipPage() {
                         const nextPlanId = Number(event.target.value)
                         setSelectedCategory(key)
                         setSelectedPlanId(Number.isNaN(nextPlanId) ? null : nextPlanId)
+                        setSelectionTouched(true)
                         resetCouponSelection()
                       }}
                       disabled={!categoryPlans.length}
@@ -619,13 +638,18 @@ function CustomerMembershipPage() {
 
             <button
               type="button"
-              disabled={checkoutMutation.isPending || !selectedPlan}
+              disabled={checkoutMutation.isPending || !selectedPlan || queueLimitReached}
               onClick={handleCheckout}
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400 disabled:text-slate-100"
             >
               <CalendarClock size={16} />
-              {checkoutMutation.isPending ? 'Redirecting to PayOS...' : 'Checkout'}
+              {checkoutMutation.isPending ? 'Redirecting to PayOS...' : `${checkoutActionLabel} with PayOS`}
             </button>
+            {queueLimitReached && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                You already have the maximum of 2 memberships in progress: your current active membership and one queued next membership.
+              </p>
+            )}
           </article>
         </section>
       </div>

@@ -3,15 +3,30 @@ package com.gymcore.backend.modules.promotion.service;
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.ReportService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PromotionService {
+
+    private static final java.math.BigDecimal MAX_DISCOUNT_PERCENT = new java.math.BigDecimal("100.00");
+    private static final java.math.BigDecimal MAX_DISCOUNT_AMOUNT = new java.math.BigDecimal("9999999999.99");
+
+    @Value("${app.promotion.image-dir:uploads/promotions}")
+    private String promotionImageDir;
+
+    @Value("${app.promotion.image-max-bytes:5242880}")
+    private long promotionImageMaxBytes;
 
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
@@ -73,25 +88,29 @@ public class PromotionService {
 
     private Map<String, Object> adminCreateCoupon(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
+        String promoCode = requireText(payload.get("promoCode"), "Promo code is required.");
         java.math.BigDecimal discountPercent = requireDecimal(payload.get("discountPercent"));
         java.math.BigDecimal discountAmount = requireDecimal(payload.get("discountAmount"));
         String applyTarget = normalizeApplyTarget(payload.get("applyTarget"));
         int bonusDurationMonths = requireNonNegativeInt(payload.get("bonusDurationMonths"));
+        java.time.LocalDate validFrom = requireDate(payload.get("validFrom"), "Valid from is required.");
+        java.time.LocalDate validTo = requireDate(payload.get("validTo"), "Valid to is required.");
         validateCouponBenefit(discountPercent, discountAmount, bonusDurationMonths, applyTarget);
+        validateCouponDateWindow(validFrom, validTo);
 
         jdbcTemplate.update(
                 """
                         INSERT INTO dbo.Promotions (PromoCode, Description, DiscountPercent, DiscountAmount, ApplyTarget, BonusDurationMonths, ValidFrom, ValidTo, IsActive)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                payload.get("promoCode"),
+                promoCode,
                 payload.get("description"),
                 discountPercent,
                 discountAmount,
                 applyTarget,
                 bonusDurationMonths,
-                payload.get("validFrom"),
-                payload.get("validTo"),
+                validFrom,
+                validTo,
                 requireBit(payload.getOrDefault("isActive", 1)));
         return Map.of("success", true);
     }
@@ -101,11 +120,15 @@ public class PromotionService {
         int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
+        String promoCode = requireText(body.get("promoCode"), "Promo code is required.");
         java.math.BigDecimal discountPercent = requireDecimal(body.get("discountPercent"));
         java.math.BigDecimal discountAmount = requireDecimal(body.get("discountAmount"));
         String applyTarget = normalizeApplyTarget(body.get("applyTarget"));
         int bonusDurationMonths = requireNonNegativeInt(body.get("bonusDurationMonths"));
+        java.time.LocalDate validFrom = requireDate(body.get("validFrom"), "Valid from is required.");
+        java.time.LocalDate validTo = requireDate(body.get("validTo"), "Valid to is required.");
         validateCouponBenefit(discountPercent, discountAmount, bonusDurationMonths, applyTarget);
+        validateCouponDateWindow(validFrom, validTo);
 
         jdbcTemplate.update(
                 """
@@ -113,14 +136,14 @@ public class PromotionService {
                         SET PromoCode = ?, Description = ?, DiscountPercent = ?, DiscountAmount = ?, ApplyTarget = ?, BonusDurationMonths = ?, ValidFrom = ?, ValidTo = ?, IsActive = ?
                         WHERE PromotionID = ?
                         """,
-                body.get("promoCode"),
+                promoCode,
                 body.get("description"),
                 discountPercent,
                 discountAmount,
                 applyTarget,
                 bonusDurationMonths,
-                body.get("validFrom"),
-                body.get("validTo"),
+                validFrom,
+                validTo,
                 requireBit(body.getOrDefault("isActive", 1)),
                 promotionId);
         return Map.of("success", true);
@@ -142,6 +165,72 @@ public class PromotionService {
                 ORDER BY p.PromotionPostID DESC
                 """;
         return Map.of("posts", jdbcTemplate.queryForList(sql));
+    }
+
+    public Map<String, Object> uploadPromotionBanner(String authorizationHeader, MultipartFile file) {
+        currentUserService.requireAdmin(authorizationHeader);
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promotion banner file is required.");
+        }
+        if (file.getSize() > promotionImageMaxBytes) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, promotionBannerTooLargeMessage());
+        }
+
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to read promotion banner file.");
+        }
+        if (bytes.length == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promotion banner file is required.");
+        }
+
+        String extension = detectImageExtension(bytes);
+        if (extension == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only JPG, PNG, or WEBP images are allowed.");
+        }
+
+        Path baseDir = Paths.get(promotionImageDir).toAbsolutePath().normalize();
+        Path imageDir = baseDir.resolve("banners").normalize();
+        if (!imageDir.startsWith(baseDir)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid promotion banner storage location.");
+        }
+
+        try {
+            Files.createDirectories(imageDir);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to create promotion banner storage folder.");
+        }
+
+        String filename = UUID.randomUUID().toString().replace("-", "") + "." + extension;
+        Path storedPath = imageDir.resolve(filename).normalize();
+        if (!storedPath.startsWith(imageDir)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid promotion banner file path.");
+        }
+
+        try {
+            Files.write(storedPath, bytes);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to store promotion banner file.");
+        }
+
+        return Map.of("imageUrl", "/uploads/promotions/banners/" + filename);
+    }
+
+    public String promotionBannerTooLargeMessage() {
+        long bytesPerMegabyte = 1024L * 1024L;
+        long maxMegabytes = Math.max(1L, Math.round((double) promotionImageMaxBytes / bytesPerMegabyte));
+        return "Promotion banner file is too large. Maximum size is " + maxMegabytes + " MB.";
+    }
+
+    public Map<String, Object> deleteUploadedPromotionBanner(String authorizationHeader, String imageUrl) {
+        currentUserService.requireAdmin(authorizationHeader);
+        String normalized = requireText(imageUrl, "Promotion banner URL is required.");
+        boolean deleted = tryDeleteManagedPromotionBannerIfUnused(normalized);
+        return Map.of("deleted", deleted, "imageUrl", normalized);
     }
 
     private Map<String, Object> adminCreatePost(String auth, Map<String, Object> payload) {
@@ -404,10 +493,12 @@ public class PromotionService {
                 return decimal;
             }
             if (value instanceof Number number) {
-                return java.math.BigDecimal.valueOf(number.doubleValue());
+                return new java.math.BigDecimal(String.valueOf(number));
             }
-            return new java.math.BigDecimal(String.valueOf(value));
+            return new java.math.BigDecimal(String.valueOf(value).trim());
         } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid decimal value.");
+        } catch (ArithmeticException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid decimal value.");
         }
     }
@@ -449,13 +540,65 @@ public class PromotionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Only one discount type is allowed (percent or amount).");
         }
-        if (discountPercent == null && discountAmount == null && bonusDurationMonths == 0) {
+        validateDecimalScale(discountPercent, "Discount percent");
+        validateDecimalScale(discountAmount, "Discount amount");
+
+        if (discountPercent != null) {
+            if (discountPercent.compareTo(java.math.BigDecimal.ZERO) < 0
+                    || discountPercent.compareTo(MAX_DISCOUNT_PERCENT) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Discount percent must be between 0 and 100.");
+            }
+        }
+
+        if (discountAmount != null) {
+            if (discountAmount.compareTo(java.math.BigDecimal.ZERO) < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Discount amount must be greater than or equal to 0.");
+            }
+            if (discountAmount.compareTo(MAX_DISCOUNT_AMOUNT) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Discount amount exceeds the maximum supported value.");
+            }
+        }
+
+        boolean hasDiscountPercent = discountPercent != null
+                && discountPercent.compareTo(java.math.BigDecimal.ZERO) > 0;
+        boolean hasDiscountAmount = discountAmount != null
+                && discountAmount.compareTo(java.math.BigDecimal.ZERO) > 0;
+        if (!hasDiscountPercent && !hasDiscountAmount && bonusDurationMonths == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Coupon must include discount or bonus duration.");
         }
         if ("ORDER".equals(applyTarget) && bonusDurationMonths > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Product coupons cannot include bonus membership months.");
+        }
+    }
+
+    private void validateDecimalScale(java.math.BigDecimal value, String fieldName) {
+        if (value == null) {
+            return;
+        }
+        if (value.scale() > 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    fieldName + " must have at most 2 decimal places.");
+        }
+    }
+
+    private java.time.LocalDate requireDate(Object value, String message) {
+        String text = requireText(value, message);
+        try {
+            return java.time.LocalDate.parse(text);
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+    }
+
+    private void validateCouponDateWindow(java.time.LocalDate validFrom, java.time.LocalDate validTo) {
+        if (validTo.isBefore(validFrom)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Valid to must be on or after valid from.");
         }
     }
 
@@ -471,6 +614,75 @@ public class PromotionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target must be ORDER or MEMBERSHIP.");
         }
         return normalized;
+    }
+
+    private String detectImageExtension(byte[] bytes) {
+        if (bytes.length >= 3
+                && (bytes[0] & 0xFF) == 0xFF
+                && (bytes[1] & 0xFF) == 0xD8
+                && (bytes[2] & 0xFF) == 0xFF) {
+            return "jpg";
+        }
+        if (bytes.length >= 8
+                && (bytes[0] & 0xFF) == 0x89
+                && bytes[1] == 0x50
+                && bytes[2] == 0x4E
+                && bytes[3] == 0x47
+                && bytes[4] == 0x0D
+                && bytes[5] == 0x0A
+                && bytes[6] == 0x1A
+                && bytes[7] == 0x0A) {
+            return "png";
+        }
+        if (bytes.length >= 12
+                && bytes[0] == 0x52
+                && bytes[1] == 0x49
+                && bytes[2] == 0x46
+                && bytes[3] == 0x46
+                && bytes[8] == 0x57
+                && bytes[9] == 0x45
+                && bytes[10] == 0x42
+                && bytes[11] == 0x50) {
+            return "webp";
+        }
+        return null;
+    }
+
+    private boolean tryDeleteManagedPromotionBannerIfUnused(String imageUrl) {
+        Path storedPath = resolveManagedPromotionBannerPath(imageUrl);
+        if (storedPath == null) {
+            return false;
+        }
+
+        Integer usageCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.PromotionPosts
+                WHERE BannerUrl = ?
+                """, Integer.class, imageUrl);
+        if (usageCount != null && usageCount > 0) {
+            return false;
+        }
+
+        try {
+            return Files.deleteIfExists(storedPath);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private Path resolveManagedPromotionBannerPath(String imageUrl) {
+        String normalizedUrl = imageUrl == null ? null : String.valueOf(imageUrl).trim();
+        if (normalizedUrl == null || !normalizedUrl.startsWith("/uploads/promotions/")) {
+            return null;
+        }
+
+        String relative = normalizedUrl.substring("/uploads/promotions/".length());
+        Path configuredRoot = Paths.get(promotionImageDir).toAbsolutePath().normalize();
+        Path resolved = configuredRoot.resolve(relative.replace("/", java.io.File.separator)).normalize();
+        if (!resolved.startsWith(configuredRoot)) {
+            return null;
+        }
+        return resolved;
     }
 
     private java.math.BigDecimal calculateDiscount(java.math.BigDecimal subtotal, java.math.BigDecimal discountPercent,

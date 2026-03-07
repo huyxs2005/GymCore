@@ -5,6 +5,11 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AppShell from './AppShell'
 
+const mockSessionState = {
+  isAuthenticated: true,
+  user: { userId: 1, role: 'CUSTOMER', fullName: 'Customer A' },
+}
+
 vi.mock('../../features/auth/useSession', () => ({
   useSession: vi.fn(),
 }))
@@ -26,20 +31,20 @@ vi.mock('../../features/product/api/cartApi', () => ({
 const { useSession } = await import('../../features/auth/useSession')
 const { cartApi } = await import('../../features/product/api/cartApi')
 
-function renderShell(pathname) {
+function renderShell(pathname, client = null) {
   function LocationProbe() {
     const location = useLocation()
     return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>
   }
 
-  const client = new QueryClient({
+  const queryClient = client || new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   })
 
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[pathname]}>
         <AppShell>
           <div>content</div>
@@ -53,31 +58,28 @@ function renderShell(pathname) {
 describe('AppShell cart button', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useSession.mockReturnValue({
-      isAuthenticated: true,
-      user: { role: 'CUSTOMER', fullName: 'Customer A' },
-    })
+    mockSessionState.isAuthenticated = true
+    mockSessionState.user = { userId: 1, role: 'CUSTOMER', fullName: 'Customer A' }
+    useSession.mockImplementation(() => mockSessionState)
     cartApi.getCart.mockResolvedValue({
-      data: {
-        items: [{ productId: 1, quantity: 2 }],
-      },
+      items: [{ productId: 1, quantity: 2 }],
     })
   })
 
-  it('toggles the cart drawer when clicked from the shop page', async () => {
+  it('navigates to the dedicated cart page when clicked from the shop page', async () => {
     const user = userEvent.setup()
-    const onToggle = vi.fn()
-    window.addEventListener('gymcore:toggle-cart', onToggle)
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
 
     renderShell('/customer/shop')
     const cartButton = await screen.findByRole('button', { name: /open cart/i })
     await user.click(cartButton)
 
-    expect(onToggle).toHaveBeenCalledTimes(1)
-    window.removeEventListener('gymcore:toggle-cart', onToggle)
+    expect(scrollSpy).toHaveBeenCalledWith(0, 0)
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/customer/cart')
+    scrollSpy.mockRestore()
   })
 
-  it('navigates to the shop with openCart=1 when clicked outside the shop page', async () => {
+  it('navigates to the dedicated cart page when clicked outside the shop page', async () => {
     const user = userEvent.setup()
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
 
@@ -86,15 +88,12 @@ describe('AppShell cart button', () => {
     await user.click(cartButton)
 
     expect(scrollSpy).toHaveBeenCalledWith(0, 0)
-    expect(screen.getByTestId('location-probe')).toHaveTextContent('/customer/shop?openCart=1')
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/customer/cart')
     scrollSpy.mockRestore()
   })
 
   it('does not show customer cart button for non-customer users', () => {
-    useSession.mockReturnValue({
-      isAuthenticated: true,
-      user: { role: 'COACH', fullName: 'Coach A' },
-    })
+    mockSessionState.user = { userId: 9, role: 'COACH', fullName: 'Coach A' }
 
     renderShell('/coach/schedule')
     expect(screen.queryByRole('button', { name: /open cart/i })).not.toBeInTheDocument()
@@ -161,5 +160,38 @@ describe('AppShell cart button', () => {
     headerNav = screen.getAllByRole('navigation')[0]
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
+  })
+
+  it('does not reuse another customer cart badge when the session user changes', async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    })
+
+    let resolveSecondCart
+    cartApi.getCart
+      .mockResolvedValueOnce({
+        items: [{ productId: 1, quantity: 2 }],
+      })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveSecondCart = resolve
+      }))
+
+    const firstRender = renderShell('/customer/shop', client)
+    expect(await screen.findByText('2')).toBeInTheDocument()
+    firstRender.unmount()
+
+    mockSessionState.user = { userId: 2, role: 'CUSTOMER', fullName: 'Customer B' }
+    renderShell('/customer/shop', client)
+
+    expect(screen.queryByText('2')).not.toBeInTheDocument()
+
+    resolveSecondCart({
+      items: [],
+    })
+
+    expect(await screen.findByRole('button', { name: /open cart/i })).toBeInTheDocument()
+    expect(screen.queryByText('2')).not.toBeInTheDocument()
   })
 })

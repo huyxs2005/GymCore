@@ -531,9 +531,12 @@ GO
 CREATE TABLE dbo.Products (
     ProductID INT IDENTITY(1,1) PRIMARY KEY,
     ProductName NVARCHAR(150) NOT NULL,
+    ShortDescription NVARCHAR(220) NULL,
     Description NVARCHAR(800) NULL,
+    UsageInstructions NVARCHAR(1200) NULL,
     Price DECIMAL(12,2) NOT NULL,
     ImageUrl NVARCHAR(500) NULL,
+    ThumbnailUrl NVARCHAR(500) NULL,
     IsActive BIT NOT NULL CONSTRAINT DF_Products_IsActive DEFAULT 1,
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Products_CreatedAt DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 NULL,
@@ -542,6 +545,57 @@ CREATE TABLE dbo.Products (
     CONSTRAINT CK_Products_Price CHECK (Price >= 0),
     CONSTRAINT FK_Products_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(UserID)
 );
+GO
+
+CREATE TABLE dbo.ProductCategories (
+    ProductCategoryID INT IDENTITY(1,1) PRIMARY KEY,
+    CategoryName NVARCHAR(100) NOT NULL UNIQUE,
+    Description NVARCHAR(300) NULL,
+    SortOrder INT NOT NULL CONSTRAINT DF_ProductCategories_SortOrder DEFAULT 0,
+    IsActive BIT NOT NULL CONSTRAINT DF_ProductCategories_IsActive DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_ProductCategories_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    CONSTRAINT CK_ProductCategories_SortOrder CHECK (SortOrder >= 0)
+);
+GO
+
+CREATE TABLE dbo.ProductCategoryMap (
+    ProductID INT NOT NULL,
+    ProductCategoryID INT NOT NULL,
+    PRIMARY KEY (ProductID, ProductCategoryID),
+
+    CONSTRAINT FK_ProductCategoryMap_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT FK_ProductCategoryMap_Category FOREIGN KEY (ProductCategoryID) REFERENCES dbo.ProductCategories(ProductCategoryID)
+);
+GO
+
+CREATE INDEX IX_ProductCategoryMap_Category
+ON dbo.ProductCategoryMap(ProductCategoryID, ProductID);
+GO
+
+CREATE TABLE dbo.ProductImages (
+    ProductImageID INT IDENTITY(1,1) PRIMARY KEY,
+    ProductID INT NOT NULL,
+    ImageUrl NVARCHAR(500) NOT NULL,
+    AltText NVARCHAR(150) NULL,
+    DisplayOrder INT NOT NULL CONSTRAINT DF_ProductImages_DisplayOrder DEFAULT 1,
+    IsPrimary BIT NOT NULL CONSTRAINT DF_ProductImages_IsPrimary DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_ProductImages_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL,
+
+    CONSTRAINT FK_ProductImages_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT CK_ProductImages_DisplayOrder CHECK (DisplayOrder > 0)
+);
+GO
+
+CREATE UNIQUE INDEX UX_ProductImages_OnePrimary
+ON dbo.ProductImages(ProductID)
+WHERE IsPrimary = 1;
+GO
+
+CREATE INDEX IX_ProductImages_Product_Order
+ON dbo.ProductImages(ProductID, DisplayOrder, ProductImageID);
 GO
 
 CREATE TABLE dbo.Carts (
@@ -578,6 +632,10 @@ CREATE TABLE dbo.Orders (
     TotalAmount DECIMAL(12,2) NOT NULL CONSTRAINT DF_Orders_Total DEFAULT 0,
 
     Status NVARCHAR(20) NOT NULL CONSTRAINT DF_Orders_Status DEFAULT 'PENDING', -- PENDING|PAID|CANCELLED
+    ShippingFullName NVARCHAR(255) NULL,
+    ShippingPhone NVARCHAR(50) NULL,
+    ShippingEmail NVARCHAR(255) NULL,
+    ShippingAddress NVARCHAR(MAX) NULL,
 
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Orders_CreatedAt DEFAULT SYSDATETIME(),
     UpdatedAt DATETIME2 NULL,
@@ -1041,6 +1099,59 @@ ON dbo.Payments(CustomerMembershipID)
 WHERE Status = 'PENDING' AND CustomerMembershipID IS NOT NULL;
 GO
 
+CREATE TABLE dbo.OrderInvoices (
+    InvoiceID INT IDENTITY(1,1) PRIMARY KEY,
+    InvoiceCode NVARCHAR(40) NOT NULL UNIQUE,
+    OrderID INT NOT NULL UNIQUE,
+    PaymentID INT NOT NULL UNIQUE,
+    CustomerID INT NOT NULL,
+    RecipientEmail NVARCHAR(255) NULL,
+    RecipientName NVARCHAR(255) NULL,
+    ShippingPhone NVARCHAR(50) NULL,
+    ShippingAddress NVARCHAR(MAX) NULL,
+    PaymentMethod NVARCHAR(50) NULL,
+    Currency NVARCHAR(10) NOT NULL CONSTRAINT DF_OrderInvoices_Currency DEFAULT 'VND',
+    Subtotal DECIMAL(18,2) NOT NULL,
+    DiscountAmount DECIMAL(18,2) NOT NULL,
+    TotalAmount DECIMAL(18,2) NOT NULL,
+    PaidAt DATETIME2 NOT NULL,
+    PickedUpAt DATETIME2 NULL,
+    PickedUpByUserID INT NULL,
+    EmailSentAt DATETIME2 NULL,
+    EmailSendError NVARCHAR(1000) NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_OrderInvoices_CreatedAt DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_OrderInvoices_UpdatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_OrderInvoices_Order FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+    CONSTRAINT FK_OrderInvoices_Payment FOREIGN KEY (PaymentID) REFERENCES dbo.Payments(PaymentID),
+    CONSTRAINT FK_OrderInvoices_Customer FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT FK_OrderInvoices_PickedUpByUser FOREIGN KEY (PickedUpByUserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE INDEX IX_OrderInvoices_Customer_PaidAt
+ON dbo.OrderInvoices(CustomerID, PaidAt DESC);
+GO
+
+CREATE TABLE dbo.OrderInvoiceItems (
+    InvoiceItemID INT IDENTITY(1,1) PRIMARY KEY,
+    InvoiceID INT NOT NULL,
+    ProductID INT NULL,
+    ProductName NVARCHAR(255) NOT NULL,
+    Quantity INT NOT NULL,
+    UnitPrice DECIMAL(18,2) NOT NULL,
+    LineTotal DECIMAL(18,2) NOT NULL,
+    CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_OrderInvoiceItems_CreatedAt DEFAULT SYSDATETIME(),
+
+    CONSTRAINT FK_OrderInvoiceItems_Invoice FOREIGN KEY (InvoiceID) REFERENCES dbo.OrderInvoices(InvoiceID),
+    CONSTRAINT FK_OrderInvoiceItems_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+);
+GO
+
+CREATE INDEX IX_OrderInvoiceItems_InvoiceID
+ON dbo.OrderInvoiceItems(InvoiceID);
+GO
+
 ALTER TABLE dbo.UserPromotionClaims
 ADD CONSTRAINT FK_UserPromotionClaims_UsedPayment
 FOREIGN KEY (UsedPaymentID) REFERENCES dbo.Payments(PaymentID);
@@ -1244,3 +1355,4 @@ CREATE INDEX IX_CheckIns_Customer_Time ON dbo.CheckIns(CustomerID, CheckInTime);
 CREATE INDEX IX_FoodGoalMap_Goal ON dbo.FoodGoalMap(GoalID);
 CREATE INDEX IX_WorkoutGoalMap_Goal ON dbo.WorkoutGoalMap(GoalID);
 GO
+

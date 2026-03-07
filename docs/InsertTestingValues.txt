@@ -135,6 +135,18 @@ BEGIN TRY
     WHERE Email IN (N'admin@gymcore.local', N'reception@gymcore.local', N'coach@gymcore.local', N'customer@gymcore.local')
       AND (PasswordHash IS NULL OR PasswordHash LIKE N'HASHED_%' OR PasswordHash NOT LIKE N'$2%');
 
+    UPDATE dbo.Users
+    SET AvatarUrl = CASE Email
+        WHEN N'customer@gymcore.local' THEN N'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
+        WHEN N'coach@gymcore.local' THEN N'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=256'
+        ELSE AvatarUrl
+    END,
+        AvatarSource = CASE
+            WHEN Email IN (N'customer@gymcore.local', N'coach@gymcore.local') THEN N'CUSTOM'
+            ELSE AvatarSource
+        END
+    WHERE Email IN (N'customer@gymcore.local', N'coach@gymcore.local');
+
     IF @AdminID IS NULL OR @ReceptionistID IS NULL OR @CoachID IS NULL OR @CustomerID IS NULL
     BEGIN
         THROW 50002, 'Missing one or more required users.', 1;
@@ -383,41 +395,45 @@ BEGIN TRY
     END;
 
     /* Products */
-    INSERT INTO dbo.Products (ProductName, Description, Price, ImageUrl, UpdatedBy)
-    SELECT v.ProductName, v.Description, v.Price, NULL, @AdminID
+    INSERT INTO dbo.Products (
+        ProductName, ShortDescription, Description, UsageInstructions, Price, ImageUrl, ThumbnailUrl, UpdatedBy
+    )
+    SELECT v.ProductName, v.ShortDescription, v.Description, v.UsageInstructions, v.Price, v.ImageUrl, v.ThumbnailUrl, @AdminID
     FROM (VALUES
-        (N'Creatine Monohydrate', N'Performance supplement', CAST(1000 AS DECIMAL(12,2))),
-        (N'Whey Protein',         N'Protein powder',         CAST(2000 AS DECIMAL(12,2)))
-    ) AS v(ProductName, Description, Price)
+        (N'Creatine Monohydrate', N'Pure strength support', N'Performance supplement', N'Mix 1 scoop with water after training or as directed.', CAST(1000 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Whey Protein',         N'Everyday protein shake', N'Protein powder',         N'Mix 1 scoop with 250-300ml water or milk after workouts.', CAST(2000 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500')
+    ) AS v(ProductName, ShortDescription, Description, UsageInstructions, Price, ImageUrl, ThumbnailUrl)
     WHERE NOT EXISTS (
         SELECT 1 FROM dbo.Products p WHERE p.ProductName = v.ProductName
     );
 
     /* Products (extended catalog from coupon branch, idempotent) */
-    INSERT INTO dbo.Products (ProductName, Description, Price, ImageUrl, UpdatedBy)
-    SELECT v.ProductName, v.Description, v.Price, v.ImageUrl, @AdminID
+    INSERT INTO dbo.Products (
+        ProductName, ShortDescription, Description, UsageInstructions, Price, ImageUrl, ThumbnailUrl, UpdatedBy
+    )
+    SELECT v.ProductName, v.ShortDescription, v.Description, v.UsageInstructions, v.Price, v.ImageUrl, v.ThumbnailUrl, @AdminID
     FROM (VALUES
-        (N'Whey Protein Isolate - Vanilla', N'100% pure whey protein isolate. 25g protein per serving. Low carb and low fat.', CAST(2600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
-        (N'Whey Protein Concentrate - Chocolate', N'Premium whey concentrate. 24g protein per serving with rich chocolate flavor.', CAST(2100 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
-        (N'Whey Protein Blend - Strawberry', N'Whey blend (isolate + concentrate). 23g protein per serving.', CAST(2200 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
-        (N'Hydrolyzed Whey Protein - Unflavored', N'Fast-absorbing hydrolyzed whey. 26g protein per serving.', CAST(2800 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
-        (N'Creatine Monohydrate - Micronized', N'Pure micronized creatine monohydrate. 5g per serving.', CAST(1100 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
-        (N'Creatine HCL - Ultra Pure', N'Creatine HCL with improved solubility and absorption.', CAST(1300 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
-        (N'Creatine Ethyl Ester', N'Creatine ethyl ester formula supporting ATP production.', CAST(1250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
-        (N'Buffered Creatine - Kre-Alkalyn', N'pH-buffered creatine with reduced side effects.', CAST(1400 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
-        (N'Mass Gainer - Chocolate Supreme', N'High-calorie gainer with protein and complex carbs.', CAST(2300 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
-        (N'Lean Mass Gainer - Vanilla', N'Lean mass formula with balanced calories and protein.', CAST(2200 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
-        (N'Serious Mass - Banana', N'Mass building formula with vitamins and minerals.', CAST(2400 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
-        (N'Weight Gainer Pro - Cookies & Cream', N'Weight gainer with smooth texture and easy digestion.', CAST(2250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
-        (N'Pre-Workout Extreme - Fruit Punch', N'High-stimulant pre-workout with caffeine and pump support.', CAST(1700 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
-        (N'Pre-Workout Pump - Blue Raspberry', N'Stim-free pump formula for evening workouts.', CAST(1600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
-        (N'Pre-Workout Focus - Green Apple', N'Balanced pre-workout for energy and focus.', CAST(1650 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
-        (N'BCAA 2:1:1 - Watermelon', N'BCAA formula supporting recovery and reducing fatigue.', CAST(1500 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
-        (N'BCAA + Electrolytes - Lemon Lime', N'Intra-workout hydration with BCAAs and electrolytes.', CAST(1550 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
-        (N'BCAA Energy - Mixed Berry', N'BCAA + caffeine blend for energy during workouts.', CAST(1600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
-        (N'Multi-Vitamin for Men - Daily Pack', N'Complete multivitamin formula for active men.', CAST(1150 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
-        (N'Multi-Vitamin for Athletes - Tablets', N'High-potency multivitamin for training support.', CAST(1250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500')
-    ) AS v(ProductName, Description, Price, ImageUrl)
+        (N'Whey Protein Isolate - Vanilla', N'Lean whey isolate for recovery', N'100% pure whey protein isolate. 25g protein per serving. Low carb and low fat.', N'Mix 1 scoop with cold water after training.', CAST(2600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Whey Protein Concentrate - Chocolate', N'Classic chocolate recovery shake', N'Premium whey concentrate. 24g protein per serving with rich chocolate flavor.', N'Mix 1 scoop with water or milk any time protein is needed.', CAST(2100 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Whey Protein Blend - Strawberry', N'Strawberry daily whey blend', N'Whey blend (isolate + concentrate). 23g protein per serving.', N'Mix 1 scoop after workouts or between meals.', CAST(2200 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
+        (N'Hydrolyzed Whey Protein - Unflavored', N'Fast digesting premium whey', N'Fast-absorbing hydrolyzed whey. 26g protein per serving.', N'Mix 1 scoop in water immediately after training.', CAST(2800 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
+        (N'Creatine Monohydrate - Micronized', N'Micronized strength support', N'Pure micronized creatine monohydrate. 5g per serving.', N'Take 1 scoop daily with water.', CAST(1100 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Creatine HCL - Ultra Pure', N'Soluble daily creatine', N'Creatine HCL with improved solubility and absorption.', N'Take as directed before or after training.', CAST(1300 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
+        (N'Creatine Ethyl Ester', N'Creatine formula for training output', N'Creatine ethyl ester formula supporting ATP production.', N'Take once daily with water.', CAST(1250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500', N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
+        (N'Buffered Creatine - Kre-Alkalyn', N'Buffered creatine support', N'pH-buffered creatine with reduced side effects.', N'Take pre-workout or post-workout with water.', CAST(1400 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500', N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
+        (N'Mass Gainer - Chocolate Supreme', N'High-calorie mass support', N'High-calorie gainer with protein and complex carbs.', N'Blend 2 scoops with milk between meals.', CAST(2300 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Lean Mass Gainer - Vanilla', N'Balanced calories for lean growth', N'Lean mass formula with balanced calories and protein.', N'Blend 1-2 scoops after workouts or between meals.', CAST(2200 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Serious Mass - Banana', N'Banana mass gainer formula', N'Mass building formula with vitamins and minerals.', N'Blend with milk for higher calories.', CAST(2400 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Weight Gainer Pro - Cookies & Cream', N'Easy-drinking calorie booster', N'Weight gainer with smooth texture and easy digestion.', N'Take after workouts or as a meal boost.', CAST(2250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
+        (N'Pre-Workout Extreme - Fruit Punch', N'High-energy pre-workout', N'High-stimulant pre-workout with caffeine and pump support.', N'Take 20-30 minutes before training.', CAST(1700 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
+        (N'Pre-Workout Pump - Blue Raspberry', N'Stim-free pump formula', N'Stim-free pump formula for evening workouts.', N'Take before training for pump support.', CAST(1600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500', N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
+        (N'Pre-Workout Focus - Green Apple', N'Balanced energy and focus', N'Balanced pre-workout for energy and focus.', N'Take one serving before training sessions.', CAST(1650 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500', N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
+        (N'BCAA 2:1:1 - Watermelon', N'Intra-workout recovery drink', N'BCAA formula supporting recovery and reducing fatigue.', N'Mix during workouts or between meals.', CAST(1500 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
+        (N'BCAA + Electrolytes - Lemon Lime', N'Hydration plus amino recovery', N'Intra-workout hydration with BCAAs and electrolytes.', N'Sip throughout training.', CAST(1550 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'BCAA Energy - Mixed Berry', N'BCAA with light energy support', N'BCAA + caffeine blend for energy during workouts.', N'Take before or during training.', CAST(1600 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Multi-Vitamin for Men - Daily Pack', N'Daily micronutrient support', N'Complete multivitamin formula for active men.', N'Take 1 serving with breakfast.', CAST(1150 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Multi-Vitamin for Athletes - Tablets', N'Athlete-focused daily vitamins', N'High-potency multivitamin for training support.', N'Take daily with food.', CAST(1250 AS DECIMAL(12,2)), N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500')
+    ) AS v(ProductName, ShortDescription, Description, UsageInstructions, Price, ImageUrl, ThumbnailUrl)
     WHERE NOT EXISTS (
         SELECT 1
         FROM dbo.Products p
@@ -455,6 +471,88 @@ BEGIN TRY
         (N'Multi-Vitamin for Athletes - Tablets', CAST(1250 AS DECIMAL(12,2)))
     ) AS v(ProductName, Price)
       ON p.ProductName = v.ProductName;
+
+    /* Keep richer product content synchronized on re-run */
+    UPDATE p
+    SET p.ShortDescription = v.ShortDescription,
+        p.Description = v.Description,
+        p.UsageInstructions = v.UsageInstructions,
+        p.ImageUrl = v.ImageUrl,
+        p.ThumbnailUrl = v.ThumbnailUrl,
+        p.UpdatedAt = SYSDATETIME(),
+        p.UpdatedBy = @AdminID
+    FROM dbo.Products p
+    JOIN (VALUES
+        (N'Creatine Monohydrate', N'Pure strength support', N'Performance supplement', N'Mix 1 scoop with water after training or as directed.', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Whey Protein', N'Everyday protein shake', N'Protein powder', N'Mix 1 scoop with 250-300ml water or milk after workouts.', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Whey Protein Isolate - Vanilla', N'Lean whey isolate for recovery', N'100% pure whey protein isolate. 25g protein per serving. Low carb and low fat.', N'Mix 1 scoop with cold water after training.', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Whey Protein Concentrate - Chocolate', N'Classic chocolate recovery shake', N'Premium whey concentrate. 24g protein per serving with rich chocolate flavor.', N'Mix 1 scoop with water or milk any time protein is needed.', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Whey Protein Blend - Strawberry', N'Strawberry daily whey blend', N'Whey blend (isolate + concentrate). 23g protein per serving.', N'Mix 1 scoop after workouts or between meals.', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
+        (N'Hydrolyzed Whey Protein - Unflavored', N'Fast digesting premium whey', N'Fast-absorbing hydrolyzed whey. 26g protein per serving.', N'Mix 1 scoop in water immediately after training.', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
+        (N'Creatine Monohydrate - Micronized', N'Micronized strength support', N'Pure micronized creatine monohydrate. 5g per serving.', N'Take 1 scoop daily with water.', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Creatine HCL - Ultra Pure', N'Soluble daily creatine', N'Creatine HCL with improved solubility and absorption.', N'Take as directed before or after training.', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
+        (N'Creatine Ethyl Ester', N'Creatine formula for training output', N'Creatine ethyl ester formula supporting ATP production.', N'Take once daily with water.', N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500', N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
+        (N'Buffered Creatine - Kre-Alkalyn', N'Buffered creatine support', N'pH-buffered creatine with reduced side effects.', N'Take pre-workout or post-workout with water.', N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500', N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
+        (N'Mass Gainer - Chocolate Supreme', N'High-calorie mass support', N'High-calorie gainer with protein and complex carbs.', N'Blend 2 scoops with milk between meals.', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'Lean Mass Gainer - Vanilla', N'Balanced calories for lean growth', N'Lean mass formula with balanced calories and protein.', N'Blend 1-2 scoops after workouts or between meals.', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Serious Mass - Banana', N'Banana mass gainer formula', N'Mass building formula with vitamins and minerals.', N'Blend with milk for higher calories.', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Weight Gainer Pro - Cookies & Cream', N'Easy-drinking calorie booster', N'Weight gainer with smooth texture and easy digestion.', N'Take after workouts or as a meal boost.', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500'),
+        (N'Pre-Workout Extreme - Fruit Punch', N'High-energy pre-workout', N'High-stimulant pre-workout with caffeine and pump support.', N'Take 20-30 minutes before training.', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500'),
+        (N'Pre-Workout Pump - Blue Raspberry', N'Stim-free pump formula', N'Stim-free pump formula for evening workouts.', N'Take before training for pump support.', N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500', N'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=500'),
+        (N'Pre-Workout Focus - Green Apple', N'Balanced energy and focus', N'Balanced pre-workout for energy and focus.', N'Take one serving before training sessions.', N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500', N'https://images.unsplash.com/photo-1556817411-58c45dd94e8c?w=500'),
+        (N'BCAA 2:1:1 - Watermelon', N'Intra-workout recovery drink', N'BCAA formula supporting recovery and reducing fatigue.', N'Mix during workouts or between meals.', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500'),
+        (N'BCAA + Electrolytes - Lemon Lime', N'Hydration plus amino recovery', N'Intra-workout hydration with BCAAs and electrolytes.', N'Sip throughout training.', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500'),
+        (N'BCAA Energy - Mixed Berry', N'BCAA with light energy support', N'BCAA + caffeine blend for energy during workouts.', N'Take before or during training.', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500'),
+        (N'Multi-Vitamin for Men - Daily Pack', N'Daily micronutrient support', N'Complete multivitamin formula for active men.', N'Take 1 serving with breakfast.', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500'),
+        (N'Multi-Vitamin for Athletes - Tablets', N'Athlete-focused daily vitamins', N'High-potency multivitamin for training support.', N'Take daily with food.', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500')
+    ) AS v(ProductName, ShortDescription, Description, UsageInstructions, ImageUrl, ThumbnailUrl)
+      ON p.ProductName = v.ProductName;
+
+    /* Product category mapping */
+    INSERT INTO dbo.ProductCategoryMap (ProductID, ProductCategoryID)
+    SELECT p.ProductID, c.ProductCategoryID
+    FROM dbo.Products p
+    JOIN dbo.ProductCategories c
+      ON (
+            (p.ProductName LIKE N'%Whey%' AND c.CategoryName = N'Protein')
+         OR (p.ProductName LIKE N'%Creatine%' AND c.CategoryName = N'Creatine')
+         OR ((p.ProductName LIKE N'%Gainer%' OR p.ProductName LIKE N'%Serious Mass%' OR p.ProductName LIKE N'%Weight Gainer%') AND c.CategoryName = N'Mass Gainer')
+         OR (p.ProductName LIKE N'%Pre-Workout%' AND c.CategoryName = N'Pre-workout')
+         OR (p.ProductName LIKE N'BCAA%' AND c.CategoryName = N'BCAA')
+         OR (p.ProductName LIKE N'%Vitamin%' AND c.CategoryName = N'Vitamins')
+      )
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.ProductCategoryMap pcm
+        WHERE pcm.ProductID = p.ProductID
+          AND pcm.ProductCategoryID = c.ProductCategoryID
+    );
+
+    /* Product gallery rows */
+    INSERT INTO dbo.ProductImages (ProductID, ImageUrl, AltText, DisplayOrder, IsPrimary)
+    SELECT p.ProductID, v.ImageUrl, v.AltText, v.DisplayOrder, v.IsPrimary
+    FROM dbo.Products p
+    JOIN (VALUES
+        (N'Creatine Monohydrate', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'Creatine Monohydrate front image', 1, CAST(1 AS BIT)),
+        (N'Whey Protein', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'Whey Protein front image', 1, CAST(1 AS BIT)),
+        (N'Whey Protein', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'Whey Protein serving suggestion', 2, CAST(0 AS BIT)),
+        (N'Whey Protein Isolate - Vanilla', N'https://images.unsplash.com/photo-1579722820308-d74e571900a9?w=500', N'Vanilla whey isolate tub', 1, CAST(1 AS BIT)),
+        (N'Whey Protein Isolate - Vanilla', N'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', N'Vanilla whey isolate scoop view', 2, CAST(0 AS BIT)),
+        (N'Creatine Monohydrate - Micronized', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'Micronized creatine tub', 1, CAST(1 AS BIT)),
+        (N'Creatine Monohydrate - Micronized', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500', N'Micronized creatine powder view', 2, CAST(0 AS BIT)),
+        (N'Mass Gainer - Chocolate Supreme', N'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=500', N'Chocolate mass gainer tub', 1, CAST(1 AS BIT)),
+        (N'Pre-Workout Extreme - Fruit Punch', N'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=500', N'Fruit punch pre-workout jar', 1, CAST(1 AS BIT)),
+        (N'BCAA 2:1:1 - Watermelon', N'https://images.unsplash.com/photo-1534368420702-00fa0cd5a7dc?w=500', N'Watermelon BCAA container', 1, CAST(1 AS BIT)),
+        (N'Multi-Vitamin for Athletes - Tablets', N'https://images.unsplash.com/photo-1622484211126-f3347e0c2d58?w=500', N'Athlete multivitamin bottle', 1, CAST(1 AS BIT))
+    ) AS v(ProductName, ImageUrl, AltText, DisplayOrder, IsPrimary)
+      ON p.ProductName = v.ProductName
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.ProductImages pi
+        WHERE pi.ProductID = p.ProductID
+          AND pi.ImageUrl = v.ImageUrl
+          AND pi.DisplayOrder = v.DisplayOrder
+    );
 
     /* Cart */
     IF NOT EXISTS (SELECT 1 FROM dbo.Carts WHERE CustomerID = @CustomerID)
@@ -712,6 +810,56 @@ BEGIN TRY
         Amount = @OrderTotal
     WHERE OrderID = @OrderID
       AND Status = 'PENDING';
+
+    /*
+      Product review seed for product detail testing:
+      - forces one reusable PAID order path for the seeded customer
+      - makes ProductID 19 reviewable
+      - upserts a visible review for http://localhost:5173/customer/shop/19
+    */
+    IF EXISTS (SELECT 1 FROM dbo.Products WHERE ProductID = 19)
+    BEGIN
+        UPDATE dbo.Orders
+        SET Status = N'PAID'
+        WHERE OrderID = @OrderID;
+
+        UPDATE dbo.Payments
+        SET Status = N'SUCCESS',
+            PayOS_Status = N'SUCCESS'
+        WHERE OrderID = @OrderID;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM dbo.OrderItems
+            WHERE OrderID = @OrderID
+              AND ProductID = 19
+        )
+        BEGIN
+            INSERT INTO dbo.OrderItems (OrderID, ProductID, Quantity, UnitPrice)
+            SELECT @OrderID, p.ProductID, 1, p.Price
+            FROM dbo.Products p
+            WHERE p.ProductID = 19;
+        END;
+
+        MERGE dbo.ProductReviews AS tgt
+        USING (
+            SELECT
+                CAST(19 AS INT) AS ProductID,
+                @CustomerID AS CustomerID,
+                CAST(5 AS TINYINT) AS Rating,
+                N'Good product. Mixes well and feels effective.' AS Comment
+        ) AS src
+          ON tgt.ProductID = src.ProductID
+         AND tgt.CustomerID = src.CustomerID
+        WHEN MATCHED THEN
+            UPDATE SET
+                Rating = src.Rating,
+                Comment = src.Comment,
+                ReviewDate = SYSDATETIME()
+        WHEN NOT MATCHED THEN
+            INSERT (ProductID, CustomerID, Rating, Comment)
+            VALUES (src.ProductID, src.CustomerID, src.Rating, src.Comment);
+    END;
 
     /* Health: enter height/weight, history trigger updates current */
     IF NOT EXISTS (

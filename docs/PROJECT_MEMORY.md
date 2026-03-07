@@ -116,9 +116,11 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Frontend tests run with Vitest (`npm run test:run`).
 - Recent state after major changes was green on both sides.
 
-## 10.1) Latest verified test run (Feb 27, 2026)
-- Backend: `.\mvnw.cmd test` -> passed (`110` tests).
-- Frontend: `npm run test -- --run` -> passed (`14` files, `38` tests).
+## 10.1) Latest verified test run (Mar 8, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`245` tests).
+- Frontend: `npm run lint` -> passed.
+- Frontend: `npm run test:run -- --maxWorkers=1` -> passed (`43` files, `162` tests).
+- Frontend: `npm run build` -> passed.
 
 ## 11) Working principle reminders
 - Keep secrets out of git.
@@ -210,7 +212,8 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - `docs/Usecase functions.txt` and DB docs are aligned on payment channels:
   - Membership checkout channel is PayOS redirect.
   - System payment methods tracked for audit are `PAYOS` and `CASH`.
-  - Product flow remains online checkout + in-store pickup, with no shipping.
+  - Product flow remains online checkout + in-store pickup.
+  - Product orders now also store recipient/shipping-contact snapshot fields for invoice and handoff purposes.
 - `docs/alter.txt` now includes idempotent compatibility migration blocks for:
   - strict membership coach-booking constraint (`CK_MembershipPlans_CoachBookingByType`)
   - day-pass date enforcement trigger (`TRG_CustomerMemberships_ValidateDayPassDate`)
@@ -221,6 +224,72 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   3. `docs/InsertValues.txt`
   4. `docs/InsertTestingValues.txt` (optional)
 
+## 30) Admin backoffice completion (Mar 7, 2026)
+- Admin dashboard at `/admin/dashboard` is now live, not a placeholder.
+- Backend admin service now implements:
+  - `get-dashboard-summary`
+  - `get-revenue-overview`
+- Admin dashboard was later narrowed into an operations page only.
+  - Revenue analytics were removed from dashboard and moved fully into `/admin/reports`.
+  - Dashboard now focuses on:
+    - customers
+    - staff accounts
+    - locked staff
+    - pending PT demand
+    - awaiting pickup
+    - live promotions
+    - recent operational lists
+- Admin reports at `/admin/reports` now own all revenue analytics.
+  - Filter system is mutually exclusive, one active mode at a time:
+    - `Quick range`
+    - `Custom range`
+  - Quick range owns preset windows such as:
+    - `Today`
+    - `7 days`
+    - `30 days`
+  - Reports page now uses one applied filter summary shared by:
+    - KPI totals
+    - main revenue chart
+    - daily breakdown
+    - export
+  - Export format is Excel only (`.xlsx`) and always follows the exact applied filter.
+- Admin users page at `/admin/users` is now a real staff-management surface.
+- Staff management scope is explicit:
+  - manage employee accounts only
+  - supported roles: `ADMIN`, `COACH`, `RECEPTIONIST`
+  - admin-created `CUSTOMER` accounts are forbidden in both UI and backend
+- Admin users backend now supports:
+  - staff list/search/filter
+  - create staff
+  - update staff
+  - lock staff
+  - unlock staff
+- Coach staff creation/edit uses the existing `Coaches` profile model and preserves coach-specific fields.
+- Admin self-protection rules are enforced:
+  - cannot lock self
+  - cannot deactivate self
+  - cannot disable the last active admin
+- Admin CRUD screens now follow a more consistent quality bar:
+  - list/filter controls exist on the main admin management pages (`users`, `memberships`, `products`, `promotions`, `coach management`)
+  - required admin-form inputs use explicit in-app validation/error messages instead of browser-native required-field popups
+
+## 31) Latest verified test run (Mar 8, 2026)
+- Backend: `.\mvnw.cmd test` -> passed (`245` tests, `0` failures, `0` errors).
+- Frontend: `npm run test:run -- --maxWorkers=1` -> passed (`162` tests).
+- Frontend lint: `npm run lint` -> passed.
+- Frontend build: `npm run build` -> passed.
+  - backend validation exceptions are surfaced back into those admin forms with concrete messages
+- Additional release-readiness coverage added for:
+  - backend content placeholder controller/service dispatch
+  - backend PDF revenue report export path
+  - frontend starter pages:
+    - `CustomerKnowledgePage`
+    - `ReceptionCustomersPage`
+    - `AdminCoachInsightsPage`
+  - frontend route guards for:
+    - `/customer/knowledge`
+    - `/reception/customers`
+
 ## 20) Latest verified test run (Mar 1, 2026)
 - Backend: `.\mvnw.cmd test` -> passed (`124` tests, `0` failures, `0` errors).
 - Frontend: `npm run test:run` -> passed (`18` files, `46` tests).
@@ -229,6 +298,68 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - Verifies customer cart header button behavior:
     - shown on `/customer/shop`, click dispatches `gymcore:toggle-cart`
     - hidden outside shop routes.
+
+## 20.1) Planned product shop upgrade (DB first, gym scope)
+- Product redesign scope was narrowed intentionally.
+- The app does not need Amazon/Shopee-level marketplace complexity.
+- Planned schema direction is now:
+  - keep `dbo.Products` as the sellable item
+  - extend products with:
+    - `ShortDescription`
+    - `UsageInstructions`
+    - `ThumbnailUrl`
+  - add:
+    - `dbo.ProductCategories`
+    - `dbo.ProductCategoryMap`
+    - `dbo.ProductImages`
+- Product categories should stay practical for a gym supplement shop:
+  - Protein
+  - Creatine
+  - Mass Gainer
+  - Pre-workout
+  - BCAA
+  - Vitamins
+- Planned UX direction:
+  - customer shop should be image-first with simple category filters and rating summary
+  - product detail should show gallery, description, usage instructions, and reviews
+  - admin product management should focus on thumbnail/gallery, price, category, and active/archive controls
+  - customer reviews should later be reachable from both product detail and order history
+- Important rollout rule:
+  - DB-first change was completed before backend/frontend implementation.
+
+## 20.2) Product shop upgrade implemented (Mar 7, 2026)
+- The simplified gym-shop catalog is now implemented against the upgraded product schema.
+- Customer shop now supports:
+  - image-first product cards
+  - category filters
+  - richer product detail with gallery + usage instructions
+  - pickup-oriented buying history with order IDs
+  - review entry from order history for purchased products
+- Admin product management now supports:
+  - left sidebar admin shell
+  - richer create/edit form
+  - category assignment
+  - image gallery editing with one primary image
+  - archive action instead of hard delete
+- Backend product flow now supports:
+  - richer admin product payloads
+  - archive endpoint for admin products
+- Customer order history is now exposed in the profile dropdown as `Order history`.
+
+## 20.3) Latest verification snapshot (Mar 7, 2026)
+- Frontend:
+  - `npm run lint` -> passed
+  - `npm run test:run -- --maxWorkers=1` -> passed (`32` files, `107` tests)
+  - `npm run build` -> passed
+- Backend:
+  - focused regression passed for changed product classes:
+    - `ProductSalesServiceCheckoutTest`
+    - `OrderInvoiceServiceTest`
+    - `ProductSalesServiceAdminCatalogTest`
+    - `ProductSalesControllerTest`
+- Full backend Maven suite could not be completed on this machine in this run because the JVM hit native memory allocation failure before the test phase.
+  - DB docs/migrations/seeds must be updated first
+  - backend/frontend coding should start only after that schema is rerun locally
 
 ## 25) PT duplicate-booking guard (Mar 2, 2026)
 - `backend/src/main/java/com/gymcore/backend/modules/coach/service/CoachBookingService.java` now blocks:
@@ -258,6 +389,30 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - `PATCH /api/v1/notifications/{id}/read`
   - `PATCH /api/v1/notifications/{id}/unread`
   - `PATCH /api/v1/notifications/read-all`
+
+## 28) Selective merge planning for `origin/feature/coupon` (Mar 7, 2026)
+- Current branch remains source of truth for:
+  - membership flow
+  - PT booking flow
+  - notifications
+  - explicit coupon target model (`ApplyTarget`, `BonusDurationMonths`, `PromotionPosts`)
+- Useful additive delta identified on `origin/feature/coupon`:
+  - product order shipping snapshot fields on `Orders`
+  - `OrderInvoices`
+  - `OrderInvoiceItems`
+  - backend/frontend admin invoice center
+- Merge strategy is selective, not branch-wide:
+  - ignore env/template file changes
+  - ignore branch-side promotion simplification that would weaken current promotion-post flow
+  - port invoice/shipping logic manually onto current code
+- Additive DB script for this merge lives at:
+  - folded into `docs/alter.txt`
+- The selective merge has now been implemented on the main branch:
+  - `Orders` stores recipient/shipping snapshot fields
+  - successful paid product orders generate `OrderInvoices` and `OrderInvoiceItems`
+  - invoice email sending is handled by backend after successful product payment confirmation
+  - admin and receptionist can review invoices from dedicated invoice-center pages
+  - product checkout remains pickup-only even though invoice/contact snapshot fields are stored
 - Frontend notification UX now includes:
   - header bell dropdown with recent alerts
   - dedicated `/notifications` page
@@ -353,3 +508,31 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - 3-column structure (brand, contact, quick links)
   - gradient background and cleaner spacing/typography
   - concise operational info and pickup note in footer bottom row.
+
+## 20.3) Product pickup + review management upgrade (Mar 7, 2026)
+- Product invoice center now supports receptionist/admin pickup confirmation.
+- A dedicated receptionist pickup page now exists at `/reception/pickup` for fast front-desk order handoff.
+- Pickup state is tracked on `OrderInvoices` via:
+  - `PickedUpAt`
+  - `PickedUpByUserID`
+- Customer order history is now a fuller purchase-history screen with:
+  - search
+  - pickup status
+  - receipt email state
+  - invoice code
+  - payment timestamp
+  - product deep links back to shop detail
+- Customer product reviews now support full self-service lifecycle:
+  - create
+  - update
+  - delete
+- Review management is available from both:
+  - product detail page
+  - customer order history page
+- Admin product gallery entry no longer depends on raw image URLs in the UI.
+  - Admin uploads image files and the backend stores them under `/uploads/products/...`.
+- Admin catalog now includes:
+  - status/category/review filters
+  - archive/restore actions
+  - gallery reorder/remove
+  - conservative file cleanup for removed managed uploads
