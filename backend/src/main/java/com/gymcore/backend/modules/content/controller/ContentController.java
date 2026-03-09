@@ -2,6 +2,7 @@ package com.gymcore.backend.modules.content.controller;
 
 import com.gymcore.backend.common.api.ApiResponse;
 import com.gymcore.backend.modules.content.service.ContentService;
+import com.gymcore.backend.modules.content.service.GeminiChatService;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ContentController {
 
     private final ContentService contentService;
+    private final GeminiChatService geminiChatService;
 
-    public ContentController(ContentService contentService) {
+    public ContentController(ContentService contentService, GeminiChatService geminiChatService) {
         this.contentService = contentService;
+        this.geminiChatService = geminiChatService;
     }
 
     @GetMapping("/workouts/categories")
@@ -76,5 +79,21 @@ public class ContentController {
     public ApiResponse<Map<String, Object>> getAiRecommendations(@RequestBody Map<String, Object> payload) {
         return ApiResponse.ok("AI recommendations endpoint ready for implementation",
                 contentService.execute("ai-recommendations", payload));
+    }
+
+    @PostMapping("/ai/chat")
+    public ApiResponse<Map<String, Object>> chat(@RequestBody Map<String, Object> payload) {
+        Object rawMessages = payload == null ? null : payload.get("messages");
+        Object rawContext = payload == null ? null : payload.get("context");
+        @SuppressWarnings("unchecked")
+        java.util.List<java.util.Map<String, Object>> messages = rawMessages instanceof java.util.List<?> list
+                ? (java.util.List<java.util.Map<String, Object>>) list
+                : java.util.List.of();
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> context = rawContext instanceof java.util.Map<?, ?> map
+                ? (java.util.Map<String, Object>) map
+                : java.util.Map.of();
+        String reply = geminiChatService.chat(messages, context);
+        return ApiResponse.ok("AI chat response generated", java.util.Map.of("reply", reply));
     }
 }

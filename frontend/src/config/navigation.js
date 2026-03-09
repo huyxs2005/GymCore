@@ -26,6 +26,8 @@ export const adminNav = [
   { to: '/admin/memberships', label: 'Memberships' },
   { to: '/admin/coach-management', label: 'Coach Management' },
   { to: '/admin/products', label: 'Products' },
+  { to: '/admin/workouts', label: 'Workouts' },
+  { to: '/admin/foods', label: 'Foods' },
   { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/promotions', label: 'Promotions' },
   { to: '/admin/reports', label: 'Reports' },

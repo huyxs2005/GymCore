@@ -5,19 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 class ContentServiceTest {
 
-    private final ContentService contentService = new ContentService();
-
     @Test
     void execute_shouldReturnNotImplementedForUnsupportedAction() {
+        ContentService contentService = new ContentService(org.mockito.Mockito.mock(JdbcTemplate.class));
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
-                () -> contentService.execute("get-workouts", null));
+                () -> contentService.execute("unsupported-action", null));
 
         assertEquals(HttpStatus.NOT_IMPLEMENTED, exception.getStatusCode());
-        assertEquals("Unsupported content action: get-workouts", exception.getReason());
+        assertEquals("Unsupported content action: unsupported-action", exception.getReason());
     }
 }

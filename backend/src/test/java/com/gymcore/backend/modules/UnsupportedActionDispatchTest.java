@@ -53,7 +53,7 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void contentService_shouldRejectUnsupportedAction() {
-        ContentService service = new ContentService();
+        ContentService service = new ContentService(jdbcTemplate);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));

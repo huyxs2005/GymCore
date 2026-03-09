@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, Clock3, Dumbbell, MapPin, Phone, ShoppingCart } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -92,6 +92,10 @@ function AppShell({ children }) {
   const headerLinks = workspaceLinks.length > 0 ? workspaceLinks : (isAuthenticated && shouldUseRoleHeader(pathname) ? roleLinks : [])
   const showWorkspaceNav = headerLinks.length > 0
   const showShopCartButton = isAuthenticated && userRole === 'CUSTOMER'
+  const desktopNavRef = useRef(null)
+  const mobileNavRef = useRef(null)
+  const desktopDragRef = useRef({ active: false, startX: 0, scrollLeft: 0 })
+  const mobileDragRef = useRef({ active: false, startX: 0, scrollLeft: 0 })
 
   function jumpToTop() {
     window.scrollTo(0, 0)
@@ -109,6 +113,60 @@ function AppShell({ children }) {
     jumpToTop()
   }
 
+  const onDesktopMouseDown = (event) => {
+    if (event.button !== 0) return
+    const el = desktopNavRef.current
+    if (!el) return
+    desktopDragRef.current.active = true
+    desktopDragRef.current.startX = event.pageX - el.offsetLeft
+    desktopDragRef.current.scrollLeft = el.scrollLeft
+    event.preventDefault()
+  }
+
+  const onDesktopMouseUp = () => {
+    desktopDragRef.current.active = false
+  }
+
+  const onDesktopMouseLeave = () => {
+    desktopDragRef.current.active = false
+  }
+
+  const onDesktopMouseMove = (event) => {
+    if (!desktopDragRef.current.active) return
+    const el = desktopNavRef.current
+    if (!el) return
+    const x = event.pageX - el.offsetLeft
+    const walk = x - desktopDragRef.current.startX
+    el.scrollLeft = desktopDragRef.current.scrollLeft - walk
+  }
+
+  const onMobileMouseDown = (event) => {
+    if (event.button !== 0) return
+    const el = mobileNavRef.current
+    if (!el) return
+    mobileDragRef.current.active = true
+    mobileDragRef.current.startX = event.pageX - el.offsetLeft
+    mobileDragRef.current.scrollLeft = el.scrollLeft
+    event.preventDefault()
+  }
+
+  const onMobileMouseUp = () => {
+    mobileDragRef.current.active = false
+  }
+
+  const onMobileMouseLeave = () => {
+    mobileDragRef.current.active = false
+  }
+
+  const onMobileMouseMove = (event) => {
+    if (!mobileDragRef.current.active) return
+    const el = mobileNavRef.current
+    if (!el) return
+    const x = event.pageX - el.offsetLeft
+    const walk = x - mobileDragRef.current.startX
+    el.scrollLeft = mobileDragRef.current.scrollLeft - walk
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -122,7 +180,15 @@ function AppShell({ children }) {
 
           <div className="flex items-center gap-3">
             {showWorkspaceNav && (
-              <nav className="hidden flex-wrap items-center gap-3 text-xs font-medium sm:flex sm:text-sm">
+              <nav
+                ref={desktopNavRef}
+                className="gc-scrollbar-hidden hidden max-w-[60vw] select-none items-center gap-3 overflow-x-auto whitespace-nowrap text-xs font-medium sm:flex sm:flex-nowrap sm:text-sm"
+                onMouseDown={onDesktopMouseDown}
+                onMouseUp={onDesktopMouseUp}
+                onMouseLeave={onDesktopMouseLeave}
+                onMouseMove={onDesktopMouseMove}
+                aria-label="Workspace navigation"
+              >
                 {headerLinks.map((link) => (
                   <NavLink
                     key={link.to}
@@ -153,7 +219,15 @@ function AppShell({ children }) {
         </div>
         {showWorkspaceNav && (
           <div className="mx-auto max-w-7xl px-4 pb-3 sm:hidden sm:px-6">
-            <nav className="flex flex-wrap gap-2 text-xs font-medium">
+            <nav
+              ref={mobileNavRef}
+              className="gc-scrollbar-hidden flex select-none flex-nowrap gap-2 overflow-x-auto whitespace-nowrap text-xs font-medium"
+              onMouseDown={onMobileMouseDown}
+              onMouseUp={onMobileMouseUp}
+              onMouseLeave={onMobileMouseLeave}
+              onMouseMove={onMobileMouseMove}
+              aria-label="Workspace navigation"
+            >
               {headerLinks.map((link) => (
                 <NavLink
                   key={link.to}

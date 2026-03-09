@@ -31,6 +31,8 @@ const AdminMembershipsPage = lazy(() => import('../pages/admin/AdminMembershipsP
 const AdminCoachManagementPage = lazy(() => import('../pages/admin/AdminCoachManagementPage'))
 const CoachBookingManagementPage = lazy(() => import('../pages/coach/CoachBookingManagementPage'))
 const AdminProductsPage = lazy(() => import('../pages/admin/AdminProductsPage'))
+const AdminWorkoutsPage = lazy(() => import('../pages/admin/AdminWorkoutsPage'))
+const AdminFoodsPage = lazy(() => import('../pages/admin/AdminFoodsPage'))
 const AdminInvoicesPage = lazy(() => import('../pages/admin/AdminInvoicesPage'))
 const AdminPromotionsPage = lazy(() => import('../pages/admin/AdminPromotionsPage'))
 const AdminReportsPage = lazy(() => import('../pages/admin/AdminReportsPage'))
@@ -109,6 +111,8 @@ function AppRouter() {
         <Route path="/admin/memberships" element={withRole(['ADMIN'], <AdminMembershipsPage />)} />
         <Route path="/admin/coach-management" element={withRole(['ADMIN'], <AdminCoachManagementPage />)} />
         <Route path="/admin/products" element={withRole(['ADMIN'], <AdminProductsPage />)} />
+        <Route path="/admin/workouts" element={withRole(['ADMIN'], <AdminWorkoutsPage />)} />
+        <Route path="/admin/foods" element={withRole(['ADMIN'], <AdminFoodsPage />)} />
         <Route path="/admin/invoices" element={withRole(['ADMIN'], <AdminInvoicesPage />)} />
         <Route path="/admin/promotions" element={withRole(['ADMIN'], <AdminPromotionsPage />)} />
         <Route path="/admin/reports" element={withRole(['ADMIN'], <AdminReportsPage />)} />

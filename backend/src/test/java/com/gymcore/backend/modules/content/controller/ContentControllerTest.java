@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.gymcore.backend.common.api.ApiResponse;
 import com.gymcore.backend.modules.content.service.ContentService;
+import com.gymcore.backend.modules.content.service.GeminiChatService;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,12 +15,14 @@ import org.mockito.Mockito;
 class ContentControllerTest {
 
     private ContentService contentService;
+    private GeminiChatService geminiChatService;
     private ContentController controller;
 
     @BeforeEach
     void setUp() {
         contentService = Mockito.mock(ContentService.class);
-        controller = new ContentController(contentService);
+        geminiChatService = Mockito.mock(GeminiChatService.class);
+        controller = new ContentController(contentService, geminiChatService);
     }
 
     @Test
