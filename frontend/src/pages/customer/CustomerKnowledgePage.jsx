@@ -1,10 +1,20 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { foodApi } from '../../features/content/api/foodApi'
 import { workoutApi } from '../../features/content/api/workoutApi'
 import AiChatWidget from '../../components/common/AiChatWidget'
+import { aiApi } from '../../features/content/api/aiApi'
+
+const FOOD_PERSONALIZATION_TAGS = [
+  { id: 'HIGH_PROTEIN', label: 'Dam cao' },
+  { id: 'LOW_CARB', label: 'Carb thap' },
+  { id: 'HIGH_CARB', label: 'Carb cao' },
+  { id: 'LOW_FAT', label: 'Beo thap' },
+  { id: 'LOW_CALORIE', label: 'It calories' },
+  { id: 'BALANCED', label: 'Can bang macro' },
+]
 
 function toYouTubeEmbedUrl(rawUrl) {
   if (!rawUrl) return null
@@ -58,6 +68,12 @@ function CustomerKnowledgePage() {
   const [foodCategoryId, setFoodCategoryId] = useState('ALL')
   const [foodSearch, setFoodSearch] = useState('')
   const [selectedFoodId, setSelectedFoodId] = useState(null)
+  const [selectedFoodTags, setSelectedFoodTags] = useState([])
+  const [foodAiAnswers, setFoodAiAnswers] = useState({
+    goal: '',
+    mealTime: '',
+    avoid: '',
+  })
 
   const workoutsQuery = useQuery({
     queryKey: ['content', 'workouts'],
@@ -79,6 +95,10 @@ function CustomerKnowledgePage() {
     queryKey: ['content', 'food', selectedFoodId],
     queryFn: () => foodApi.getFoodDetail(selectedFoodId),
     enabled: Boolean(selectedFoodId),
+  })
+
+  const personalizedFoodMutation = useMutation({
+    mutationFn: aiApi.getPersonalizedFoodRecommendations,
   })
 
   const workouts = useMemo(() => workoutsQuery.data?.items ?? [], [workoutsQuery.data])
@@ -113,6 +133,25 @@ function CustomerKnowledgePage() {
       return haystack.includes(normalizedFoodSearch)
     })
   }, [foodCategoryId, foods, normalizedFoodSearch])
+
+  const personalizedFoods = useMemo(
+    () => personalizedFoodMutation.data?.foods ?? [],
+    [personalizedFoodMutation.data],
+  )
+
+  const toggleFoodTag = (tagId) => {
+    setSelectedFoodTags((prev) =>
+      prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId],
+    )
+  }
+
+  const requestPersonalizedFoods = () => {
+    personalizedFoodMutation.mutate({
+      tags: selectedFoodTags,
+      answers: foodAiAnswers,
+      limitFoods: 6,
+    })
+  }
 
   return (
     <WorkspaceScaffold
@@ -335,6 +374,120 @@ function CustomerKnowledgePage() {
                   {category.name}
                 </button>
               ))}
+            </div>
+
+            <div className="rounded-3xl border border-gym-100 bg-gym-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gym-700">AI personalized foods</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Chon nhan macro + tra loi nhanh de AI de xuat mon an phu hop tu database.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={requestPersonalizedFoods}
+                  disabled={personalizedFoodMutation.isPending}
+                  className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {personalizedFoodMutation.isPending ? 'Dang phan tich...' : 'Goi y Food cho toi'}
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {FOOD_PERSONALIZATION_TAGS.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleFoodTag(tag.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      selectedFoodTags.includes(tag.id)
+                        ? 'bg-gym-600 text-white'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {tag.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Muc tieu</span>
+                  <select
+                    value={foodAiAnswers.goal}
+                    onChange={(event) => setFoodAiAnswers((prev) => ({ ...prev, goal: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-gym-500"
+                  >
+                    <option value="">Chon muc tieu</option>
+                    <option value="Giam mo">Giam mo</option>
+                    <option value="Tang co">Tang co</option>
+                    <option value="Giu dang">Giu dang</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Khung bua an</span>
+                  <select
+                    value={foodAiAnswers.mealTime}
+                    onChange={(event) => setFoodAiAnswers((prev) => ({ ...prev, mealTime: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-gym-500"
+                  >
+                    <option value="">Chon bua</option>
+                    <option value="Truoc tap">Truoc tap</option>
+                    <option value="Sau tap">Sau tap</option>
+                    <option value="Bua chinh">Bua chinh</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Muon tranh</span>
+                  <input
+                    value={foodAiAnswers.avoid}
+                    onChange={(event) => setFoodAiAnswers((prev) => ({ ...prev, avoid: event.target.value }))}
+                    placeholder="vd: sua, hai san..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-gym-500"
+                  />
+                </label>
+              </div>
+
+              {personalizedFoodMutation.isError ? (
+                <p className="mt-3 text-sm text-rose-600">Khong the lay goi y ca nhan hoa luc nay.</p>
+              ) : null}
+
+              {personalizedFoodMutation.data?.summary ? (
+                <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700">
+                  {personalizedFoodMutation.data.summary}
+                </p>
+              ) : null}
+
+              {(personalizedFoodMutation.data?.followUpQuestions || []).length ? (
+                <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cau hoi goi y tiep</p>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                    {(personalizedFoodMutation.data?.followUpQuestions || []).map((question) => (
+                      <li key={question.id}>- {question.question}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {personalizedFoods.length ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {personalizedFoods.map((food) => (
+                    <button
+                      key={`ai-food-${food.foodId}`}
+                      type="button"
+                      onClick={() => setSelectedFoodId(food.foodId)}
+                      className="rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-gym-300"
+                    >
+                      <p className="text-sm font-semibold text-slate-900">{food.name}</p>
+                      <p className="mt-1 text-xs text-slate-500">Match score: {food.matchScore ?? '-'}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-600">{(food.matchReasons || []).join(' • ')}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             {foodsQuery.isLoading ? <p className="text-sm text-slate-500">Loading foods...</p> : null}

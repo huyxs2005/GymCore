@@ -81,6 +81,12 @@ public class ContentController {
                 contentService.execute("ai-recommendations", payload));
     }
 
+    @PostMapping("/ai/food-personalized")
+    public ApiResponse<Map<String, Object>> getPersonalizedFoodRecommendations(@RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Personalized food recommendations generated",
+                contentService.execute("ai-food-personalized", payload));
+    }
+
     @PostMapping("/ai/chat")
     public ApiResponse<Map<String, Object>> chat(@RequestBody Map<String, Object> payload) {
         Object rawMessages = payload == null ? null : payload.get("messages");

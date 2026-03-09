@@ -25,6 +25,7 @@ vi.mock('../../features/content/api/foodApi', () => ({
 vi.mock('../../features/content/api/aiApi', () => ({
   aiApi: {
     getRecommendations: vi.fn(() => Promise.resolve({ workouts: [], foods: [] })),
+    getPersonalizedFoodRecommendations: vi.fn(() => Promise.resolve({ foods: [], followUpQuestions: [] })),
   },
 }))
 
@@ -50,6 +51,5 @@ describe('CustomerKnowledgePage', () => {
     expect(screen.getByText('Knowledge & AI')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Workouts' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Foods' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'AI Recommendations' })).toBeInTheDocument()
   })
 })

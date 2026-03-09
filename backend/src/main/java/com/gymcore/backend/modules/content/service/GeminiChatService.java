@@ -7,6 +7,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -21,17 +24,20 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class GeminiChatService {
 
     private final RestTemplate restTemplate;
+    private static final Logger log = LoggerFactory.getLogger(GeminiChatService.class);
     private static final Pattern RETRY_DELAY_SECONDS_PATTERN = Pattern.compile("\"retryDelay\"\\s*:\\s*\"(\\d+)s\"");
     private static final Pattern RETRY_HINT_SECONDS_PATTERN = Pattern.compile("Please\\s+retry\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)s", Pattern.CASE_INSENSITIVE);
 
     @Value("${app.ai.gemini.api-key:}")
     private String apiKey;
 
-    @Value("${app.ai.gemini.model:gemini-1.5-flash}")
+    @Value("${app.ai.gemini.model:gemini-2.5-flash}")
     private String model;
 
     public GeminiChatService(RestTemplate restTemplate) {
@@ -44,7 +50,10 @@ public class GeminiChatService {
                     "AI chat is not configured on the server.");
         }
 
-        String preferredModel = StringUtils.hasText(model) ? model.trim() : "gemini-1.5-pro";
+        String preferredModel = StringUtils.hasText(model) ? model.trim() : "gemini-2.5-flash";
+        // Helpful debug: show effective model and whether env overrides exist (do NOT log apiKey).
+        log.info("Gemini effective model='{}' (APP_AI_GEMINI_MODEL='{}')",
+                preferredModel, String.valueOf(System.getenv("APP_AI_GEMINI_MODEL")));
         Map<String, Object> body = buildRequestBody(messages, context);
 
         try {
@@ -59,7 +68,7 @@ public class GeminiChatService {
                     return callGenerateContent(fallback.get(), body);
                 }
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                        "Configured AI model is incompatible with generateContent. Update APP_AI_GEMINI_MODEL to a supported model (e.g. gemini-1.5-pro).");
+                        "Configured AI model is incompatible with generateContent. Update APP_AI_GEMINI_MODEL to a supported model (e.g. gemini-2.5-flash).");
             }
             throw badRequest;
         } catch (HttpClientErrorException.NotFound notFound) {
@@ -118,6 +127,7 @@ public class GeminiChatService {
 
     @SuppressWarnings("rawtypes")
     private String callGenerateContent(String resolvedModel, Map<String, Object> body) {
+        log.info("Calling Gemini generateContent with model='{}'", resolvedModel);
         String url = UriComponentsBuilder
                 .fromUriString("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent")
                 .queryParam("key", apiKey.trim())
@@ -139,46 +149,87 @@ public class GeminiChatService {
     private Optional<String> discoverFallbackModel() {
         try {
             String listUrl = UriComponentsBuilder
-                    .fromUriString("https://generativelanguage.googleapis.com/v1beta/models")
+                    .fromUriString("https://generativelanguage.googleapis.com/v1/models")
                     .queryParam("key", apiKey.trim())
                     .toUriString();
-
-            ResponseEntity<Map> response = restTemplate.exchange(listUrl, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), Map.class);
+    
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    listUrl,
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders()),
+                    Map.class
+            );
+    
             Map body = response.getBody();
             if (body == null) return Optional.empty();
+    
             Object modelsObj = body.get("models");
-            if (!(modelsObj instanceof List<?> models) || models.isEmpty()) return Optional.empty();
-
-            String best = null;
+            if (!(modelsObj instanceof List<?> models) || models.isEmpty()) {
+                return Optional.empty();
+            }
+    
+            List<String> candidates = new ArrayList<>();
+    
             for (Object modelObj : models) {
                 if (!(modelObj instanceof Map<?, ?> modelMap)) continue;
-                Object nameObj = modelMap.get("name"); // "models/gemini-2.0-flash"
+    
+                Object nameObj = modelMap.get("name");
                 if (nameObj == null) continue;
+    
                 String name = String.valueOf(nameObj).trim();
                 if (!name.startsWith("models/")) continue;
+    
                 String id = name.substring("models/".length());
-
-                Object methodsObj = modelMap.get("supportedGenerationMethods");
-                boolean supportsGenerate = methodsObj instanceof List<?> list
-                        && list.stream().anyMatch(v -> "generateContent".equalsIgnoreCase(String.valueOf(v)));
-                if (!supportsGenerate) continue;
-
-                if (best == null) best = id;
                 String lower = id.toLowerCase();
-
-                // Prefer 1.5 pro if present; then any pro; then flash.
-                if (lower.contains("1.5") && lower.contains("pro")) {
-                    best = id;
-                    break;
-                }
-                if (lower.contains("pro")) {
-                    best = id;
-                } else if (best == null && lower.contains("flash")) {
-                    best = id;
+    
+                // ---- HARD FILTER ----
+                if (!lower.startsWith("gemini-")) continue;
+                if (lower.contains("image")) continue;
+                if (lower.contains("vision")) continue;
+                if (lower.contains("preview")) continue;
+                if (lower.contains("research")) continue;
+                if (lower.contains("embedding")) continue;
+    
+                // ---- CHECK API SUPPORT ----
+                Object methodsObj = modelMap.get("supportedGenerationMethods");
+                boolean supportsGenerate =
+                        methodsObj instanceof List<?> list &&
+                        list.stream().anyMatch(v ->
+                                "generateContent".equalsIgnoreCase(String.valueOf(v)));
+    
+                if (!supportsGenerate) continue;
+    
+                candidates.add(id);
+            }
+    
+            if (candidates.isEmpty()) {
+                return Optional.empty();
+            }
+    
+            // ---- PRIORITY ORDER ----
+            List<String> priority = List.of(
+                    "gemini-2.5-flash",
+                    "gemini-2.0-flash",
+                    "gemini-1.5-pro",
+                    "gemini-1.5-flash"
+            );
+    
+            for (String preferred : priority) {
+                for (String model : candidates) {
+                    if (model.equalsIgnoreCase(preferred)) {
+                        log.info("Gemini fallback model selected='{}'", model);
+                        return Optional.of(model);
+                    }
                 }
             }
-            return Optional.ofNullable(best);
-        } catch (RuntimeException ignored) {
+    
+            // If none matched priority, use first safe candidate
+            String fallback = candidates.get(0);
+            log.info("Gemini fallback model selected='{}'", fallback);
+            return Optional.of(fallback);
+    
+        } catch (Exception ex) {
+            log.warn("Failed to discover Gemini fallback model: {}", ex.getMessage());
             return Optional.empty();
         }
     }
@@ -222,6 +273,12 @@ public class GeminiChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Messages are required.");
         }
         return contents;
+    }
+    @PostConstruct
+    public void debugGemini() {
+        log.info("Gemini initialized. model='{}', apiKeyConfigured={}",
+                String.valueOf(model),
+                StringUtils.hasText(apiKey));
     }
 
     @SuppressWarnings("rawtypes")
