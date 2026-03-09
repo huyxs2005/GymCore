@@ -7,4 +7,7 @@ export const aiApi = {
   getRecommendations(payload) {
     return apiClient.post('/v1/ai/recommendations', payload).then((response) => response.data?.data ?? response.data)
   },
+  getPersonalizedFoodRecommendations(payload) {
+    return apiClient.post('/v1/ai/food-personalized', payload).then((response) => response.data?.data ?? response.data)
+  },
 }
