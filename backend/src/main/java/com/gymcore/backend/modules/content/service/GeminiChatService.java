@@ -44,11 +44,24 @@ public class GeminiChatService {
                     "AI chat is not configured on the server.");
         }
 
-        String preferredModel = StringUtils.hasText(model) ? model.trim() : "gemini-2.0-flash";
+        String preferredModel = StringUtils.hasText(model) ? model.trim() : "gemini-1.5-pro";
         Map<String, Object> body = buildRequestBody(messages, context);
 
         try {
             return callGenerateContent(preferredModel, body);
+        } catch (HttpClientErrorException.BadRequest badRequest) {
+            // Some models (e.g. "deep-research-*") do not support generateContent.
+            // If configured model is incompatible, fall back to a supported model.
+            String errorBody = badRequest.getResponseBodyAsString();
+            if (StringUtils.hasText(errorBody) && errorBody.toLowerCase().contains("interactions api")) {
+                Optional<String> fallback = discoverFallbackModel();
+                if (fallback.isPresent() && !fallback.get().equalsIgnoreCase(preferredModel)) {
+                    return callGenerateContent(fallback.get(), body);
+                }
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "Configured AI model is incompatible with generateContent. Update APP_AI_GEMINI_MODEL to a supported model (e.g. gemini-1.5-pro).");
+            }
+            throw badRequest;
         } catch (HttpClientErrorException.NotFound notFound) {
             Optional<String> fallback = discoverFallbackModel();
             if (fallback.isPresent() && !fallback.get().equalsIgnoreCase(preferredModel)) {
@@ -151,9 +164,17 @@ public class GeminiChatService {
                 if (!supportsGenerate) continue;
 
                 if (best == null) best = id;
-                if (id.toLowerCase().contains("flash")) {
+                String lower = id.toLowerCase();
+
+                // Prefer 1.5 pro if present; then any pro; then flash.
+                if (lower.contains("1.5") && lower.contains("pro")) {
                     best = id;
-                    if (id.toLowerCase().contains("2.0")) break;
+                    break;
+                }
+                if (lower.contains("pro")) {
+                    best = id;
+                } else if (best == null && lower.contains("flash")) {
+                    best = id;
                 }
             }
             return Optional.ofNullable(best);
