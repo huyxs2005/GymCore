@@ -17,6 +17,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpClientErrorException;
@@ -30,6 +31,7 @@ import jakarta.annotation.PostConstruct;
 public class GeminiChatService {
 
     private final RestTemplate restTemplate;
+    private final JdbcTemplate jdbcTemplate;
     private static final Logger log = LoggerFactory.getLogger(GeminiChatService.class);
     private static final Pattern RETRY_DELAY_SECONDS_PATTERN = Pattern.compile("\"retryDelay\"\\s*:\\s*\"(\\d+)s\"");
     private static final Pattern RETRY_HINT_SECONDS_PATTERN = Pattern.compile("Please\\s+retry\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)s", Pattern.CASE_INSENSITIVE);
@@ -40,8 +42,9 @@ public class GeminiChatService {
     @Value("${app.ai.gemini.model:gemini-2.5-flash}")
     private String model;
 
-    public GeminiChatService(RestTemplate restTemplate) {
+    public GeminiChatService(RestTemplate restTemplate, JdbcTemplate jdbcTemplate) {
         this.restTemplate = restTemplate;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public String chat(List<Map<String, Object>> messages, Map<String, Object> context) {
@@ -115,9 +118,10 @@ public class GeminiChatService {
 
     private Map<String, Object> buildRequestBody(List<Map<String, Object>> messages, Map<String, Object> context) {
         Map<String, Object> body = new LinkedHashMap<>();
+        String foodCatalog = buildFoodCatalogContext();
         body.put("systemInstruction", Map.of(
                 "parts", List.of(Map.of("text",
-                        buildSystemInstruction(context)))));
+                        buildSystemInstruction(context, foodCatalog)))));
         body.put("contents", mapMessages(messages));
         body.put("generationConfig", Map.of(
                 "temperature", 0.6,
@@ -215,10 +219,10 @@ public class GeminiChatService {
             );
     
             for (String preferred : priority) {
-                for (String model : candidates) {
-                    if (model.equalsIgnoreCase(preferred)) {
-                        log.info("Gemini fallback model selected='{}'", model);
-                        return Optional.of(model);
+                for (String candidateModel : candidates) {
+                    if (candidateModel.equalsIgnoreCase(preferred)) {
+                        log.info("Gemini fallback model selected='{}'", candidateModel);
+                        return Optional.of(candidateModel);
                     }
                 }
             }
@@ -228,13 +232,13 @@ public class GeminiChatService {
             log.info("Gemini fallback model selected='{}'", fallback);
             return Optional.of(fallback);
     
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             log.warn("Failed to discover Gemini fallback model: {}", ex.getMessage());
             return Optional.empty();
         }
     }
 
-    private String buildSystemInstruction(Map<String, Object> context) {
+    private String buildSystemInstruction(Map<String, Object> context, String foodCatalog) {
         String mode = context == null ? "" : String.valueOf(context.getOrDefault("mode", "")).trim();
         return """
                 You are GymCore AI assistant.
@@ -242,9 +246,65 @@ public class GeminiChatService {
                 Respond in Vietnamese. Be concise and practical.
                 Scope: workouts, foods, basic fitness guidance.
                 If user asks for medical advice, respond with general guidance and advise consulting a professional.
+                
+                IMPORTANT FOOD CONSTRAINT:
+                - When suggesting foods, you MUST ONLY recommend food names from the allowed catalog below.
+                - Do NOT invent new food names.
+                - If no suitable item exists in the catalog, clearly say no suitable database food was found.
+                - Prefer answers in bullet points with exact food names.
 
                 Current screen: %s
-                """.formatted(mode);
+                
+                Allowed food catalog from database:
+                %s
+                """.formatted(mode, foodCatalog);
+    }
+
+    private String buildFoodCatalogContext() {
+        try {
+            List<Map<String, Object>> foods = jdbcTemplate.query("""
+                    SELECT TOP (80) f.FoodName,
+                           f.Calories,
+                           f.Protein,
+                           f.Carbs,
+                           f.Fat
+                    FROM dbo.Foods f
+                    WHERE f.IsActive = 1
+                    ORDER BY f.CreatedAt DESC, f.FoodName
+                    """, (rs, rowNum) -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("name", rs.getString("FoodName"));
+                row.put("calories", rs.getObject("Calories"));
+                row.put("protein", rs.getObject("Protein"));
+                row.put("carbs", rs.getObject("Carbs"));
+                row.put("fat", rs.getObject("Fat"));
+                return row;
+            });
+            if (foods.isEmpty()) return "- No active foods in database.";
+
+            StringBuilder builder = new StringBuilder();
+            for (Map<String, Object> food : foods) {
+                String name = String.valueOf(food.getOrDefault("name", "")).trim();
+                if (!StringUtils.hasText(name)) continue;
+                builder.append("- ").append(name)
+                        .append(" | Cal: ").append(formatNumber(food.get("calories")))
+                        .append(" | P: ").append(formatNumber(food.get("protein")))
+                        .append(" | C: ").append(formatNumber(food.get("carbs")))
+                        .append(" | F: ").append(formatNumber(food.get("fat")))
+                        .append('\n');
+            }
+            String text = builder.toString().trim();
+            return text.isEmpty() ? "- No active foods in database." : text;
+        } catch (RuntimeException exception) {
+            log.warn("Failed to build food catalog context: {}", exception.getMessage());
+            return "- Food catalog is temporarily unavailable.";
+        }
+    }
+
+    private static String formatNumber(Object value) {
+        if (value == null) return "-";
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? "-" : text;
     }
 
     private List<Map<String, Object>> mapMessages(List<Map<String, Object>> messages) {
