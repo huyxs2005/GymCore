@@ -182,7 +182,7 @@ function AppShell({ children }) {
             {showWorkspaceNav && (
               <nav
                 ref={desktopNavRef}
-                className="gc-scrollbar-hidden hidden max-w-[60vw] select-none items-center gap-3 overflow-x-auto whitespace-nowrap text-xs font-medium sm:flex sm:flex-nowrap sm:text-sm"
+                className="gc-scrollbar-hidden hidden max-w-[74vw] select-none items-center gap-2 overflow-x-auto whitespace-nowrap text-xs font-medium sm:flex sm:flex-nowrap sm:text-sm"
                 onMouseDown={onDesktopMouseDown}
                 onMouseUp={onDesktopMouseUp}
                 onMouseLeave={onDesktopMouseLeave}
@@ -196,8 +196,8 @@ function AppShell({ children }) {
                     onClick={() => handleRouteClick(link.to)}
                     className={({ isActive }) =>
                       isActive
-                        ? 'rounded-md bg-gym-100 px-2 py-1 text-gym-900'
-                        : 'rounded-md px-2 py-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900'
+                        ? 'rounded-md bg-gym-100 px-1.5 py-1 text-gym-900'
+                        : 'rounded-md px-1.5 py-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900'
                     }
                   >
                     {link.label}
