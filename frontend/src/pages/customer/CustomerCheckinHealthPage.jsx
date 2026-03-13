@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { CheckCircle2, History, Activity, UserCog, ClipboardList, Plus, Scale, Ruler } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
@@ -245,6 +246,22 @@ function CustomerCheckinHealthPage() {
       subtitle="Manage your check-ins and track your health progress in one place."
       links={customerNav}
     >
+      <div className="mb-6 flex flex-col gap-3 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,1),rgba(240,249,255,1))] p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Progress-first destination</p>
+          <h2 className="mt-2 text-xl font-black text-slate-900">Use Progress Hub for the full health and PT follow-up story.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            This page keeps your QR, check-in history, and manual metric entry available while the new hub becomes the main place to review progress.
+          </p>
+        </div>
+        <Link
+          to="/customer/progress-hub"
+          className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+        >
+          Open Progress Hub
+        </Link>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="lg:col-span-1">
           <article className="gc-card flex flex-col items-center">
