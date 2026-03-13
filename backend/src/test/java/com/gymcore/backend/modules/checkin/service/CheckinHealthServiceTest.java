@@ -280,14 +280,28 @@ class CheckinHealthServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> currentHealth = (Map<String, Object>) data.get("currentHealth");
         assertEquals("2026-03-10T08:00:00Z", currentHealth.get("updatedAt"));
+        assertEquals("progress-hub.v1", data.get("contractVersion"));
+        assertEquals(currentHealth, data.get("currentSnapshot"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> healthHistory = (Map<String, Object>) data.get("healthHistory");
         assertEquals(2, ((List<?>) healthHistory.get("items")).size());
 
         @SuppressWarnings("unchecked")
+        Map<String, Object> historySummary = (Map<String, Object>) data.get("historySummary");
+        assertEquals(2, historySummary.get("totalRecords"));
+        assertEquals("2026-03-10T08:00:00Z", historySummary.get("latestRecordedAt"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> coachNotes = (Map<String, Object>) data.get("coachNotes");
         assertEquals(1, ((List<?>) coachNotes.get("items")).size());
+        assertEquals(coachNotes, data.get("recentCoachNotes"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestCoachingSignal = (Map<String, Object>) data.get("latestCoachingSignal");
+        assertEquals("COACH_NOTE", latestCoachingSignal.get("sourceType"));
+        assertEquals("Form is improving each week.", latestCoachingSignal.get("summary"));
+        assertEquals("Coach Lan", latestCoachingSignal.get("coachName"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> followUp = (Map<String, Object>) data.get("followUp");
@@ -295,6 +309,114 @@ class CheckinHealthServiceTest {
         assertEquals(1, followUp.get("recentCoachNoteCount"));
         assertEquals("2026-03-11T10:30:00Z", followUp.get("lastProgressSignalAt"));
         assertEquals(Boolean.TRUE, followUp.get("hasCurrentHealth"));
+        assertEquals(Boolean.TRUE, followUp.get("readOnly"));
+        assertEquals(Boolean.FALSE, followUp.get("customerCanWriteProgress"));
+        assertEquals(Boolean.FALSE, followUp.get("customerCanWriteCoachNotes"));
+        assertEquals("REVIEW_LATEST_COACH_NOTE", followUp.get("recommendedFocus"));
+        verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CustomerHealthHistory"), any(), any(), any());
+        verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CheckIns"), any(), any(), any());
+    }
+
+    @Test
+    void customerGetProgressHub_shouldReturnExplicitEmptyStateWithoutWrites() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(5, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+        when(jdbcTemplate.queryForObject(contains("FROM dbo.CustomerHealthCurrent"), any(RowMapper.class), eq(5)))
+                .thenThrow(new EmptyResultDataAccessException(1));
+        when(jdbcTemplate.query(contains("FROM dbo.CustomerHealthHistory"), any(RowMapper.class), eq(5)))
+                .thenReturn(List.of());
+        when(jdbcTemplate.query(contains("FROM dbo.PTSessionNotes"), any(RowMapper.class), eq(5)))
+                .thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = service.execute("customer-get-progress-hub", Map.of(
+                "authorizationHeader", "Bearer customer"
+        ));
+
+        assertEquals(Map.of(), data.get("currentHealth"));
+        assertEquals(Map.of(), data.get("currentSnapshot"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> historySummary = (Map<String, Object>) data.get("historySummary");
+        assertEquals(0, historySummary.get("totalRecords"));
+        assertEquals(null, historySummary.get("latestRecordedAt"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestCoachingSignal = (Map<String, Object>) data.get("latestCoachingSignal");
+        assertEquals("HEALTH_SNAPSHOT", latestCoachingSignal.get("sourceType"));
+        assertEquals("No coaching signal recorded yet.", latestCoachingSignal.get("summary"));
+        assertEquals(null, latestCoachingSignal.get("recordedAt"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> followUp = (Map<String, Object>) data.get("followUp");
+        assertEquals("COMPLETE_BASELINE_CHECK_IN", followUp.get("recommendedFocus"));
+        assertEquals(Boolean.TRUE, followUp.get("readOnly"));
+        verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CustomerHealthHistory"), any(), any(), any());
+        verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CheckIns"), any(), any(), any());
+    }
+
+    @Test
+    void customerGetProgressHub_shouldStayCompatibleWithExistingCustomerHealthReads() throws Exception {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(5, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.queryForObject(contains("FROM dbo.CustomerHealthCurrent"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Map<String, Object>> mapper = invocation.getArgument(1);
+                    return mapper.mapRow(resultSet(Map.of(
+                            "HeightCm", 168.0,
+                            "WeightKg", 64.5,
+                            "BMI", 22.9,
+                            "UpdatedAt", Timestamp.from(Instant.parse("2026-03-08T09:15:00Z"))
+                    )), 0);
+                });
+        when(jdbcTemplate.query(contains("FROM dbo.CustomerHealthHistory"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Map<String, Object>> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "HeightCm", 168.0,
+                            "WeightKg", 64.5,
+                            "BMI", 22.9,
+                            "RecordedAt", Timestamp.from(Instant.parse("2026-03-08T09:15:00Z"))
+                    )), 0));
+                });
+        when(jdbcTemplate.query(contains("FROM dbo.PTSessionNotes"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Map<String, Object>> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "PTSessionNoteID", 21,
+                            "NoteContent", "Keep the same tempo for squats.",
+                            "CreatedAt", Timestamp.from(Instant.parse("2026-03-09T09:00:00Z")),
+                            "SessionDate", LocalDate.of(2026, 3, 9),
+                            "CoachName", "Coach Nam"
+                    )), 0));
+                });
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> legacyCurrent = service.execute("customer-get-health-current", Map.of(
+                "authorizationHeader", "Bearer customer"
+        ));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> legacyHistory = service.execute("customer-get-health-history", Map.of(
+                "authorizationHeader", "Bearer customer"
+        ));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> legacyNotes = service.execute("customer-get-coach-notes", Map.of(
+                "authorizationHeader", "Bearer customer"
+        ));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> aggregate = service.execute("customer-get-progress-hub", Map.of(
+                "authorizationHeader", "Bearer customer"
+        ));
+
+        assertEquals(legacyCurrent, aggregate.get("currentHealth"));
+        assertEquals(legacyHistory, aggregate.get("healthHistory"));
+        assertEquals(legacyNotes, aggregate.get("coachNotes"));
+        verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CustomerHealthHistory"), any(), any(), any());
+        verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CheckIns"), any(), any(), any());
     }
 
     private ResultSet resultSet(Map<String, Object> values) throws Exception {
