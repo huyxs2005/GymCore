@@ -146,6 +146,20 @@ class ContentControllerTest {
     }
 
     @Test
+    void getAiWeeklyPlan_shouldPassPayload() {
+        Map<String, Object> payload = Map.of("goal", "gain muscle");
+        Map<String, Object> request = new java.util.LinkedHashMap<>(payload);
+        request.put("authorizationHeader", "Bearer customer");
+        when(contentService.execute("ai-weekly-plan", request))
+                .thenReturn(Map.of("contractVersion", "ai-weekly-plan.v1"));
+
+        ApiResponse<Map<String, Object>> response = controller.getAiWeeklyPlan("Bearer customer", payload);
+
+        assertEquals("ai-weekly-plan.v1", response.data().get("contractVersion"));
+        verify(contentService).execute("ai-weekly-plan", request);
+    }
+
+    @Test
     void getPersonalizedFoodRecommendations_shouldPassAuthorizationHeader() {
         Map<String, Object> payload = Map.of("tags", java.util.List.of("HIGH_PROTEIN"));
         Map<String, Object> request = new java.util.LinkedHashMap<>(payload);
