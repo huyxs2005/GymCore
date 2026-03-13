@@ -210,8 +210,13 @@ public class ContentService {
         List<Map<String, Object>> foods = recommendFoods(aiContext, limitFoods);
 
         Map<String, Object> response = new LinkedHashMap<>();
+        response.put("contractVersion", "ai-recommendations.v2");
         response.put("goalCodes", aiContext.goalSelection().goalCodes());
         response.put("source", aiContext.goalSelection().source());
+        response.put("summary", buildRecommendationSummary(aiContext, workouts, foods));
+        response.put("contextHighlights", buildRecommendationHighlights(aiContext));
+        response.put("sections", buildRecommendationSections(workouts, foods));
+        response.put("nextActions", buildRecommendationNextActions(workouts, foods));
         response.put("workouts", workouts);
         response.put("foods", foods);
         return withAiContext(response, aiContext, "ai-recommendations");
@@ -1098,6 +1103,9 @@ public class ContentService {
             ScoreResult scoreResult = scoreWorkout(copy, aiContext);
             copy.put("contextScore", scoreResult.score());
             copy.put("contextReasons", scoreResult.reasons());
+            copy.put("reasons", scoreResult.reasons());
+            copy.put("action", buildCatalogAction("view-workout-detail", "/customer/knowledge/workouts/" + copy.get("workoutId"),
+                    copy.get("workoutId"), "workoutId"));
             scored.add(copy);
         }
         scored.sort((left, right) -> Integer.compare(
@@ -1116,6 +1124,9 @@ public class ContentService {
             ScoreResult scoreResult = scoreFoodForContext(copy, aiContext);
             copy.put("contextScore", scoreResult.score());
             copy.put("contextReasons", scoreResult.reasons());
+            copy.put("reasons", scoreResult.reasons());
+            copy.put("action", buildCatalogAction("view-food-detail", "/customer/knowledge/foods/" + copy.get("foodId"),
+                    copy.get("foodId"), "foodId"));
             scored.add(copy);
         }
         scored.sort((left, right) -> Integer.compare(
@@ -1510,6 +1521,170 @@ public class ContentService {
         }
         sb.append(".");
         return sb.toString();
+    }
+
+    private Map<String, Object> buildRecommendationSummary(
+            AiContextResolution aiContext,
+            List<Map<String, Object>> workouts,
+            List<Map<String, Object>> foods) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("headline", buildRecommendationHeadline(aiContext, workouts, foods));
+        summary.put("rationale", buildRecommendationRationale(aiContext));
+        summary.put("focus", buildPlanFocusLabel(aiContext));
+        summary.put("safetyNote", "Suggestions stay guidance-level and should not replace coach programming or medical advice.");
+        return summary;
+    }
+
+    private List<Map<String, Object>> buildRecommendationHighlights(AiContextResolution aiContext) {
+        List<Map<String, Object>> highlights = new ArrayList<>();
+        if (!aiContext.goalSelection().goalCodes().isEmpty()) {
+            highlights.add(Map.of(
+                    "type", "goal",
+                    "label", "Goal focus",
+                    "value", String.join(", ", aiContext.goalSelection().goalCodes())));
+        }
+        String latestProgressSummary = normalizeText(aiContext.latestProgressSignal().get("summary"));
+        if (StringUtils.hasText(latestProgressSummary) && !latestProgressSummary.startsWith("No ")) {
+            highlights.add(Map.of(
+                    "type", "progress",
+                    "label", "Progress context",
+                    "value", latestProgressSummary));
+        }
+        String latestNoteSummary = normalizeText(aiContext.latestNoteSignal().get("summary"));
+        if (StringUtils.hasText(latestNoteSummary) && !latestNoteSummary.startsWith("No ")) {
+            highlights.add(Map.of(
+                    "type", "coach-note",
+                    "label", "Coach cue",
+                    "value", latestNoteSummary));
+        }
+        if (highlights.isEmpty()) {
+            highlights.add(Map.of(
+                    "type", "fallback",
+                    "label", "Context",
+                    "value", "Recommendations fall back to available catalog context when health or progress signals are missing."));
+        }
+        return highlights;
+    }
+
+    private List<Map<String, Object>> buildRecommendationSections(
+            List<Map<String, Object>> workouts,
+            List<Map<String, Object>> foods) {
+        List<Map<String, Object>> sections = new ArrayList<>();
+        sections.add(buildRecommendationSection(
+                "workout-focus",
+                "Workout focus",
+                "workout",
+                workouts,
+                "Recommended training ideas grounded in current goals and recent signals."));
+        sections.add(buildRecommendationSection(
+                "food-focus",
+                "Food emphasis",
+                "food",
+                foods,
+                "Nutrition ideas that complement the same context without replacing meal planning."));
+        return sections;
+    }
+
+    private Map<String, Object> buildRecommendationSection(
+            String id,
+            String title,
+            String itemType,
+            List<Map<String, Object>> items,
+            String description) {
+        Map<String, Object> section = new LinkedHashMap<>();
+        section.put("id", id);
+        section.put("title", title);
+        section.put("itemType", itemType);
+        section.put("description", description);
+        section.put("items", items);
+        section.put("emptyState", "No matching " + itemType + " guidance is available yet.");
+        return section;
+    }
+
+    private List<Map<String, Object>> buildRecommendationNextActions(
+            List<Map<String, Object>> workouts,
+            List<Map<String, Object>> foods) {
+        List<Map<String, Object>> actions = new ArrayList<>();
+        if (!workouts.isEmpty()) {
+            Map<String, Object> topWorkout = workouts.get(0);
+            actions.add(buildCatalogAction(
+                    "view-top-workout",
+                    "/customer/knowledge/workouts/" + topWorkout.get("workoutId"),
+                    topWorkout.get("workoutId"),
+                    "workoutId"));
+        }
+        if (!foods.isEmpty()) {
+            Map<String, Object> topFood = foods.get(0);
+            actions.add(buildCatalogAction(
+                    "view-top-food",
+                    "/customer/knowledge/foods/" + topFood.get("foodId"),
+                    topFood.get("foodId"),
+                    "foodId"));
+        }
+        actions.add(Map.of(
+                "id", "review-progress-hub",
+                "label", "Review latest progress signals",
+                "route", "/customer/progress-hub",
+                "type", "route"));
+        return actions;
+    }
+
+    private Map<String, Object> buildCatalogAction(String id, String route, Object entityId, String entityKey) {
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("id", id);
+        action.put("label", "Open detail");
+        action.put("route", route);
+        action.put("type", "route");
+        action.put(entityKey, entityId);
+        return action;
+    }
+
+    private String buildRecommendationHeadline(
+            AiContextResolution aiContext,
+            List<Map<String, Object>> workouts,
+            List<Map<String, Object>> foods) {
+        String focus = buildPlanFocusLabel(aiContext);
+        return "This week's guidance leans toward " + focus.toLowerCase(Locale.ROOT)
+                + " with " + workouts.size() + " workout and " + foods.size() + " food suggestions.";
+    }
+
+    private String buildRecommendationRationale(AiContextResolution aiContext) {
+        List<String> reasons = new ArrayList<>();
+        if (!aiContext.goalSelection().goalCodes().isEmpty()) {
+            reasons.add("saved goals");
+        }
+        if (hasSignal(aiContext.latestProgressSignal())) {
+            reasons.add("recent health/progress signals");
+        }
+        if (hasSignal(aiContext.latestNoteSignal())) {
+            reasons.add("latest coach note");
+        }
+        if (reasons.isEmpty()) {
+            return "Using the available catalog context because richer customer signals are not available yet.";
+        }
+        return "Using " + String.join(", ", reasons) + " to explain why these suggestions fit now.";
+    }
+
+    private String buildPlanFocusLabel(AiContextResolution aiContext) {
+        if (aiContext.goalSelection().goalCodes().contains("GAIN_MUSCLE")) {
+            return "Strength and protein support";
+        }
+        if (aiContext.goalSelection().goalCodes().contains("LOSE_FAT")) {
+            return "Consistency, conditioning, and recovery support";
+        }
+        String signalText = signalText(aiContext);
+        if (containsAny(signalText, "recovery", "mobility", "rest", "sore", "fatigue")) {
+            return "Recovery and movement quality";
+        }
+        return "Balanced training consistency";
+    }
+
+    private String buildRecoveryCue(AiContextResolution aiContext) {
+        String signalText = signalText(aiContext);
+        if (containsAny(signalText, "recovery", "mobility", "rest", "sore", "fatigue")) {
+            return "Recent signals suggest a lighter recovery bias, so keep one session mobility-first and avoid stacking hard days back to back.";
+        }
+        return "Leave room for at least one lighter day so the plan stays sustainable and inside GymCore's guidance scope.";
     }
 
     private record ScoreResult(int score, List<String> reasons) {
