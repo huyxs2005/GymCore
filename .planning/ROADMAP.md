@@ -11,7 +11,7 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 - [x] **Phase 5: PT Reschedule and Exceptions** - self-service PT changes and coach unavailability handling
 - [x] **Phase 6: Reminder and Notification Discipline** - action-oriented reminders and controlled broadcast behavior
 - [x] **Phase 7: Customer Progress Hub** - unified progress, PT context, and note visibility
-- [ ] **Phase 8: AI and Weekly Planning** - context-aware recommendations and mini weekly plans
+- [x] **Phase 8: AI and Weekly Planning** - context-aware recommendations, consultative chat grounding, and mini weekly plans
 
 ### Phase 1: Commerce Quick Wins
 **Goal**: Reduce paid-order handoff friction and increase conversion from existing shop traffic.
@@ -160,7 +160,7 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 - [x] 08-01: AI context-assembly backend foundation
 - [x] 08-02: Recommendation refinement and weekly-plan backend contracts
 - [x] 08-03: Customer knowledge and weekly-planner UX integration
-- [ ] 08-04: Consultative chat context, action bridges, and Phase 8 verification
+- [x] 08-04: Consultative chat context, action bridges, and Phase 8 verification
 
 ## Progress
 
@@ -173,4 +173,4 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 | 5. PT Reschedule and Exceptions | 5/5 | Executed | 2026-03-13 |
 | 6. Reminder and Notification Discipline | 4/4 | Executed | 2026-03-13 |
 | 7. Customer Progress Hub | 4/4 | Executed | 2026-03-13 |
-| 8. AI and Weekly Planning | 3/4 | In Progress | 2026-03-13 |
+| 8. AI and Weekly Planning | 4/4 | Executed | 2026-03-13 |

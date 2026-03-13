@@ -3,19 +3,19 @@
 ## Project Reference
 - See: [.planning/PROJECT.md](D:\project\GymCore-beta-test-0.2\.planning\PROJECT.md) (updated 2026-03-12)
 - Core value: Make GymCore operationally safe, low-friction, and worth returning to weekly through clearer lifecycle logic, stronger PT continuity, safer commerce handoff, better support visibility, and useful AI guidance.
-- Current focus: Phase 7 (Customer Progress Hub) is complete. Phase 8 (AI and Weekly Planning) is the next dependency-safe execution target after PROG-01 sign-off.
+- Current focus: Phase 8 (AI and Weekly Planning) is complete with consultative chat grounding, weekly-plan action bridges, and end-to-end customer AI verification.
 
 ## Current Position
-- Phase: 8 of 8 (AI and Weekly Planning in progress)
-- Plan Execution: 3 of 4 in current phase
-- Status: Phase 1 through Phase 7 executed; Phase 8 has 08-01, 08-02, and 08-03 complete
-- Last activity: 2026-03-13 - executed Plan 08-03 (customer knowledge and weekly-planner UX integration) with inline weekly guidance, explainable recommendation sections, reusable AI action bridges, and frontend coverage for planner/action routing
-- Progress: [##########] 96.9%
+- Phase: 8 of 8 (AI and Weekly Planning complete)
+- Plan Execution: 4 of 4 in current phase
+- Status: Phase 1 through Phase 8 executed; roadmap milestone is implementation-complete pending any separate milestone wrap-up
+- Last activity: 2026-03-13 - executed Plan 08-04 (consultative chat context, shared action bridges, and Phase 8 verification) with grounded Gemini prompt context, widget action handoff, dedicated AI business-flow coverage, and full customer-suite verification
+- Progress: [##########] 100.0%
 
 ## Performance Metrics
 - Total phases in roadmap: 8
 - Planned phases complete: 8
-- Executed phases complete: 7
+- Executed phases complete: 8
 - Pending todos captured: 0
 - Active debug sessions: 0
 
@@ -34,6 +34,7 @@
 - Phase 8 weekly planning is a guidance-only backend contract with deterministic sections, explicit disclaimers, and route-ready next actions instead of open-ended prose.
 - Phase 8 customer AI must stay embedded in the existing knowledge page, with weekly plans and recommendation rationale rendered inline rather than on a separate AI-only screen.
 - Frontend AI action routes like `/customer/knowledge/workouts/:id` and `/customer/knowledge/foods/:id` should resolve locally inside the knowledge page so backend-owned actions can open inline content detail without extra router churn.
+- Phase 8 chat prompts should consume the same route-ready action vocabulary as recommendations and weekly plans, and chat must never imply it completed booking or other operational flows itself.
 - Phase 7 keeps legacy customer health and coach-note endpoints live while the new progress hub contract rolls out incrementally.
 - Phase 7 progress-hub aggregates use additive aliases like `currentSnapshot` and `recentCoachNotes` instead of breaking legacy response keys during migration.
 - Customer progress-hub follow-up remains explicitly read-only; coach-owned progress and note writes stay authoritative.
@@ -55,10 +56,10 @@
 - `backend\\mvnw.cmd` still fails in this shell environment; targeted backend verification currently depends on the local Maven installation plus `.codex-maven-settings.xml`.
 - `gsd-tools` could update `ROADMAP.md`, but its `STATE.md`/`REQUIREMENTS.md` helpers do not match this repo's custom planning-file format, so state position updates for 07-03 were applied manually.
 - Unrelated backend tests `UnsupportedActionDispatchTest` and `MembershipServiceCustomerFlowTest` still instantiate `CheckinHealthService` with an outdated constructor, which blocks repo-wide `mvn test` style verification before the new content tests can run.
-- Later execution order should continue to respect roadmap dependencies; Phase 8 Plan 08-04 is the next safe execution target.
+- The Phase 8 code path is complete, but targeted backend Maven verification remains blocked by unrelated pre-existing tests `UnsupportedActionDispatchTest` and `MembershipServiceCustomerFlowTest`, which still instantiate `CheckinHealthService` with an outdated constructor.
 
 ## Session Continuity
-- Last completed session: Phase 8 customer knowledge and weekly-planner UX integration
-- Stopped at: Plan 08-03 execution, summary creation, and manual roadmap/state/requirements updates after targeted frontend verification
-- Resume action: run `$gsd-execute-phase 8`
-- Continue file: [.planning/phases/08-ai-and-weekly-planning/08-04-PLAN.md](D:\project\GymCore-beta-test-0.2\.planning\phases\08-ai-and-weekly-planning\08-04-PLAN.md)
+- Last completed session: Phase 8 consultative chat context and final AI verification
+- Stopped at: Plan 08-04 execution, summary creation, and manual roadmap/state/requirements updates after frontend and Playwright verification
+- Resume action: milestone is implementation-complete; use verification or cleanup workflows if additional closure is needed
+- Continue file: [.planning/phases/08-ai-and-weekly-planning/08-04-SUMMARY.md](D:\project\GymCore-beta-test-0.2\.planning\phases\08-ai-and-weekly-planning\08-04-SUMMARY.md)
