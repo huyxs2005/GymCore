@@ -3,19 +3,19 @@
 ## Project Reference
 - See: [.planning/PROJECT.md](D:\project\GymCore-beta-test-0.2\.planning\PROJECT.md) (updated 2026-03-12)
 - Core value: Make GymCore operationally safe, low-friction, and worth returning to weekly through clearer lifecycle logic, stronger PT continuity, safer commerce handoff, better support visibility, and useful AI guidance.
-- Current focus: Phase 6 (Reminder and Notification Discipline) is in progress. Plan 06-04 is now the next dependency-safe execution target after the important-only promotion broadcast work from Plan 06-03.
+- Current focus: Phase 6 (Reminder and Notification Discipline) is complete. Phase 7 (Customer Progress Hub) is now the next dependency-safe execution target.
 
 ## Current Position
 - Phase: 6 of 8 (Reminder and Notification Discipline)
-- Plan Execution: 3 of 4 in current phase
-- Status: Phase 1 through Phase 5 executed; Phase 6 in progress
-- Last activity: 2026-03-13 - executed Plan 06-03 (important-only promotion broadcast discipline) with explicit promotion-post importance, guarded customer-wide promotion notifications, admin UI broadcast controls, and frontend regression coverage
-- Progress: [#######---] 71.0%
+- Plan Execution: 4 of 4 in current phase
+- Status: Phase 1 through Phase 6 executed; Phase 7 is next
+- Last activity: 2026-03-13 - executed Plan 06-04 (reminder center UX and Phase 6 verification) with action-first notification surfaces, de-emphasized read history, reminder-center frontend coverage, and Playwright verification for important-only promotion notification visibility
+- Progress: [########--] 75.0%
 
 ## Performance Metrics
 - Total phases in roadmap: 8
 - Planned phases complete: 8
-- Executed phases complete: 5
+- Executed phases complete: 6
 - Pending todos captured: 0
 - Active debug sessions: 0
 
@@ -26,6 +26,7 @@
 - Commerce allows recipient-change requests for paid but unpicked orders, review only after pickup, reorder from history, and wallet-first coupon usage.
 - Reception can only search, explain, and check in against valid rules. No membership override powers.
 - Promotion notifications broadcast only for posts marked important. Expiry reminders follow 7/3/1-day cadence, and paid-but-unpicked orders follow a 1/3/7-day pickup reminder cadence.
+- Reminder center surfaces direct next actions first while preserving read notifications as quieter visible history across the dropdown and full page.
 - Sensitive admin actions require reason notes, and customer-facing sensitive account actions must send explanation emails.
 - AI must use goals, health, and progress, and can produce mini weekly plans while routing users back to real flows.
 
@@ -37,11 +38,11 @@
 ### Blockers and Concerns
 - No phase-specific CONTEXT.md exists yet; all phases were planned from roadmap, requirements, and research.
 - A dedicated multi-context Playwright follow-up for coach replacement acceptance/decline is currently skipped locally because it is flaky on the local dev-server/browser-context combination.
-- `backend/src/test/java/com/gymcore/backend/modules/UnsupportedActionDispatchTest.java` currently fails `testCompile` because its `UserManagementService` constructor call no longer matches the service signature. This is unrelated to Phase 6 reminder work but currently blocks targeted Maven test execution for Plans 06-01, 06-02, and 06-03.
-- Later execution order should continue to respect roadmap dependencies; Plan 06-04 is the next safe execution target before later progress and AI work.
+- `backend/src/test/java/com/gymcore/backend/modules/UnsupportedActionDispatchTest.java` currently fails `testCompile` because its `UserManagementService` constructor call no longer matches the service signature. This is unrelated to Phase 6 reminder work but still blocks normal Maven test compilation and required a Playwright backend startup workaround in Plan 06-04.
+- Later execution order should continue to respect roadmap dependencies; Phase 7 is the next safe execution target before AI and weekly-planning work.
 
 ## Session Continuity
-- Last completed session: Phase 6 Plan 06-03 execution
-- Stopped at: important-only promotion broadcast discipline implemented, summarized, and frontend page tests verified; the exact Maven targeted-test command remains blocked by the unrelated `UnsupportedActionDispatchTest` constructor mismatch
+- Last completed session: Phase 6 Plan 06-04 execution
+- Stopped at: reminder center UX and Phase 6 verification completed, summarized, and committed; frontend notification tests and the required Playwright reminder/promotion suite both passed, with backend Playwright startup using `-Dmaven.test.skip=true` because of the unrelated `UnsupportedActionDispatchTest` constructor mismatch
 - Resume action: run `$gsd-execute-phase 6`
-- Continue file: [.planning/phases/06-reminder-and-notification-discipline/06-04-PLAN.md](D:\project\GymCore-beta-test-0.2\.planning\phases\06-reminder-and-notification-discipline\06-04-PLAN.md)
+- Continue file: [.planning/phases/07-customer-progress-hub/07-01-PLAN.md](D:\project\GymCore-beta-test-0.2\.planning\phases\07-customer-progress-hub\07-01-PLAN.md)
