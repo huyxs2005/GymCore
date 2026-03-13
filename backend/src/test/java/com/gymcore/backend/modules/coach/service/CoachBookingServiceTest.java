@@ -14,8 +14,11 @@ import static org.mockito.Mockito.when;
 
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.AuthService;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +68,72 @@ class CoachBookingServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(String.valueOf(exception.getReason()).contains("ACTIVE Gym + Coach membership"));
+    }
+
+    @Test
+    void customerCreateInstantBooking_shouldConfirmImmediatelyAndNotifyBothSides() {
+        LocalDate requestStart = nextMonday(LocalDate.now().plusDays(7));
+        LocalDate requestEnd = requestStart.plusDays(21);
+
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
+                eq(10), eq(requestStart), eq(requestEnd)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    ResultSet rs = Mockito.mock(ResultSet.class);
+                    when(rs.getInt("CustomerMembershipID")).thenReturn(77);
+                    when(rs.getBoolean("AllowsCoachBooking")).thenReturn(true);
+                    return mapper.mapRow(rs, 0);
+                });
+
+        when(jdbcTemplate.query(eq("SELECT 1 FROM dbo.Coaches WHERE CoachID = ?"), any(RowMapper.class), eq(20)))
+                .thenReturn(List.of(1));
+
+        when(jdbcTemplate.query(contains("FROM dbo.CoachWeeklyAvailability"), any(RowMapper.class), eq(20)))
+                .thenReturn(List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)));
+
+        when(jdbcTemplate.query(
+                contains("WHERE s.CoachID = ? AND s.SessionDate >= ? AND s.SessionDate <= ?"),
+                any(RowMapper.class),
+                eq(20),
+                eq(requestStart),
+                eq(requestEnd)))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.update(any(org.springframework.jdbc.core.PreparedStatementCreator.class), any(org.springframework.jdbc.support.KeyHolder.class)))
+                .thenReturn(1);
+
+        when(jdbcTemplate.query(
+                contains("SELECT TOP (1) PTRequestID FROM dbo.PTRecurringRequests"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenReturn(List.of(901));
+
+        when(jdbcTemplate.update(contains("INSERT INTO dbo.PTRequestSlots"), eq(901), eq(1), eq(1))).thenReturn(1);
+        when(jdbcTemplate.update(contains("INSERT INTO dbo.PTSessions"), eq(901), eq(10), eq(20), any(LocalDate.class), eq(1), eq(1)))
+                .thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute("customer-create-instant-booking", Map.of(
+                "authorizationHeader", "Bearer customer",
+                "coachId", 20,
+                "endDate", requestEnd.toString(),
+                "slots", List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1))));
+
+        assertEquals("APPROVED", result.get("status"));
+        assertEquals("INSTANT", result.get("bookingMode"));
+        assertEquals(901, result.get("ptRequestId"));
+        assertTrue(((Integer) result.get("sessionsCreated")) > 0);
+        verify(notificationService).notifyUser(eq(20), eq("PT_BOOKING_CONFIRMED"), anyString(), contains("booked a recurring PT phase"),
+                eq("/coach/schedule?tab=schedule"), eq(901), eq("PT_BOOKING_CONFIRMED_901"));
+        verify(notificationService).notifyUser(eq(10), eq("PT_BOOKING_CONFIRMED"), anyString(), contains("confirmed"),
+                eq("/customer/coach-booking"), eq(901), eq("PT_BOOKING_CONFIRMED_CUSTOMER_901"));
     }
 
     @Test
@@ -133,21 +202,35 @@ class CoachBookingServiceTest {
     }
 
     @Test
-    void customerRescheduleSession_shouldCreatePendingRequestInsteadOfImmediateSessionChange() {
+    void customerRescheduleSession_shouldConfirmDirectlyWhenSlotIsValid() {
         when(authService.requireAuthContext("Bearer customer"))
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
 
         when(jdbcTemplate.query(
-                contains("SELECT CoachID, SessionDate, TimeSlotID, Status, CancelReason"),
+                contains("JOIN dbo.PTRecurringRequests r ON r.PTRequestID = s.PTRequestID"),
                 any(RowMapper.class),
                 eq(222),
                 eq(10)))
                 .thenReturn(List.of(mapOfNullable(
                         "coachId", 20,
-                        "sessionDate", LocalDate.now().plusDays(2),
+                        "sessionDate", LocalDate.now().plusDays(3),
                         "timeSlotId", 1,
                         "status", "SCHEDULED",
-                        "cancelReason", null)));
+                        "cancelReason", null,
+                        "ptRequestId", 900,
+                        "primaryCoachId", 20,
+                        "endDate", LocalDate.now().plusDays(30))));
+
+        when(jdbcTemplate.queryForObject(
+                contains("SELECT TOP (1) StartTime"),
+                eq(java.sql.Time.class),
+                eq(1)))
+                .thenReturn(java.sql.Time.valueOf(LocalTime.of(7, 0)));
+        when(jdbcTemplate.queryForObject(
+                contains("SELECT TOP (1) StartTime"),
+                eq(java.sql.Time.class),
+                eq(2)))
+                .thenReturn(java.sql.Time.valueOf(LocalTime.of(8, 30)));
 
         when(jdbcTemplate.queryForObject(
                 contains("FROM dbo.CoachWeeklyAvailability"),
@@ -161,16 +244,25 @@ class CoachBookingServiceTest {
                 eq(20), eq(LocalDate.now().plusDays(3).getDayOfWeek().getValue()), eq(2)))
                 .thenReturn(1);
 
-        when(jdbcTemplate.query(
-                contains("SELECT PTSessionID FROM dbo.PTSessions"),
-                any(RowMapper.class),
+        when(jdbcTemplate.queryForObject(
+                contains("AND PTSessionID <> ?"),
+                eq(Integer.class),
                 eq(20),
                 eq(LocalDate.now().plusDays(3)),
                 eq(2),
                 eq(222)))
-                .thenReturn(List.of());
+                .thenReturn(0);
 
-        when(jdbcTemplate.update(contains("SET CancelReason"), anyString(), eq(222), eq(10))).thenReturn(1);
+        when(jdbcTemplate.queryForObject(
+                contains("FROM dbo.PTSessionReplacementOffers"),
+                eq(Integer.class),
+                eq(222)))
+                .thenReturn(0);
+
+        when(jdbcTemplate.update(contains("SET SessionDate = ?"), eq(LocalDate.now().plusDays(3)), eq(2),
+                eq(LocalDate.now().plusDays(3).getDayOfWeek().getValue()), eq(222), eq(10))).thenReturn(1);
+        when(jdbcTemplate.queryForObject("SELECT FullName FROM dbo.Users WHERE UserID = ?", String.class, 10))
+                .thenReturn("Customer Minh");
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) service.execute("customer-reschedule-session", Map.of(
@@ -181,28 +273,38 @@ class CoachBookingServiceTest {
                         "timeSlotId", 2,
                         "reason", "Need to move this session")));
 
-        assertEquals("PENDING_COACH_APPROVAL", result.get("status"));
+        assertEquals("RESCHEDULED", result.get("status"));
         assertEquals(222, result.get("sessionId"));
         assertEquals(2, result.get("requestedTimeSlotId"));
-        verify(jdbcTemplate).update(contains("SET CancelReason"), anyString(), eq(222), eq(10));
+        verify(jdbcTemplate).update(contains("SET SessionDate = ?"), eq(LocalDate.now().plusDays(3)), eq(2),
+                eq(LocalDate.now().plusDays(3).getDayOfWeek().getValue()), eq(222), eq(10));
     }
 
     @Test
-    void customerRescheduleSession_shouldRejectWhenRequestAlreadyPending() {
+    void customerRescheduleSession_shouldRejectInsideTwelveHourCutoff() {
         when(authService.requireAuthContext("Bearer customer"))
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
 
         when(jdbcTemplate.query(
-                contains("SELECT CoachID, SessionDate, TimeSlotID, Status, CancelReason"),
+                contains("JOIN dbo.PTRecurringRequests r ON r.PTRequestID = s.PTRequestID"),
                 any(RowMapper.class),
                 eq(222),
                 eq(10)))
                 .thenReturn(List.of(mapOfNullable(
                         "coachId", 20,
-                        "sessionDate", LocalDate.now().plusDays(2),
+                        "sessionDate", LocalDate.now(),
                         "timeSlotId", 1,
                         "status", "SCHEDULED",
-                        "cancelReason", "RESCHEDULE_REQUEST|2030-03-03|2|Already sent")));
+                        "cancelReason", null,
+                        "ptRequestId", 900,
+                        "primaryCoachId", 20,
+                        "endDate", LocalDate.now().plusDays(30))));
+
+        when(jdbcTemplate.queryForObject(
+                contains("SELECT TOP (1) StartTime"),
+                eq(java.sql.Time.class),
+                eq(1)))
+                .thenReturn(java.sql.Time.valueOf(LocalTime.now().plusHours(2).withSecond(0).withNano(0)));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
                 "customer-reschedule-session",
@@ -214,7 +316,7 @@ class CoachBookingServiceTest {
                                 "timeSlotId", 3))));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        assertTrue(String.valueOf(exception.getReason()).contains("already pending"));
+        assertTrue(String.valueOf(exception.getReason()).contains("12 hours"));
     }
 
     @Test
@@ -223,16 +325,30 @@ class CoachBookingServiceTest {
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
 
         when(jdbcTemplate.query(
-                contains("SELECT CoachID, SessionDate, TimeSlotID, Status, CancelReason"),
+                contains("JOIN dbo.PTRecurringRequests r ON r.PTRequestID = s.PTRequestID"),
                 any(RowMapper.class),
                 eq(333),
                 eq(10)))
                 .thenReturn(List.of(mapOfNullable(
                         "coachId", 20,
-                        "sessionDate", LocalDate.now().plusDays(2),
+                        "sessionDate", LocalDate.now().plusDays(3),
                         "timeSlotId", 1,
                         "status", "SCHEDULED",
-                        "cancelReason", null)));
+                        "cancelReason", null,
+                        "ptRequestId", 901,
+                        "primaryCoachId", 20,
+                        "endDate", LocalDate.now().plusDays(30))));
+
+        when(jdbcTemplate.queryForObject(
+                contains("SELECT TOP (1) StartTime"),
+                eq(java.sql.Time.class),
+                eq(1)))
+                .thenReturn(java.sql.Time.valueOf(LocalTime.of(7, 0)));
+        when(jdbcTemplate.queryForObject(
+                contains("SELECT TOP (1) StartTime"),
+                eq(java.sql.Time.class),
+                eq(2)))
+                .thenReturn(java.sql.Time.valueOf(LocalTime.of(8, 30)));
 
         when(jdbcTemplate.queryForObject(
                 contains("FROM dbo.CoachWeeklyAvailability"),
@@ -257,6 +373,154 @@ class CoachBookingServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(String.valueOf(exception.getReason()).contains("not available"));
+    }
+
+    @Test
+    void customerRescheduleSeries_shouldReplaceFutureScheduledSessionsFromCutover() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(
+                contains("WHERE r.CustomerID = ?"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenReturn(List.of(mapOfNullable(
+                        "ptRequestId", 900,
+                        "customerId", 10,
+                        "coachId", 20,
+                        "coachName", "Coach Alex",
+                        "coachEmail", "coach@gymcore.local",
+                        "coachPhone", "0900000003",
+                        "customerMembershipId", 77,
+                        "startDate", "2026-03-17",
+                        "endDate", LocalDate.now().plusDays(35).toString(),
+                        "status", "APPROVED",
+                        "bookingMode", "INSTANT")));
+
+        when(jdbcTemplate.query(
+                contains("FROM dbo.PTRequestSlots prs"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenReturn(List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)));
+
+        when(jdbcTemplate.query(
+                contains("Status <> 'SCHEDULED'"),
+                any(RowMapper.class),
+                eq(900),
+                eq(LocalDate.now().plusDays(7))))
+                .thenReturn(List.of());
+
+        when(jdbcTemplate.queryForObject(contains("FROM dbo.CoachWeeklyAvailability"), eq(Integer.class), eq(20)))
+                .thenReturn(56);
+        when(jdbcTemplate.queryForObject(
+                contains("WHERE CoachID = ? AND DayOfWeek = ? AND TimeSlotID = ? AND IsAvailable = 1"),
+                eq(Integer.class), eq(20), eq(1), eq(2)))
+                .thenReturn(1);
+        when(jdbcTemplate.queryForObject(
+                contains("WHERE PTRequestID = ? AND SessionDate = ? AND TimeSlotID = ?"),
+                eq(Integer.class), eq(900), any(LocalDate.class), eq(2)))
+                .thenReturn(0);
+        when(jdbcTemplate.update(contains("DELETE FROM dbo.PTSessions"), eq(900), eq(LocalDate.now().plusDays(7))))
+                .thenReturn(2);
+        when(jdbcTemplate.update(contains("DELETE FROM dbo.PTRequestSlots"), eq(900))).thenReturn(1);
+        when(jdbcTemplate.update(contains("INSERT INTO dbo.PTRequestSlots"), eq(900), eq(1), eq(2))).thenReturn(1);
+        when(jdbcTemplate.queryForObject("SELECT FullName FROM dbo.Users WHERE UserID = ?", String.class, 10))
+                .thenReturn("Customer Minh");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "customer-reschedule-series",
+                Map.of(
+                        "authorizationHeader", "Bearer customer",
+                        "body", Map.of(
+                                "cutoverDate", LocalDate.now().plusDays(7).toString(),
+                                "slots", List.of(Map.of("dayOfWeek", 1, "timeSlotId", 2)))));
+
+        assertEquals("UPDATED", result.get("status"));
+        verify(jdbcTemplate).update(contains("DELETE FROM dbo.PTRequestSlots"), eq(900));
+        verify(jdbcTemplate, atLeastOnce()).update(contains("INSERT INTO dbo.PTSessions"), eq(900), eq(10), eq(20),
+                any(LocalDate.class), eq(1), eq(2));
+    }
+
+    @Test
+    void coachCreateUnavailableBlock_shouldPersistBlockAndCountImpactedSessions() {
+        when(authService.requireAuthContext("Bearer coach"))
+                .thenReturn(new AuthService.AuthContext(20, "COACH", "Coach Alex", "coach@gymcore.local"));
+
+        when(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dbo.TimeSlots WHERE TimeSlotID = ?",
+                Integer.class, 2))
+                .thenReturn(1);
+        when(jdbcTemplate.update(any(org.springframework.jdbc.core.PreparedStatementCreator.class),
+                any(org.springframework.jdbc.support.KeyHolder.class)))
+                .thenAnswer(invocation -> {
+                    org.springframework.jdbc.support.KeyHolder keyHolder = invocation.getArgument(1);
+                    keyHolder.getKeyList().add(Map.of("UnavailableBlockID", 61));
+                    return 1;
+                });
+        when(jdbcTemplate.queryForObject(
+                contains("FROM dbo.PTSessions"),
+                eq(Integer.class),
+                eq(20),
+                eq(LocalDate.now().plusDays(1)),
+                eq(LocalDate.now().plusDays(2)),
+                eq(2),
+                eq(2)))
+                .thenReturn(2);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "coach-create-unavailable-block",
+                Map.of(
+                        "authorizationHeader", "Bearer coach",
+                        "startDate", LocalDate.now().plusDays(1).toString(),
+                        "endDate", LocalDate.now().plusDays(2).toString(),
+                        "timeSlotId", 2,
+                        "note", "Medical leave"));
+
+        assertEquals(61, result.get("unavailableBlockId"));
+        assertEquals(2, result.get("impactedSessions"));
+    }
+
+    @Test
+    void customerRespondReplacementOffer_shouldAcceptAndSwapSessionCoach() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(
+                contains("WHERE o.PTSessionID = ?"),
+                any(RowMapper.class),
+                eq(777),
+                eq(10)))
+                .thenReturn(List.of(mapOfNullable(
+                        "offerId", 91,
+                        "originalCoachId", 20,
+                        "replacementCoachId", 21,
+                        "sessionDate", LocalDate.now().plusDays(3),
+                        "timeSlotId", 2)));
+        when(jdbcTemplate.queryForObject(contains("FROM dbo.CoachWeeklyAvailability"), eq(Integer.class), eq(21)))
+                .thenReturn(56);
+        when(jdbcTemplate.queryForObject(
+                contains("WHERE CoachID = ? AND DayOfWeek = ? AND TimeSlotID = ? AND IsAvailable = 1"),
+                eq(Integer.class), eq(21), eq(LocalDate.now().plusDays(3).getDayOfWeek().getValue()), eq(2)))
+                .thenReturn(1);
+        when(jdbcTemplate.queryForObject(
+                contains("AND PTSessionID <> ?"),
+                eq(Integer.class), eq(21), eq(LocalDate.now().plusDays(3)), eq(2), eq(777)))
+                .thenReturn(0);
+        when(jdbcTemplate.update(contains("SET CoachID = ?"), eq(21), eq(777), eq(10))).thenReturn(1);
+        when(jdbcTemplate.update(contains("UPDATE dbo.PTSessionReplacementOffers"), eq("ACCEPTED"), eq(91))).thenReturn(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "customer-respond-replacement-offer",
+                Map.of(
+                        "authorizationHeader", "Bearer customer",
+                        "sessionId", 777,
+                        "body", Map.of("decision", "ACCEPT")));
+
+        assertEquals("ACCEPTED", result.get("status"));
+        verify(jdbcTemplate).update(contains("SET CoachID = ?"), eq(21), eq(777), eq(10));
     }
 
     @Test
@@ -320,6 +584,327 @@ class CoachBookingServiceTest {
         assertFalse(items.isEmpty());
         assertEquals("CANCELLED", items.get(0).get("status"));
         assertEquals("Coach had an emergency meeting", items.get(0).get("cancelReason"));
+    }
+
+    @Test
+    void customerGetCurrentPhase_shouldReturnDashboardForInstantPtPhase() throws Exception {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(
+                contains("COALESCE(r.BookingMode, 'REQUEST') AS BookingMode"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTRequestID", 900,
+                            "CustomerID", 10,
+                            "CoachID", 20,
+                            "CustomerMembershipID", 77,
+                            "StartDate", LocalDate.of(2026, 3, 17),
+                            "EndDate", LocalDate.of(2026, 4, 14),
+                            "Status", "APPROVED",
+                            "BookingMode", "INSTANT",
+                            "CoachName", "Coach Alex",
+                            "CoachEmail", "coach@gymcore.local",
+                            "CoachPhone", "0900000003")), 0));
+                });
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTRequestSlots prs"), any(RowMapper.class), eq(900)))
+                .thenReturn(List.of(
+                        mapOfNullable("dayOfWeek", 1, "timeSlotId", 1, "slotIndex", 1,
+                                "startTime", "07:00:00", "endTime", "08:30:00"),
+                        mapOfNullable("dayOfWeek", 3, "timeSlotId", 1, "slotIndex", 1,
+                                "startTime", "07:00:00", "endTime", "08:30:00")));
+
+        when(jdbcTemplate.query(
+                contains("AND s.Status = 'SCHEDULED'"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTSessionID", 301,
+                            "PTRequestID", 900,
+                            "CoachID", 20,
+                            "CoachName", "Coach Alex",
+                            "CoachPhone", "0900000003",
+                            "SessionDate", LocalDate.of(2026, 3, 17),
+                            "DayOfWeek", 1,
+                            "TimeSlotID", 1,
+                            "SlotIndex", 1,
+                            "StartTime", java.sql.Time.valueOf("07:00:00"),
+                            "EndTime", java.sql.Time.valueOf("08:30:00"),
+                            "Status", "SCHEDULED",
+                            "CancelReason", null)), 0));
+                });
+
+        when(jdbcTemplate.query(
+                contains("AND s.SessionDate >= ?"),
+                any(RowMapper.class),
+                eq(900),
+                any(LocalDate.class),
+                any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTSessionID", 301,
+                            "PTRequestID", 900,
+                            "CoachID", 20,
+                            "CoachName", "Coach Alex",
+                            "CoachPhone", "0900000003",
+                            "SessionDate", LocalDate.of(2026, 3, 17),
+                            "DayOfWeek", 1,
+                            "TimeSlotID", 1,
+                            "SlotIndex", 1,
+                            "StartTime", java.sql.Time.valueOf("07:00:00"),
+                            "EndTime", java.sql.Time.valueOf("08:30:00"),
+                            "Status", "SCHEDULED",
+                            "CancelReason", null)), 0));
+                });
+
+        when(jdbcTemplate.query(
+                contains("FROM dbo.PTSessionNotes n"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenReturn(List.of(mapOfNullable(
+                        "noteId", 88,
+                        "ptSessionId", 301,
+                        "noteContent", "Strong improvement in posture",
+                        "createdAt", "2026-03-16T01:00:00Z",
+                        "updatedAt", "2026-03-16T01:30:00Z")));
+
+        when(jdbcTemplate.query(
+                contains("FROM dbo.CustomerHealthHistory"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenReturn(List.of(mapOfNullable(
+                        "heightCm", new BigDecimal("172.5"),
+                        "weightKg", new BigDecimal("70.2"),
+                        "bmi", new BigDecimal("23.6"),
+                        "recordedAt", "2026-03-15T02:00:00Z")));
+
+        when(jdbcTemplate.queryForObject(contains("WHERE PTRequestID = ? AND Status = 'COMPLETED'"), eq(Long.class), eq(900)))
+                .thenReturn(2L);
+        when(jdbcTemplate.queryForObject(contains("WHERE PTRequestID = ? AND Status = 'SCHEDULED'"), eq(Long.class), eq(900)))
+                .thenReturn(4L);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "customer-get-current-phase",
+                Map.of("authorizationHeader", "Bearer customer"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> activePhase = (Map<String, Object>) result.get("activePhase");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> dashboard = (Map<String, Object>) result.get("dashboard");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> nextSession = (Map<String, Object>) dashboard.get("nextSession");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestSignals = (Map<String, Object>) dashboard.get("latestSignals");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mostRecentSignal = (Map<String, Object>) latestSignals.get("mostRecent");
+
+        assertEquals("INSTANT", activePhase.get("bookingMode"));
+        assertEquals("Coach Alex", activePhase.get("coachName"));
+        assertEquals("Coach Alex", nextSession.get("coachName"));
+        assertEquals(2L, dashboard.get("completedSessions"));
+        assertEquals(4L, dashboard.get("remainingSessions"));
+        assertFalse(((Map<?, ?>) dashboard.get("latestNote")).isEmpty());
+        assertFalse(((Map<?, ?>) dashboard.get("latestProgress")).isEmpty());
+        assertEquals("COACH_NOTE", mostRecentSignal.get("sourceType"));
+    }
+
+    @Test
+    void customerGetProgressContext_shouldExposeCustomerSafePtSummary() throws Exception {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.query(
+                contains("COALESCE(r.BookingMode, 'REQUEST') AS BookingMode"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTRequestID", 900,
+                            "CustomerID", 10,
+                            "CoachID", 20,
+                            "CustomerMembershipID", 77,
+                            "StartDate", LocalDate.of(2026, 3, 17),
+                            "EndDate", LocalDate.of(2026, 4, 14),
+                            "Status", "APPROVED",
+                            "BookingMode", "INSTANT",
+                            "CoachName", "Coach Alex",
+                            "CoachEmail", "coach@gymcore.local",
+                            "CoachPhone", "0900000003")), 0));
+                });
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTRequestSlots prs"), any(RowMapper.class), eq(900)))
+                .thenReturn(List.of(mapOfNullable(
+                        "dayOfWeek", 1,
+                        "timeSlotId", 1,
+                        "slotIndex", 1,
+                        "startTime", "07:00:00",
+                        "endTime", "08:30:00")));
+
+        when(jdbcTemplate.query(
+                contains("AND s.Status = 'SCHEDULED'"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTSessionID", 301,
+                            "PTRequestID", 900,
+                            "CoachID", 20,
+                            "CoachName", "Coach Alex",
+                            "CoachPhone", "0900000003",
+                            "SessionDate", LocalDate.of(2026, 3, 17),
+                            "DayOfWeek", 1,
+                            "TimeSlotID", 1,
+                            "SlotIndex", 1,
+                            "StartTime", java.sql.Time.valueOf("07:00:00"),
+                            "EndTime", java.sql.Time.valueOf("08:30:00"),
+                            "Status", "SCHEDULED",
+                            "CancelReason", null)), 0));
+                });
+
+        when(jdbcTemplate.query(
+                contains("AND s.SessionDate >= ?"),
+                any(RowMapper.class),
+                eq(900),
+                any(LocalDate.class),
+                any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTSessionID", 301,
+                            "PTRequestID", 900,
+                            "CoachID", 20,
+                            "CoachName", "Coach Alex",
+                            "CoachPhone", "0900000003",
+                            "SessionDate", LocalDate.of(2026, 3, 17),
+                            "DayOfWeek", 1,
+                            "TimeSlotID", 1,
+                            "SlotIndex", 1,
+                            "StartTime", java.sql.Time.valueOf("07:00:00"),
+                            "EndTime", java.sql.Time.valueOf("08:30:00"),
+                            "Status", "SCHEDULED",
+                            "CancelReason", null)), 0));
+                });
+
+        when(jdbcTemplate.query(
+                contains("SELECT TOP (3)"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(mapOfNullable(
+                            "PTSessionID", 205,
+                            "PTRequestID", 900,
+                            "CoachID", 20,
+                            "CoachName", "Coach Alex",
+                            "CoachPhone", "0900000003",
+                            "SessionDate", LocalDate.of(2026, 3, 10),
+                            "DayOfWeek", 2,
+                            "TimeSlotID", 1,
+                            "SlotIndex", 1,
+                            "StartTime", java.sql.Time.valueOf("07:00:00"),
+                            "EndTime", java.sql.Time.valueOf("08:30:00"),
+                            "Status", "COMPLETED",
+                            "CancelReason", null,
+                            "NoteCount", 1)), 0));
+                });
+
+        when(jdbcTemplate.query(
+                contains("FROM dbo.PTSessionNotes n"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenReturn(List.of(mapOfNullable(
+                        "noteId", 88,
+                        "ptSessionId", 301,
+                        "noteContent", "Strong improvement in posture",
+                        "createdAt", "2026-03-16T01:00:00Z",
+                        "updatedAt", "2026-03-16T01:30:00Z")));
+
+        when(jdbcTemplate.query(
+                contains("FROM dbo.CustomerHealthHistory"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenReturn(List.of(mapOfNullable(
+                        "heightCm", new BigDecimal("172.5"),
+                        "weightKg", new BigDecimal("70.2"),
+                        "bmi", new BigDecimal("23.6"),
+                        "recordedAt", "2026-03-15T02:00:00Z")));
+
+        when(jdbcTemplate.queryForObject(contains("WHERE PTRequestID = ? AND Status = 'COMPLETED'"), eq(Long.class), eq(900)))
+                .thenReturn(2L);
+        when(jdbcTemplate.queryForObject(contains("WHERE PTRequestID = ? AND Status = 'SCHEDULED'"), eq(Long.class), eq(900)))
+                .thenReturn(4L);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "customer-get-progress-context",
+                Map.of("authorizationHeader", "Bearer customer"));
+
+        assertEquals(Boolean.TRUE, result.get("hasActivePt"));
+        assertEquals("ACTIVE_PHASE", result.get("status"));
+        assertEquals("APPROVED", result.get("currentPtStatus"));
+        assertEquals("INSTANT", result.get("bookingMode"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> coach = (Map<String, Object>) result.get("coach");
+        assertEquals("Coach Alex", coach.get("coachName"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> nextSession = (Map<String, Object>) result.get("nextSession");
+        assertEquals("Coach Alex", nextSession.get("coachName"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestNoteSignal = (Map<String, Object>) result.get("latestNoteSignal");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestProgressSignal = (Map<String, Object>) result.get("latestProgressSignal");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestSignals = (Map<String, Object>) result.get("latestSignals");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> recentSessions = (List<Map<String, Object>>) result.get("recentSessions");
+        assertEquals(1, recentSessions.size());
+        assertEquals("COACH_NOTE", latestNoteSignal.get("sourceType"));
+        assertEquals("HEALTH_SNAPSHOT", latestProgressSignal.get("sourceType"));
+        assertEquals("COACH_NOTE", ((Map<?, ?>) latestSignals.get("mostRecent")).get("sourceType"));
+        assertEquals(2L, result.get("completedSessions"));
+        assertEquals(4L, result.get("remainingSessions"));
+    }
+
+    @Test
+    void customerGetProgressContext_shouldReturnExplicitEmptyStateWithoutActivePt() {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+        when(jdbcTemplate.query(
+                contains("COALESCE(r.BookingMode, 'REQUEST') AS BookingMode"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.execute(
+                "customer-get-progress-context",
+                Map.of("authorizationHeader", "Bearer customer"));
+
+        assertEquals(Boolean.FALSE, result.get("hasActivePt"));
+        assertEquals("NO_ACTIVE_PHASE", result.get("status"));
+        assertEquals("NONE", result.get("currentPtStatus"));
+        assertEquals(Map.of(), result.get("nextSession"));
+        assertEquals(List.of(), result.get("recentSessions"));
     }
 
     @Test
@@ -710,7 +1295,19 @@ class CoachBookingServiceTest {
             return (java.sql.Date) value;
         });
         when(rs.getTime(anyString())).thenAnswer(invocation -> (java.sql.Time) values.get(invocation.getArgument(0)));
+        when(rs.getTimestamp(anyString())).thenAnswer(invocation -> (Timestamp) values.get(invocation.getArgument(0)));
+        when(rs.getBigDecimal(anyString())).thenAnswer(invocation -> (BigDecimal) values.get(invocation.getArgument(0)));
+        when(rs.getObject(anyString())).thenAnswer(invocation -> values.get(invocation.getArgument(0)));
+        when(rs.getBoolean(anyString())).thenAnswer(invocation -> {
+            Object value = values.get(invocation.getArgument(0));
+            return value instanceof Boolean bool && bool;
+        });
         when(rs.wasNull()).thenReturn(false);
         return rs;
+    }
+
+    private LocalDate nextMonday(LocalDate date) {
+        int daysUntilMonday = Math.floorMod(8 - date.getDayOfWeek().getValue(), 7);
+        return date.plusDays(daysUntilMonday);
     }
 }

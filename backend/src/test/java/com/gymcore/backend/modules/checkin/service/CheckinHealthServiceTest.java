@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gymcore.backend.modules.auth.service.AuthService;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
@@ -34,13 +35,15 @@ class CheckinHealthServiceTest {
 
     private JdbcTemplate jdbcTemplate;
     private AuthService authService;
+    private CoachBookingService coachBookingService;
     private CheckinHealthService service;
 
     @BeforeEach
     void setUp() {
         jdbcTemplate = Mockito.mock(JdbcTemplate.class);
         authService = Mockito.mock(AuthService.class);
-        service = new CheckinHealthService(jdbcTemplate, authService);
+        coachBookingService = Mockito.mock(CoachBookingService.class);
+        service = new CheckinHealthService(jdbcTemplate, authService, coachBookingService);
     }
 
     @Test
@@ -271,6 +274,18 @@ class CheckinHealthServiceTest {
                             "CoachName", "Coach Lan"
                     )), 0));
                 });
+        when(coachBookingService.getCustomerProgressContext(5))
+                .thenReturn(Map.of(
+                        "hasActivePt", true,
+                        "currentPtStatus", "APPROVED",
+                        "nextSession", Map.of(
+                                "sessionDate", "2026-03-15",
+                                "coachName", "Coach Lan"),
+                        "recentSessions", List.of(Map.of(
+                                "sessionDate", "2026-03-11",
+                                "status", "COMPLETED")),
+                        "coach", Map.of(
+                                "coachName", "Coach Lan")));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = service.execute("customer-get-progress-hub", Map.of(
@@ -304,15 +319,33 @@ class CheckinHealthServiceTest {
         assertEquals("Coach Lan", latestCoachingSignal.get("coachName"));
 
         @SuppressWarnings("unchecked")
+        Map<String, Object> ptContext = (Map<String, Object>) data.get("ptContext");
+        assertEquals(Boolean.TRUE, ptContext.get("hasActivePt"));
+        assertEquals("APPROVED", ptContext.get("currentPtStatus"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestNoteSignal = (Map<String, Object>) data.get("latestNoteSignal");
+        assertEquals("COACH_NOTE", latestNoteSignal.get("sourceType"));
+        assertEquals("2026-03-11T10:30:00Z", latestNoteSignal.get("recordedAt"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latestProgressSignal = (Map<String, Object>) data.get("latestProgressSignal");
+        assertEquals("HEALTH_SNAPSHOT", latestProgressSignal.get("sourceType"));
+        assertEquals("2026-03-10T08:00:00Z", latestProgressSignal.get("recordedAt"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> followUp = (Map<String, Object>) data.get("followUp");
         assertEquals(2, followUp.get("historyCount"));
         assertEquals(1, followUp.get("recentCoachNoteCount"));
         assertEquals("2026-03-11T10:30:00Z", followUp.get("lastProgressSignalAt"));
         assertEquals(Boolean.TRUE, followUp.get("hasCurrentHealth"));
+        assertEquals(Boolean.TRUE, followUp.get("hasActivePt"));
+        assertEquals("APPROVED", followUp.get("currentPtStatus"));
+        assertEquals("2026-03-15", followUp.get("nextSessionDate"));
         assertEquals(Boolean.TRUE, followUp.get("readOnly"));
         assertEquals(Boolean.FALSE, followUp.get("customerCanWriteProgress"));
         assertEquals(Boolean.FALSE, followUp.get("customerCanWriteCoachNotes"));
-        assertEquals("REVIEW_LATEST_COACH_NOTE", followUp.get("recommendedFocus"));
+        assertEquals("PREPARE_FOR_NEXT_PT_SESSION", followUp.get("recommendedFocus"));
         verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CustomerHealthHistory"), any(), any(), any());
         verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CheckIns"), any(), any(), any());
     }
@@ -327,6 +360,13 @@ class CheckinHealthServiceTest {
                 .thenReturn(List.of());
         when(jdbcTemplate.query(contains("FROM dbo.PTSessionNotes"), any(RowMapper.class), eq(5)))
                 .thenReturn(List.of());
+        when(coachBookingService.getCustomerProgressContext(5))
+                .thenReturn(Map.of(
+                        "hasActivePt", false,
+                        "currentPtStatus", "NONE",
+                        "nextSession", Map.of(),
+                        "recentSessions", List.of(),
+                        "coach", Map.of()));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = service.execute("customer-get-progress-hub", Map.of(
@@ -351,6 +391,8 @@ class CheckinHealthServiceTest {
         Map<String, Object> followUp = (Map<String, Object>) data.get("followUp");
         assertEquals("COMPLETE_BASELINE_CHECK_IN", followUp.get("recommendedFocus"));
         assertEquals(Boolean.TRUE, followUp.get("readOnly"));
+        assertEquals(Boolean.FALSE, followUp.get("hasActivePt"));
+        assertEquals("NONE", followUp.get("currentPtStatus"));
         verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CustomerHealthHistory"), any(), any(), any());
         verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CheckIns"), any(), any(), any());
     }
@@ -394,6 +436,13 @@ class CheckinHealthServiceTest {
                             "CoachName", "Coach Nam"
                     )), 0));
                 });
+        when(coachBookingService.getCustomerProgressContext(5))
+                .thenReturn(Map.of(
+                        "hasActivePt", true,
+                        "currentPtStatus", "APPROVED",
+                        "nextSession", Map.of("sessionDate", "2026-03-12"),
+                        "recentSessions", List.of(),
+                        "coach", Map.of("coachName", "Coach Nam")));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> legacyCurrent = service.execute("customer-get-health-current", Map.of(
@@ -415,6 +464,9 @@ class CheckinHealthServiceTest {
         assertEquals(legacyCurrent, aggregate.get("currentHealth"));
         assertEquals(legacyHistory, aggregate.get("healthHistory"));
         assertEquals(legacyNotes, aggregate.get("coachNotes"));
+        assertTrue(aggregate.containsKey("ptContext"));
+        assertTrue(aggregate.containsKey("latestNoteSignal"));
+        assertTrue(aggregate.containsKey("latestProgressSignal"));
         verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CustomerHealthHistory"), any(), any(), any());
         verify(jdbcTemplate, never()).update(contains("INSERT INTO dbo.CheckIns"), any(), any(), any());
     }
