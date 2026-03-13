@@ -38,6 +38,7 @@ public class CheckinHealthService {
             case "customer-get-health-current" -> customerGetHealthCurrent(asMap(payload));
             case "customer-get-health-history" -> customerGetHealthHistory(asMap(payload));
             case "customer-get-coach-notes" -> customerGetCoachNotes(asMap(payload));
+            case "customer-get-progress-hub" -> customerGetProgressHub(asMap(payload));
             case "customer-create-health-record" -> customerCreateHealthRecord(asMap(payload));
             case "reception-scan-checkin" -> receptionScanCheckin(asMap(payload));
             case "reception-validate-membership" -> receptionValidateMembership(asMap(payload));
@@ -143,6 +144,33 @@ public class CheckinHealthService {
                 "sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()),
                 "coachName", rs.getString("CoachName")), customer.userId());
         return Map.of("items", items);
+    }
+
+    private Map<String, Object> customerGetProgressHub(Map<String, Object> payload) {
+        Map<String, Object> currentHealth = customerGetHealthCurrent(payload);
+        Map<String, Object> healthHistory = customerGetHealthHistory(payload);
+        Map<String, Object> coachNotes = customerGetCoachNotes(payload);
+
+        List<Map<String, Object>> historyItems = listOfMaps(healthHistory.get("items"));
+        List<Map<String, Object>> noteItems = listOfMaps(coachNotes.get("items"));
+
+        Map<String, Object> followUp = new LinkedHashMap<>();
+        followUp.put("historyCount", historyItems.size());
+        followUp.put("recentCoachNoteCount", noteItems.size());
+        followUp.put("hasCurrentHealth", !currentHealth.isEmpty());
+        followUp.put("hasHealthHistory", !historyItems.isEmpty());
+        followUp.put("hasCoachNotes", !noteItems.isEmpty());
+        followUp.put("lastProgressSignalAt", latestTimestamp(
+                asText(currentHealth.get("updatedAt")),
+                asText(firstItemValue(historyItems, "recordedAt")),
+                asText(firstItemValue(noteItems, "createdAt"))));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("currentHealth", currentHealth);
+        data.put("healthHistory", healthHistory);
+        data.put("coachNotes", coachNotes);
+        data.put("followUp", followUp);
+        return data;
     }
 
     private Map<String, Object> customerCreateHealthRecord(Map<String, Object> payload) {
@@ -564,6 +592,34 @@ public class CheckinHealthService {
         } catch (NumberFormatException exception) {
             return null;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> listOfMaps(Object value) {
+        if (value instanceof List<?> list) {
+            return (List<Map<String, Object>>) list;
+        }
+        return List.of();
+    }
+
+    private Object firstItemValue(List<Map<String, Object>> items, String key) {
+        if (items.isEmpty()) {
+            return null;
+        }
+        return items.get(0).get(key);
+    }
+
+    private String latestTimestamp(String... values) {
+        String latest = null;
+        for (String value : values) {
+            if (value == null) {
+                continue;
+            }
+            if (latest == null || value.compareTo(latest) > 0) {
+                latest = value;
+            }
+        }
+        return latest;
     }
 
     private record CustomerLookup(int customerId, String fullName, String email, String phone) {

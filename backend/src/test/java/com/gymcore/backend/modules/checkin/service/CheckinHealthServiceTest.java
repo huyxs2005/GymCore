@@ -223,11 +223,98 @@ class CheckinHealthServiceTest {
         assertEquals("Only receptionist can perform this action.", exception.getReason());
     }
 
+    @Test
+    void customerGetProgressHub_shouldAggregateCurrentHealthHistoryAndCoachNotes() throws Exception {
+        when(authService.requireAuthContext("Bearer customer"))
+                .thenReturn(new AuthService.AuthContext(5, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
+
+        when(jdbcTemplate.queryForObject(contains("FROM dbo.CustomerHealthCurrent"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Map<String, Object>> mapper = invocation.getArgument(1);
+                    return mapper.mapRow(resultSet(Map.of(
+                            "HeightCm", 170.5,
+                            "WeightKg", 68.2,
+                            "BMI", 23.4,
+                            "UpdatedAt", Timestamp.from(Instant.parse("2026-03-10T08:00:00Z"))
+                    )), 0);
+                });
+
+        when(jdbcTemplate.query(contains("FROM dbo.CustomerHealthHistory"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Map<String, Object>> mapper = invocation.getArgument(1);
+                    return List.of(
+                            mapper.mapRow(resultSet(Map.of(
+                                    "HeightCm", 170.5,
+                                    "WeightKg", 68.2,
+                                    "BMI", 23.4,
+                                    "RecordedAt", Timestamp.from(Instant.parse("2026-03-10T08:00:00Z"))
+                            )), 0),
+                            mapper.mapRow(resultSet(Map.of(
+                                    "HeightCm", 170.5,
+                                    "WeightKg", 69.0,
+                                    "BMI", 23.7,
+                                    "RecordedAt", Timestamp.from(Instant.parse("2026-02-28T08:00:00Z"))
+                            )), 1));
+                });
+
+        when(jdbcTemplate.query(contains("FROM dbo.PTSessionNotes"), any(RowMapper.class), eq(5)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Map<String, Object>> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "PTSessionNoteID", 12,
+                            "NoteContent", "Form is improving each week.",
+                            "CreatedAt", Timestamp.from(Instant.parse("2026-03-11T10:30:00Z")),
+                            "SessionDate", LocalDate.of(2026, 3, 11),
+                            "CoachName", "Coach Lan"
+                    )), 0));
+                });
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = service.execute("customer-get-progress-hub", Map.of(
+                "authorizationHeader", "Bearer customer"
+        ));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> currentHealth = (Map<String, Object>) data.get("currentHealth");
+        assertEquals("2026-03-10T08:00:00Z", currentHealth.get("updatedAt"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> healthHistory = (Map<String, Object>) data.get("healthHistory");
+        assertEquals(2, ((List<?>) healthHistory.get("items")).size());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> coachNotes = (Map<String, Object>) data.get("coachNotes");
+        assertEquals(1, ((List<?>) coachNotes.get("items")).size());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> followUp = (Map<String, Object>) data.get("followUp");
+        assertEquals(2, followUp.get("historyCount"));
+        assertEquals(1, followUp.get("recentCoachNoteCount"));
+        assertEquals("2026-03-11T10:30:00Z", followUp.get("lastProgressSignalAt"));
+        assertEquals(Boolean.TRUE, followUp.get("hasCurrentHealth"));
+    }
+
     private ResultSet resultSet(Map<String, Object> values) throws Exception {
         ResultSet rs = Mockito.mock(ResultSet.class);
         when(rs.getString(anyString())).thenAnswer(invocation -> {
             Object value = values.get(invocation.getArgument(0));
             return value == null ? null : String.valueOf(value);
+        });
+        when(rs.getBigDecimal(anyString())).thenAnswer(invocation -> {
+            Object value = values.get(invocation.getArgument(0));
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof java.math.BigDecimal bigDecimal) {
+                return bigDecimal;
+            }
+            if (value instanceof Number number) {
+                return java.math.BigDecimal.valueOf(number.doubleValue());
+            }
+            return null;
         });
         when(rs.getInt(anyString())).thenAnswer(invocation -> {
             Object value = values.get(invocation.getArgument(0));
