@@ -123,7 +123,7 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 **Plans**:
 - [x] 06-01: Reminder-center backend foundation
 - [x] 06-02: Reminder cadence and anti-spam scheduler discipline
-- [ ] 06-03: Important-only promotion broadcast discipline
+- [x] 06-03: Important-only promotion broadcast discipline
 - [ ] 06-04: Reminder center UX and Phase 6 verification
 
 ### Phase 7: Customer Progress Hub
@@ -171,6 +171,6 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 | 3. PT Booking Core | 3/3 | Executed | 2026-03-13 |
 | 4. Support and Ops Console | 4/4 | Executed | 2026-03-13 |
 | 5. PT Reschedule and Exceptions | 5/5 | Executed | 2026-03-13 |
-| 6. Reminder and Notification Discipline | 2/4 | In Progress | - |
+| 6. Reminder and Notification Discipline | 3/4 | In Progress | - |
 | 7. Customer Progress Hub | 0/4 | Planned | - |
 | 8. AI and Weekly Planning | 0/4 | Planned | - |
