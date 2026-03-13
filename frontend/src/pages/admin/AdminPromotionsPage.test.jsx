@@ -99,6 +99,7 @@ describe('AdminPromotionsPage', () => {
             StartAt: '2026-03-01T00:00:00',
             EndAt: '2026-04-01T00:00:00',
             IsActive: true,
+            IsImportant: true,
           },
           {
             PromotionPostID: 12,
@@ -110,6 +111,7 @@ describe('AdminPromotionsPage', () => {
             StartAt: '2026-03-01T00:00:00',
             EndAt: '2026-04-01T00:00:00',
             IsActive: false,
+            IsImportant: false,
           },
         ],
       },
@@ -309,6 +311,7 @@ describe('AdminPromotionsPage', () => {
 
     expect(within(modal).getByLabelText(/Start At/i)).toHaveValue('2026-05-01')
     expect(within(modal).getByLabelText(/End At/i)).toHaveValue('2026-06-01')
+    await user.click(within(modal).getByRole('button', { name: /Mark as important broadcast/i }))
 
     await user.click(within(modal).getByRole('button', { name: /Publish Post/i }))
 
@@ -320,6 +323,40 @@ describe('AdminPromotionsPage', () => {
         promotionId: 3,
         startAt: '2026-05-01',
         endAt: '2026-06-01',
+        isImportant: 1,
+      }))
+    })
+  })
+
+  it('sends ordinary marketing posts as page-only by default', async () => {
+    const user = userEvent.setup()
+    renderWithQuery(<AdminPromotionsPage />)
+
+    await user.click(await screen.findByRole('button', { name: /New Marketing Post/i }))
+    const modal = screen.getByRole('dialog', { name: /New Marketing Post/i })
+
+    await user.type(within(modal).getByLabelText(/Post Title/i), 'Quiet Promo')
+    await user.type(within(modal).getByLabelText(/Content/i), 'Visible in promotions only.')
+
+    const fileInput = modal.querySelector('input[type="file"]')
+    const file = new File(['banner'], 'quiet.png', { type: 'image/png' })
+    await user.upload(fileInput, file)
+
+    await waitFor(() => {
+      expect(adminPromotionApi.uploadBanner).toHaveBeenCalled()
+    })
+
+    await user.click(within(modal).getByRole('button', { name: /Selected coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /FLEXBOOST2M/i }))
+
+    expect(within(modal).getByText(/Standard posts stay in the Promotions page without sending a notification blast\./i)).toBeInTheDocument()
+
+    await user.click(within(modal).getByRole('button', { name: /Publish Post/i }))
+
+    await waitFor(() => {
+      expect(adminPromotionApi.createPost).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Quiet Promo',
+        isImportant: 0,
       }))
     })
   })
