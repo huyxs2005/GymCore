@@ -58,9 +58,16 @@ vi.mock('../../features/content/api/aiApi', () => ({
   },
 }))
 
+vi.mock('../../features/coach/api/coachApi', () => ({
+  coachApi: {
+    getTimeSlots: vi.fn(),
+  },
+}))
+
 const { workoutApi } = await import('../../features/content/api/workoutApi')
 const { foodApi } = await import('../../features/content/api/foodApi')
 const { aiApi } = await import('../../features/content/api/aiApi')
+const { coachApi } = await import('../../features/coach/api/coachApi')
 
 function renderPage() {
   const client = new QueryClient({
@@ -129,6 +136,14 @@ describe('CustomerKnowledgePage', () => {
       fat: 12,
       categories: [{ foodCategoryId: 1, name: 'Meal Prep' }],
     })
+    coachApi.getTimeSlots.mockResolvedValue({
+      data: {
+        items: [
+          { timeSlotId: 1, startTime: '06:00:00', endTime: '07:00:00' },
+          { timeSlotId: 2, startTime: '18:00:00', endTime: '19:00:00' },
+        ],
+      },
+    })
 
     aiApi.getFitnessGoals.mockResolvedValue({
       items: [{ goalId: 9, goalCode: 'GAIN_MUSCLE', name: 'Gain muscle' }],
@@ -156,7 +171,25 @@ describe('CustomerKnowledgePage', () => {
       ],
     })
     aiApi.askCoachBookingAssistant.mockResolvedValue({
-      answer: 'Use coach booking if you need more structure.',
+      answer: 'Booking matcher da duoc chay bang cung luat voi man Coach Booking.',
+      matchStatus: 'READY',
+      toDate: '2026-04-30',
+      fullMatches: [
+        {
+          coachId: 51,
+          fullName: 'Coach Linh',
+          matchedSlots: 2,
+          requestedSlots: 2,
+        },
+      ],
+      partialMatches: [
+        {
+          coachId: 52,
+          fullName: 'Coach Minh',
+          matchedSlots: 1,
+          requestedSlots: 2,
+        },
+      ],
     })
     aiApi.getRecommendations.mockResolvedValue({
       source: 'PROFILE',
@@ -357,5 +390,29 @@ describe('CustomerKnowledgePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Widget: Review latest progress signals' }))
     expect(navigateMock).toHaveBeenCalledWith('/customer/progress-hub')
+  })
+
+  it('sends structured PT booking inputs to the coach assistant and renders matcher output', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByPlaceholderText(/PT buoi toi/i), 'Toi muon lich toi on dinh')
+    await user.selectOptions(screen.getByLabelText(/Recurring time slot/i), '2')
+    await user.click(screen.getByRole('button', { name: /Add slot/i }))
+    await user.click(screen.getByRole('button', { name: 'Ask coach assistant' }))
+
+    await waitFor(() => {
+      expect(aiApi.askCoachBookingAssistant.mock.calls[0][0]).toEqual(
+        expect.objectContaining({
+          question: 'Toi muon lich toi on dinh',
+          endDate: expect.any(String),
+          slots: [{ dayOfWeek: 1, timeSlotId: 2 }],
+        }),
+      )
+    })
+
+    expect(await screen.findByText(/Booking matcher da duoc chay/i)).toBeInTheDocument()
+    expect(screen.getByText('Full matches')).toBeInTheDocument()
+    expect(screen.getByText('Coach Linh')).toBeInTheDocument()
   })
 })

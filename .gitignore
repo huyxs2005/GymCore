@@ -5,3 +5,11 @@ node_modules/
 backend/uploads/
 backend/hs_err_pid*.log
 backend/replay_pid*.log
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+/tests/.auth/

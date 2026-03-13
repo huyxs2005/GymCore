@@ -1,0 +1,19 @@
+GymCore local handoff cleanup summary
+
+1. Removed outdated planning and legacy test scaffolding that no longer matches the active project flow.
+2. Added root helper scripts:
+- seed-db.ps1
+- verify-local.ps1
+3. Updated backend datasource config so SQL settings can be overridden by environment variables.
+4. Updated README and frontend README to reflect the real local setup, SQL password, verify flow, and seeded accounts.
+5. Added env examples:
+- backend/.env.example
+- frontend/.env.example
+6. Added handoff text files:
+- docs/LOCAL_SETUP_AND_VERIFY.txt
+- docs/CODING_AGENT_PROMPT.txt
+- docs/DEMO_SCRIPT_15_MIN.txt
+- docs/CHANGE_SUMMARY.txt
+7. Active local business rules are documented:
+- Product review only after pickup
+- PT booking AI aligned with the real booking match rules

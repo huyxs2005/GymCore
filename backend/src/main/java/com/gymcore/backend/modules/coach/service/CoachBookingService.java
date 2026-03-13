@@ -97,6 +97,10 @@ public class CoachBookingService {
         };
     }
 
+    public Map<String, Object> previewCustomerCoachMatches(Map<String, Object> payload) {
+        return customerMatchCoaches(payload);
+    }
+
     // ---------- Common ----------
 
     private Map<String, Object> getTimeSlots() {

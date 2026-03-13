@@ -1,0 +1,27 @@
+{
+  "name": "project",
+  "version": "1.0.0",
+  "description": "GymCore is a full-stack gym management project:\r - Backend: Spring Boot\r - Frontend: React (Vite)\r - Database: Microsoft SQL Server",
+  "main": "playwright.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyxs2005/GymCore.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/huyxs2005/GymCore/issues"
+  },
+  "homepage": "https://github.com/huyxs2005/GymCore#readme"
+}

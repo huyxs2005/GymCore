@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowUpRight, Clock3, Dumbbell, MapPin, Phone, ShoppingCart } from 'lucide-react'
+import { ArrowUpRight, ChevronLeft, ChevronRight, Clock3, Dumbbell, MapPin, Phone, ShoppingCart } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import AuthHeaderActions from '../common/AuthHeaderActions'
 import NotificationDropdown from '../common/NotificationDropdown'
@@ -34,6 +34,58 @@ function getRoleLinks(role) {
 
 function shouldUseRoleHeader(pathname) {
   return pathname === '/' || pathname === '/profile' || pathname === '/notifications'
+}
+
+function getQuickLinks(pathname, role) {
+  if (pathname.startsWith('/admin/')) {
+    return [
+      { to: '/admin/dashboard', label: 'Dashboard' },
+      { to: '/admin/support', label: 'Support Console' },
+      { to: '/admin/reports', label: 'Reports' },
+    ]
+  }
+
+  if (pathname.startsWith('/coach/')) {
+    return [
+      { to: '/coach/schedule', label: 'Schedule' },
+      { to: '/coach/booking-requests', label: 'Booking Requests' },
+      { to: '/coach/customers', label: 'Customers' },
+    ]
+  }
+
+  if (pathname.startsWith('/reception/')) {
+    return [
+      { to: '/reception/checkin', label: 'Check-in Scanner' },
+      { to: '/reception/pickup', label: 'Pickup Desk' },
+      { to: '/reception/invoices', label: 'Invoices' },
+    ]
+  }
+
+  if (pathname.startsWith('/customer/') || role === 'CUSTOMER') {
+    return [
+      { to: '/customer/progress-hub', label: 'Progress Hub' },
+      { to: '/customer/membership', label: 'Membership' },
+      { to: '/customer/shop', label: 'Product Shop' },
+    ]
+  }
+
+  return [{ to: '/', label: 'Home' }]
+}
+
+function getOverflowState(element) {
+  if (!element) {
+    return { left: false, right: false }
+  }
+
+  const maxScroll = element.scrollWidth - element.clientWidth
+  if (maxScroll <= 2) {
+    return { left: false, right: false }
+  }
+
+  return {
+    left: element.scrollLeft > 4,
+    right: element.scrollLeft < maxScroll - 4,
+  }
 }
 
 function CustomerShopCartButton({ visible, onOpenCart }) {
@@ -70,11 +122,11 @@ function CustomerShopCartButton({ visible, onOpenCart }) {
       type="button"
       aria-label="Open cart"
       onClick={onOpenCart}
-      className={`relative rounded-full p-2 text-slate-600 transition hover:bg-slate-100 focus:outline-none ${pulse ? 'scale-110' : 'scale-100'}`}
+      className={`relative rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 shadow-ambient-sm backdrop-blur-md transition duration-200 hover:border-white/15 hover:bg-white/10 hover:text-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${pulse ? 'scale-110 shadow-glow' : 'scale-100'}`}
     >
       <ShoppingCart size={20} />
       {itemCount > 0 && (
-        <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full border-2 border-white bg-gym-600 px-1 text-[10px] font-bold text-white">
+        <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full border border-slate-950 bg-gym-500 px-1 text-[10px] font-bold text-slate-950 shadow-glow">
           {itemCount > 99 ? '99+' : itemCount}
         </span>
       )}
@@ -96,6 +148,9 @@ function AppShell({ children }) {
   const mobileNavRef = useRef(null)
   const desktopDragRef = useRef({ active: false, startX: 0, scrollLeft: 0 })
   const mobileDragRef = useRef({ active: false, startX: 0, scrollLeft: 0 })
+  const [desktopOverflow, setDesktopOverflow] = useState({ left: false, right: false })
+  const [mobileOverflow, setMobileOverflow] = useState({ left: false, right: false })
+  const quickLinks = getQuickLinks(pathname, userRole)
 
   function jumpToTop() {
     window.scrollTo(0, 0)
@@ -138,6 +193,7 @@ function AppShell({ children }) {
     const x = event.pageX - el.offsetLeft
     const walk = x - desktopDragRef.current.startX
     el.scrollLeft = desktopDragRef.current.scrollLeft - walk
+    setDesktopOverflow(getOverflowState(el))
   }
 
   const onMobileMouseDown = (event) => {
@@ -165,45 +221,92 @@ function AppShell({ children }) {
     const x = event.pageX - el.offsetLeft
     const walk = x - mobileDragRef.current.startX
     el.scrollLeft = mobileDragRef.current.scrollLeft - walk
+    setMobileOverflow(getOverflowState(el))
   }
 
+  useEffect(() => {
+    if (!showWorkspaceNav) {
+      return undefined
+    }
+
+    const desktopEl = desktopNavRef.current
+    const mobileEl = mobileNavRef.current
+    const syncDesktop = () => setDesktopOverflow(getOverflowState(desktopNavRef.current))
+    const syncMobile = () => setMobileOverflow(getOverflowState(mobileNavRef.current))
+
+    const frame = window.requestAnimationFrame(() => {
+      desktopEl?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
+      mobileEl?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
+      syncDesktop()
+      syncMobile()
+    })
+
+    desktopEl?.addEventListener('scroll', syncDesktop, { passive: true })
+    mobileEl?.addEventListener('scroll', syncMobile, { passive: true })
+    window.addEventListener('resize', syncDesktop)
+    window.addEventListener('resize', syncMobile)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      desktopEl?.removeEventListener('scroll', syncDesktop)
+      mobileEl?.removeEventListener('scroll', syncMobile)
+      window.removeEventListener('resize', syncDesktop)
+      window.removeEventListener('resize', syncMobile)
+    }
+  }, [pathname, showWorkspaceNav])
+
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div className="flex min-h-screen flex-col bg-transparent text-slate-50">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[rgba(10,10,15,0.82)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-2 text-slate-900">
-            <span className="rounded-md bg-gym-500 p-1.5 text-white">
+          <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-3 text-slate-50">
+            <span className="rounded-xl bg-gym-500 p-2 text-slate-950 shadow-glow">
               <Dumbbell size={16} />
             </span>
-            <span className="text-lg font-bold">GymCore</span>
+            <span>
+              <span className="block font-display text-lg font-bold tracking-tight">GymCore</span>
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">Atmospheric fitness workspace</span>
+            </span>
           </Link>
 
           <div className="flex items-center gap-3">
             {showWorkspaceNav && (
-              <nav
-                ref={desktopNavRef}
-                className="gc-scrollbar-hidden hidden max-w-[74vw] select-none items-center gap-2 overflow-x-auto whitespace-nowrap text-xs font-medium sm:flex sm:flex-nowrap sm:text-sm"
-                onMouseDown={onDesktopMouseDown}
-                onMouseUp={onDesktopMouseUp}
-                onMouseLeave={onDesktopMouseLeave}
-                onMouseMove={onDesktopMouseMove}
-                aria-label="Workspace navigation"
-              >
-                {headerLinks.map((link) => (
-                  <NavLink
-                    key={link.to}
-                    to={link.to}
-                    onClick={() => handleRouteClick(link.to)}
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'rounded-md bg-gym-100 px-1.5 py-1 text-gym-900'
-                        : 'rounded-md px-1.5 py-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900'
-                    }
-                  >
-                    {link.label}
-                  </NavLink>
-                ))}
-              </nav>
+              <div className="relative hidden sm:block">
+                {desktopOverflow.left ? (
+                  <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start pl-1 text-slate-500" style={{ background: 'linear-gradient(90deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
+                    <ChevronLeft size={16} />
+                  </div>
+                ) : null}
+                {desktopOverflow.right ? (
+                  <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end pr-1 text-slate-500" style={{ background: 'linear-gradient(270deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
+                    <ChevronRight size={16} />
+                  </div>
+                ) : null}
+                <nav
+                  ref={desktopNavRef}
+                  className="gc-scrollbar-hidden hidden max-w-[74vw] select-none items-center gap-2 overflow-x-auto rounded-full border border-white/10 bg-white/5 px-4 py-1.5 shadow-ambient-sm backdrop-blur-xl whitespace-nowrap text-xs font-medium sm:flex sm:flex-nowrap sm:text-sm"
+                  onMouseDown={onDesktopMouseDown}
+                  onMouseUp={onDesktopMouseUp}
+                  onMouseLeave={onDesktopMouseLeave}
+                  onMouseMove={onDesktopMouseMove}
+                  aria-label="Workspace navigation"
+                >
+                  {headerLinks.map((link) => (
+                    <NavLink
+                      key={link.to}
+                      to={link.to}
+                      onClick={() => handleRouteClick(link.to)}
+                      className={({ isActive }) =>
+                        isActive
+                          ? 'rounded-full bg-gym-500 px-3 py-2 text-sm font-semibold text-slate-950 shadow-glow'
+                          : 'rounded-full px-3 py-2 text-sm text-slate-400 transition hover:bg-white/8 hover:text-slate-50'
+                      }
+                    >
+                      {link.label}
+                    </NavLink>
+                  ))}
+                </nav>
+              </div>
             )}
             {isAuthenticated && <NotificationDropdown />}
             <CustomerShopCartButton
@@ -219,65 +322,77 @@ function AppShell({ children }) {
         </div>
         {showWorkspaceNav && (
           <div className="mx-auto max-w-7xl px-4 pb-3 sm:hidden sm:px-6">
-            <nav
-              ref={mobileNavRef}
-              className="gc-scrollbar-hidden flex select-none flex-nowrap gap-2 overflow-x-auto whitespace-nowrap text-xs font-medium"
-              onMouseDown={onMobileMouseDown}
-              onMouseUp={onMobileMouseUp}
-              onMouseLeave={onMobileMouseLeave}
-              onMouseMove={onMobileMouseMove}
-              aria-label="Workspace navigation"
-            >
-              {headerLinks.map((link) => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
-                  onClick={() => handleRouteClick(link.to)}
-                  className={({ isActive }) =>
-                    isActive
-                      ? 'rounded-md bg-gym-100 px-2 py-1 text-gym-900'
-                      : 'rounded-md px-2 py-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900'
-                  }
-                >
-                  {link.label}
-                </NavLink>
-              ))}
-            </nav>
+            <div className="relative">
+              {mobileOverflow.left ? (
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-8 items-center justify-start pl-1 text-slate-500" style={{ background: 'linear-gradient(90deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
+                  <ChevronLeft size={14} />
+                </div>
+              ) : null}
+              {mobileOverflow.right ? (
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-8 items-center justify-end pr-1 text-slate-500" style={{ background: 'linear-gradient(270deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
+                  <ChevronRight size={14} />
+                </div>
+              ) : null}
+              <nav
+                ref={mobileNavRef}
+                className="gc-scrollbar-hidden flex select-none flex-nowrap gap-2 overflow-x-auto rounded-full border border-white/10 bg-white/5 px-3 py-1.5 shadow-ambient-sm backdrop-blur-xl whitespace-nowrap text-xs font-medium"
+                onMouseDown={onMobileMouseDown}
+                onMouseUp={onMobileMouseUp}
+                onMouseLeave={onMobileMouseLeave}
+                onMouseMove={onMobileMouseMove}
+                aria-label="Workspace navigation"
+              >
+                {headerLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => handleRouteClick(link.to)}
+                    className={({ isActive }) =>
+                      isActive
+                        ? 'rounded-full bg-gym-500 px-3 py-2 text-slate-950 shadow-glow'
+                        : 'rounded-full px-3 py-2 text-slate-400 transition hover:bg-white/8 hover:text-slate-50'
+                    }
+                  >
+                    {link.label}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
           </div>
         )}
       </header>
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-slate-200 bg-gradient-to-b from-white to-slate-50 px-4 pb-6 pt-10 sm:px-6">
+      <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.45),rgba(10,10,15,0.92))] px-4 pb-6 pt-10 sm:px-6">
         <div className="mx-auto max-w-7xl">
           <div className="grid gap-8 md:grid-cols-3">
             <section className="space-y-3">
-              <div className="inline-flex items-center gap-2 text-slate-900">
-                <span className="rounded-md bg-gym-500 p-1.5 text-white">
+              <div className="inline-flex items-center gap-3 text-slate-50">
+                <span className="rounded-xl bg-gym-500 p-2 text-slate-950 shadow-glow">
                   <Dumbbell size={14} />
                 </span>
-                <span className="text-base font-bold">GymCore</span>
+                <span className="font-display text-base font-bold tracking-tight">GymCore</span>
               </div>
-              <p className="max-w-xs text-sm leading-relaxed text-slate-600">
+              <p className="max-w-xs text-sm leading-relaxed text-slate-500">
                 Modern fitness management with membership, coach booking, and seamless PayOS checkout.
               </p>
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</h3>
-              <div className="space-y-2.5 text-sm text-slate-600">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Contact</h3>
+              <div className="space-y-2.5 text-sm text-slate-500">
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                   <p className="inline-flex items-center gap-2">
                     <Clock3 size={14} className="text-gym-600" />
                     <span>Open daily: {gymPublicInfo.openingHours}</span>
                   </p>
-                  <a href={`tel:${gymPublicInfo.hotline}`} className="inline-flex items-center gap-2 transition hover:text-slate-900">
+                  <a href={`tel:${gymPublicInfo.hotline}`} className="inline-flex items-center gap-2 transition hover:text-slate-50">
                     <Phone size={14} className="text-gym-600" />
                     <span>{gymPublicInfo.hotline}</span>
                   </a>
                 </div>
-                <a href={gymPublicInfo.mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-start gap-2 transition hover:text-slate-900">
+                <a href={gymPublicInfo.mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-start gap-2 transition hover:text-slate-50">
                   <MapPin size={14} className="mt-0.5 text-gym-600" />
                   <span className="leading-relaxed">{gymPublicInfo.address}</span>
                 </a>
@@ -285,22 +400,22 @@ function AppShell({ children }) {
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick Links</h3>
-              <div className="flex flex-col gap-2 text-sm text-slate-600">
-                <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-1 transition hover:text-slate-900">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Quick Links</h3>
+              <p className="text-xs text-slate-500">Shortcuts for your current workspace.</p>
+              <div className="flex flex-col gap-2 text-sm text-slate-500">
+                <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-1 transition hover:text-slate-50">
                   Home
                 </Link>
-                <Link to="/customer/membership" onClick={() => handleRouteClick('/customer/membership')} className="inline-flex items-center gap-1 transition hover:text-slate-900">
-                  Membership
-                </Link>
-                <Link to="/customer/shop" onClick={() => handleRouteClick('/customer/shop')} className="inline-flex items-center gap-1 transition hover:text-slate-900">
-                  Product Shop
-                </Link>
+                {quickLinks.map((link) => (
+                  <Link key={link.to} to={link.to} onClick={() => handleRouteClick(link.to)} className="inline-flex items-center gap-1 transition hover:text-slate-50">
+                    {link.label}
+                  </Link>
+                ))}
                 <a
                   href={gymPublicInfo.mapsUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 transition hover:text-slate-900"
+                  className="inline-flex items-center gap-1 transition hover:text-slate-50"
                 >
                   Find us on map
                   <ArrowUpRight size={12} />
@@ -309,8 +424,8 @@ function AppShell({ children }) {
             </section>
           </div>
 
-          <div className="mt-8 flex flex-col items-start justify-between gap-2 border-t border-slate-200 pt-4 text-xs text-slate-500 sm:flex-row sm:items-center">
-            <p>© {new Date().getFullYear()} GymCore. All rights reserved.</p>
+          <div className="mt-8 flex flex-col items-start justify-between gap-2 border-t border-white/10 pt-4 text-xs text-slate-500 sm:flex-row sm:items-center">
+            <p>&copy; {new Date().getFullYear()} GymCore. All rights reserved.</p>
             <p>Pickup at gym front desk for all product orders.</p>
           </div>
         </div>

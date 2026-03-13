@@ -194,9 +194,9 @@ public class ProductSalesService {
         int rating = requireRating(body.get("rating"));
         String comment = requireReviewComment(body.get("comment"));
 
-        if (!customerHasPaidOrderForProduct(user.userId(), productId)) {
+        if (!customerHasPickedUpOrderForProduct(user.userId(), productId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Review blocked: customer must have a PAID order for this product.");
+                    "Review blocked: customer must complete pickup for this product before reviewing.");
         }
 
         try {
@@ -210,7 +210,7 @@ public class ProductSalesService {
                     : exception.getMessage();
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     message != null && message.contains("Review blocked")
-                            ? "Review blocked: customer must have a PAID order for this product."
+                            ? "Review blocked: customer must complete pickup for this product before reviewing."
                             : "Unable to create review. You may have already reviewed this product.");
         }
 
@@ -225,9 +225,9 @@ public class ProductSalesService {
         int rating = requireRating(body.get("rating"));
         String comment = requireReviewComment(body.get("comment"));
 
-        if (!customerHasPaidOrderForProduct(user.userId(), productId)) {
+        if (!customerHasPickedUpOrderForProduct(user.userId(), productId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Review blocked: customer must have a PAID order for this product.");
+                    "Review blocked: customer must complete pickup for this product before reviewing.");
         }
 
         int updated = jdbcTemplate.update("""
@@ -1166,21 +1166,23 @@ public class ProductSalesService {
         }
     }
 
-    private boolean customerHasPaidOrderForProduct(int customerId, int productId) {
+    private boolean customerHasPickedUpOrderForProduct(int customerId, int productId) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1)
                 FROM dbo.Orders o
                 JOIN dbo.OrderItems oi ON oi.OrderID = o.OrderID
+                JOIN dbo.OrderInvoices i ON i.OrderID = o.OrderID
                 WHERE o.CustomerID = ?
                   AND oi.ProductID = ?
                   AND o.Status = 'PAID'
+                  AND i.PickedUpAt IS NOT NULL
                 """, Integer.class, customerId, productId);
         return count != null && count > 0;
     }
 
     private Map<String, Object> loadCustomerReviewContext(int customerId, int productId) {
         Map<String, Object> context = new LinkedHashMap<>();
-        context.put("canReview", customerHasPaidOrderForProduct(customerId, productId));
+        context.put("canReview", customerHasPickedUpOrderForProduct(customerId, productId));
 
         List<Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT TOP (1) ProductReviewID, Rating, Comment, ReviewDate

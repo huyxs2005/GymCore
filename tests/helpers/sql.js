@@ -45,15 +45,21 @@ function resolveSqlConnection() {
   const jdbcUrl = resolveSpringPlaceholder(properties['spring.datasource.url'] || '')
   const username = resolveSpringPlaceholder(properties['spring.datasource.username'] || '')
   const password = resolveSpringPlaceholder(properties['spring.datasource.password'] || '')
-  const match = jdbcUrl.match(/^jdbc:sqlserver:\/\/([^;:]+)(?::(\d+))?;.*databaseName=([^;]+)/i)
+  const hostMatch = jdbcUrl.match(/^jdbc:sqlserver:\/\/([^;:]+)(?::(\d+))?(?:;|$)/i)
+  const databaseMatch = jdbcUrl.match(/(?:^|;)databaseName=([^;]+)/i)
+  const instanceMatch = jdbcUrl.match(/(?:^|;)instanceName=([^;]+)/i)
 
-  if (!match) {
+  if (!hostMatch || !databaseMatch) {
     throw new Error(`Unsupported SQL Server JDBC URL: ${jdbcUrl}`)
   }
 
+  const host = hostMatch[1]
+  const port = hostMatch[2]
+  const instanceName = instanceMatch?.[1]?.trim()
+
   return {
-    server: match[2] ? `tcp:${match[1]},${match[2]}` : match[1],
-    database: match[3],
+    server: port ? `tcp:${host},${port}` : instanceName ? `${host}\\${instanceName}` : host,
+    database: databaseMatch[1],
     username,
     password,
   }

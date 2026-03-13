@@ -122,6 +122,26 @@ function buildActiveWarningMessage(mode, currentMembership, selectedPlan) {
   return `You already have an ACTIVE membership (${currentName}). If you continue, your current membership will end today and ${selectedName} starts today (upgrade flow).`
 }
 
+function getCheckoutStartsLabel(mode, hasActiveMembership, currentMembership) {
+  if (!mode) return 'Select a plan'
+  if (mode === 'UPGRADE') return 'Today after payment is confirmed'
+  if (hasActiveMembership) {
+    return `After ${currentMembership?.plan?.name || 'your current membership'} ends`
+  }
+  return 'Immediately after payment is confirmed'
+}
+
+function getCheckoutImpactLabel(mode, hasActiveMembership, selectedPlan) {
+  if (!mode || !selectedPlan) return 'Choose a plan to preview the checkout outcome.'
+  if (mode === 'UPGRADE') {
+    return `${selectedPlan.name} will replace your current active membership today.`
+  }
+  if (hasActiveMembership) {
+    return `${selectedPlan.name} will be queued as the next membership in your timeline.`
+  }
+  return `${selectedPlan.name} becomes your next active membership after payment.`
+}
+
 function CustomerMembershipPage() {
   const queryClient = useQueryClient()
   const [selectedPlanId, setSelectedPlanId] = useState(null)
@@ -326,6 +346,9 @@ function CustomerMembershipPage() {
   const checkoutModePreview = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : null
   const queueLimitReached = hasActiveMembership && hasQueuedMembership
   const checkoutActionLabel = checkoutModePreview ? checkoutModeLabel[checkoutModePreview] : 'Checkout'
+  const estimatedFinalAmount = Number(couponPreview?.estimatedFinalAmount || selectedPlan?.price || 0)
+  const estimatedDiscountAmount = Number(couponPreview?.estimatedDiscount || 0)
+  const bonusDurationMonths = Number(couponPreview?.bonusDurationMonths || 0)
 
   const resetCouponSelection = () => {
     setSelectedPromoCode('')
@@ -371,6 +394,49 @@ function CustomerMembershipPage() {
       subtitle="Browse plans, pay with PayOS, and track your current membership/check-in status."
       links={customerNav}
     >
+      <section className="mb-6 overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.1),_transparent_28%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.94)_45%,_rgba(34,24,10,0.94))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+        <div className="grid gap-5 lg:grid-cols-[1.6fr,1fr]">
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Membership planner</p>
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-slate-900">Choose the membership path that matches how you train right now.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                Compare access tiers, understand whether your checkout will purchase, renew, or upgrade, and preview the final PayOS outcome before you continue.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+                PayOS checkout
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                Coupon preview
+              </span>
+              <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+                Queue-aware renewals
+              </span>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Active status</p>
+              <p className="mt-2 text-lg font-black text-slate-900">{hasActiveMembership ? 'Membership active' : 'No active membership'}</p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Selected mode</p>
+              <p className="mt-2 text-lg font-black text-slate-900">
+                {checkoutModePreview ? checkoutModeLabel[checkoutModePreview] : 'Select a plan'}
+              </p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Estimated total</p>
+              <p className="mt-2 text-lg font-black text-slate-900">
+                {selectedPlan ? `${estimatedFinalAmount.toLocaleString('en-US')} VND` : '--'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {showSuccessMessage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="animate-in fade-in zoom-in rounded-3xl bg-white p-8 text-center shadow-2xl duration-300">
@@ -404,12 +470,13 @@ function CustomerMembershipPage() {
               return (
                 <article
                   key={key}
-                  className={`flex min-h-[400px] flex-col rounded-[28px] border bg-gradient-to-br p-5 shadow-sm transition ${
+                  className={`relative flex min-h-[400px] flex-col overflow-hidden rounded-[28px] border bg-gradient-to-br p-5 shadow-sm transition ${
                     selected
                       ? `${meta.border} ${meta.accent} ring-2 ring-offset-2 ring-gym-200`
                       : `border-slate-200 ${meta.accent} hover:border-gym-200`
                   }`}
                 >
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.8),_transparent_70%)]" />
                   <button
                     type="button"
                     onClick={() => {
@@ -505,6 +572,10 @@ function CustomerMembershipPage() {
                         </li>
                       ))}
                     </ul>
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Best for</p>
+                      <p className="mt-2 font-semibold text-slate-900">{meta.headline}</p>
+                    </div>
                   </div>
                 </article>
               )
@@ -636,6 +707,49 @@ function CustomerMembershipPage() {
               )}
             </div>
 
+            <div className="rounded-2xl border border-gym-100 bg-gym-50/60 p-4">
+              <div className="flex items-center gap-2">
+                <CreditCard size={16} className="text-gym-700" />
+                <h4 className="text-sm font-semibold text-slate-900">Checkout summary</h4>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Mode</p>
+                  <p className="mt-2 text-base font-black text-slate-900">
+                    {checkoutModePreview ? checkoutModeLabel[checkoutModePreview] : 'Select a plan'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Starts</p>
+                  <p className="mt-2 text-base font-black text-slate-900">
+                    {getCheckoutStartsLabel(checkoutModePreview, hasActiveMembership, currentMembership)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Coupon impact</p>
+                  <p className="mt-2 text-base font-black text-slate-900">
+                    {selectedPromoCode
+                      ? `${estimatedDiscountAmount.toLocaleString('en-US')} VND off`
+                      : 'No coupon applied'}
+                  </p>
+                  {bonusDurationMonths > 0 ? (
+                    <p className="mt-1 text-xs font-medium text-gym-700">
+                      +{bonusDurationMonths} bonus month{bonusDurationMonths > 1 ? 's' : ''}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Estimated total</p>
+                  <p className="mt-2 text-base font-black text-slate-900">
+                    {selectedPlan ? `${estimatedFinalAmount.toLocaleString('en-US')} VND` : '--'}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-slate-600">
+                {getCheckoutImpactLabel(checkoutModePreview, hasActiveMembership, selectedPlan)}
+              </p>
+            </div>
+
             <button
               type="button"
               disabled={checkoutMutation.isPending || !selectedPlan || queueLimitReached}
@@ -645,6 +759,9 @@ function CustomerMembershipPage() {
               <CalendarClock size={16} />
               {checkoutMutation.isPending ? 'Redirecting to PayOS...' : `${checkoutActionLabel} with PayOS`}
             </button>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
+              Front desk check-in still depends on the membership status shown above, so your purchase outcome is reflected both in customer pages and receptionist validation.
+            </div>
             {queueLimitReached && (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 You already have the maximum of 2 memberships in progress: your current active membership and one queued next membership.

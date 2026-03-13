@@ -85,6 +85,21 @@ function formatHumanDate(value) {
   })
 }
 
+function formatDateTimeLabel(value) {
+  if (!value) return 'No update yet'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value)
+  }
+  return parsed.toLocaleString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function buildCoachBookingMembershipGate(response) {
   const payload = response?.data ?? response ?? {}
   const membership = payload?.membership ?? {}
@@ -193,6 +208,8 @@ function CustomerCoachBookingPage() {
     items: [],
     pendingRequests: [],
     deniedRequests: [],
+    activePhase: null,
+    dashboard: {},
   })
 
   const [rescheduleModal, setRescheduleModal] = useState({
@@ -208,6 +225,12 @@ function CustomerCoachBookingPage() {
     session: null,
     rating: 0,
     comment: '',
+  })
+  const [seriesModal, setSeriesModal] = useState({
+    open: false,
+    focusDay: 1,
+    cutoverDate: '',
+    slots: [],
   })
   const [cancelModal, setCancelModal] = useState({
     open: false,
@@ -269,6 +292,8 @@ function CustomerCoachBookingPage() {
         items: Array.isArray(payload?.items) ? payload.items : [],
         pendingRequests: Array.isArray(payload?.pendingRequests) ? payload.pendingRequests : [],
         deniedRequests: Array.isArray(payload?.deniedRequests) ? payload.deniedRequests : [],
+        activePhase: payload?.activePhase ?? null,
+        dashboard: payload?.dashboard ?? {},
       }
       setScheduleData(nextSchedule)
       setPtBookingGate(buildPtBookingGate(nextSchedule))
@@ -474,7 +499,7 @@ function CustomerCoachBookingPage() {
     }
     return {
       title: 'No blocking PT request',
-      detail: 'You can open the planner and preview coach matches.',
+      detail: 'You can open the planner and run a real coach match preview for your recurring PT schedule.',
       badge: 'Available',
     }
   }, [ptBookingGate, formatSlotLabel])
@@ -575,6 +600,90 @@ function CustomerCoachBookingPage() {
       setHasPreviewedMatches(true)
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot preview coach matches')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openSeriesModal() {
+    const templateSlots = Array.isArray(scheduleData.activePhase?.templateSlots)
+      ? scheduleData.activePhase.templateSlots.map((slot) => ({
+          dayOfWeek: Number(slot.dayOfWeek),
+          timeSlotId: Number(slot.timeSlotId),
+        }))
+      : []
+    const nextSessionDate = scheduleData.dashboard?.nextSession?.sessionDate
+    setSeriesModal({
+      open: true,
+      focusDay: templateSlots[0]?.dayOfWeek || 1,
+      cutoverDate: nextSessionDate || formatDateValue(addDays(new Date(), 1)),
+      slots: templateSlots,
+    })
+  }
+
+  function closeSeriesModal() {
+    setSeriesModal({
+      open: false,
+      focusDay: 1,
+      cutoverDate: '',
+      slots: [],
+    })
+  }
+
+  function isSeriesSlotSelected(dayOfWeek, timeSlotId) {
+    return seriesModal.slots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
+  }
+
+  function toggleSeriesSlot(dayOfWeek, timeSlotId) {
+    setSeriesModal((prev) => {
+      const exists = prev.slots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
+      if (exists) {
+        return {
+          ...prev,
+          slots: prev.slots.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)),
+        }
+      }
+      return {
+        ...prev,
+        slots: [...prev.slots, { dayOfWeek, timeSlotId }],
+      }
+    })
+  }
+
+  async function submitSeriesChange() {
+    if (!seriesModal.cutoverDate || seriesModal.slots.length === 0) {
+      setError('Please choose a future cutover date and at least one recurring slot.')
+      return
+    }
+    try {
+      setLoading(true)
+      const response = await coachBookingApi.rescheduleSeries({
+        cutoverDate: seriesModal.cutoverDate,
+        slots: seriesModal.slots
+          .slice()
+          .sort((left, right) => {
+            if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+            return left.timeSlotId - right.timeSlotId
+          }),
+      })
+      closeSeriesModal()
+      setMessage(response?.data?.message || response?.message || 'Recurring PT series updated successfully.')
+      await loadMySchedule()
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot update the recurring PT plan')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleReplacementDecision(sessionId, decision) {
+    try {
+      setLoading(true)
+      const response = await coachBookingApi.respondToReplacementOffer(sessionId, { decision })
+      setMessage(response?.data?.message || response?.message || 'Replacement coach decision saved successfully.')
+      await loadMySchedule()
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot save replacement coach decision')
     } finally {
       setLoading(false)
     }
@@ -684,10 +793,10 @@ function CustomerCoachBookingPage() {
         reason: rescheduleModal.reason || undefined,
       })
       closeRescheduleModal()
-      setMessage('Reschedule request sent to coach.')
+      setMessage('PT session updated immediately.')
       await loadMySchedule()
     } catch (err) {
-      setError(err?.response?.data?.message || 'Cannot send reschedule request')
+      setError(err?.response?.data?.message || 'Cannot update this PT session')
     } finally {
       setLoading(false)
     }
@@ -719,6 +828,12 @@ function CustomerCoachBookingPage() {
     () => scheduleData.items.filter((s) => String(s.status || '').toUpperCase() === 'COMPLETED'),
     [scheduleData.items],
   )
+  const activePhase = scheduleData.activePhase
+  const ptDashboard = scheduleData.dashboard ?? {}
+  const weeklyDashboardSchedule = Array.isArray(ptDashboard.weeklySchedule) ? ptDashboard.weeklySchedule : []
+  const nextSession = ptDashboard.nextSession ?? {}
+  const latestNote = ptDashboard.latestNote ?? {}
+  const latestProgress = ptDashboard.latestProgress ?? {}
   const sessionsByDate = useMemo(() => {
     const grouped = new Map()
     scheduleData.items.forEach((session) => {
@@ -734,6 +849,46 @@ function CustomerCoachBookingPage() {
   const selectedScheduleItems = useMemo(
     () => (selectedScheduleDate ? sessionsByDate.get(selectedScheduleDate) || [] : []),
     [selectedScheduleDate, sessionsByDate],
+  )
+  const groupedSeriesSlots = useMemo(() => {
+    return DAYS.map((day) => ({
+      ...day,
+      slots: seriesModal.slots
+        .filter((slot) => slot.dayOfWeek === day.id)
+        .sort((left, right) => left.timeSlotId - right.timeSlotId),
+    })).filter((day) => day.slots.length > 0)
+  }, [seriesModal.slots])
+  const dashboardTemplateSlots = useMemo(() => {
+    return Array.isArray(activePhase?.templateSlots)
+      ? activePhase.templateSlots.slice().sort((left, right) => {
+          if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+          return Number(left.timeSlotId || 0) - Number(right.timeSlotId || 0)
+        })
+      : []
+  }, [activePhase])
+  const coachPreviewCount = matches.fullMatches.length + matches.partialMatches.length
+  const plannerStatusSummary = useMemo(
+    () => [
+      {
+        id: 'window',
+        label: 'Booking window',
+        value: form.endDate || minimumBookingStartValue,
+        detail: form.endDate ? 'Recurring plan end date selected' : 'Earliest eligible PT start is applied as the baseline',
+      },
+      {
+        id: 'slots',
+        label: 'Recurring slots',
+        value: weeklySlots.length,
+        detail: weeklySlots.length ? `${selectedSlotsByDay.size} weekday(s) currently selected` : 'Open the planner to build your recurring week',
+      },
+      {
+        id: 'preview',
+        label: 'Coach preview',
+        value: coachPreviewCount,
+        detail: hasPreviewedMatches ? 'Real PT match preview ready below' : 'Run Preview Matches after saving your recurring plan',
+      },
+    ],
+    [coachPreviewCount, form.endDate, hasPreviewedMatches, minimumBookingStartValue, selectedSlotsByDay.size, weeklySlots.length],
   )
 
   useEffect(() => {
@@ -769,11 +924,199 @@ function CustomerCoachBookingPage() {
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
-        <div className="flex gap-2">
-          <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold ${activeTab === 'match' ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Match Coaches</button>
-          <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold ${activeTab === 'schedule' ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-700'}`}>My PT Schedule</button>
-          <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold ${activeTab === 'feedback' ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Feedback Coach</button>
-        </div>
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.18),_transparent_40%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-6 text-white shadow-xl">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">PT Dashboard</p>
+              <h3 className="text-3xl font-bold">{
+                activePhase ? 'Active PT phase' : 'Plan your next coaching phase'
+              }</h3>
+              {activePhase ? (
+                <p className="text-sm leading-relaxed text-slate-200">
+                  Primary coach <strong className="text-white">{activePhase.coachName}</strong> • {activePhase.startDate} to {activePhase.endDate}
+                </p>
+              ) : (
+                <p className="text-sm leading-relaxed text-slate-200">
+                  Review membership eligibility, keep your weekly PT context visible, and jump straight into booking when you are ready.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {activePhase ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('schedule')}
+                    className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                  >
+                    Open My PT Schedule
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openSeriesModal}
+                    className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+                  >
+                    Change recurring plan
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('match')}
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+                >
+                  Book PT Plan
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activePhase ? (
+            <div className="mt-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Next session</p>
+                  <p className="mt-2 text-lg font-bold text-white">{nextSession.sessionDate || 'No future session'}</p>
+                  <p className="mt-1 text-sm text-slate-200">
+                    {nextSession.timeSlotId ? formatSlotLabel(nextSession.timeSlotId) : 'Wait for a confirmed schedule.'}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-300">{nextSession.coachName || activePhase.coachName || 'Primary coach'}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Latest coach note</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{latestNote.noteContent || 'No coaching note recorded yet.'}</p>
+                  <p className="mt-2 text-xs text-slate-300">{formatDateTimeLabel(latestNote.updatedAt || latestNote.createdAt)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Latest progress</p>
+                  <p className="mt-2 text-sm font-semibold text-white">
+                    {latestProgress.weightKg ? `${latestProgress.weightKg} kg` : 'No progress update recorded yet.'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-300">
+                    {latestProgress.heightCm ? `${latestProgress.heightCm} cm` : 'Height pending'} • {latestProgress.bmi ? `BMI ${latestProgress.bmi}` : 'BMI pending'}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-300">{formatDateTimeLabel(latestProgress.recordedAt)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">This week</p>
+                    <p className="mt-1 text-lg font-bold text-white">
+                      {ptDashboard.completedSessions || 0} completed / {ptDashboard.remainingSessions || 0} remaining PT sessions
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
+                    {activePhase.bookingMode || 'REQUEST'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  {weeklyDashboardSchedule.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-black/10 p-4 text-sm text-slate-300">
+                      No PT sessions are scheduled for the current week yet.
+                    </div>
+                  )}
+                  {weeklyDashboardSchedule.map((session) => (
+                    <div key={`dashboard-session-${session.ptSessionId}`} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{getDayMeta(session.dayOfWeek)?.label || session.sessionDate}</p>
+                          <p className="mt-1 text-xs text-slate-300">{session.sessionDate} • {formatSlotLabel(session.timeSlotId)}</p>
+                        </div>
+                        <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200">{session.status}</span>
+                      </div>
+                      {session.replacementOffer?.status === 'PENDING_CUSTOMER' && (
+                        <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-4">
+                          <p className="text-sm font-bold text-amber-100">Replacement coach offer</p>
+                          <p className="mt-1 text-sm text-amber-50">
+                            {session.replacementOffer.replacementCoachName} can cover this exception session for {session.replacementOffer.originalCoachName}.
+                          </p>
+                          {session.replacementOffer.note ? (
+                            <p className="mt-2 text-xs text-amber-100/90">Note: {session.replacementOffer.note}</p>
+                          ) : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleReplacementDecision(session.ptSessionId, 'ACCEPT')}
+                              disabled={loading}
+                              className="rounded-full bg-emerald-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50"
+                            >
+                              Accept replacement
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReplacementDecision(session.ptSessionId, 'DECLINE')}
+                              disabled={loading}
+                              className="rounded-full border border-amber-100/30 bg-transparent px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-white/10 disabled:opacity-50"
+                            >
+                              Decline replacement
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {dashboardTemplateSlots.length > 0 && (
+                  <div className="mt-4 border-t border-white/10 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Recurring template</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {dashboardTemplateSlots.map((slot) => (
+                        <span key={`template-slot-${slot.dayOfWeek}-${slot.timeSlotId}`} className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-100">
+                          {getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`} • {formatSlotLabel(slot.timeSlotId)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Membership</p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {membershipGate.eligible ? 'Gym + Coach active' : (membershipGate.reason || 'Needs Gym + Coach plan')}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Current PT state</p>
+                <p className="mt-2 text-sm font-semibold text-white">{ptBookingGateSummary.title}</p>
+                <p className="mt-1 text-xs text-slate-300">{ptBookingGateSummary.detail}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Next step</p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {membershipGate.eligible && !ptBookingGate.blocked
+                    ? 'Open the planner and run a real coach match preview.'
+                    : 'Resolve the blocker, then book your recurring PT plan.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Match Coaches</button>
+              <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
+              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback Coach</button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3 xl:min-w-[52rem]">
+              {plannerStatusSummary.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900">{item.value}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {(error || message) && (
           <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -784,80 +1127,110 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'match' && (
           <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
-                  <p className="text-sm text-slate-600">Pick recurring weekday slots in the planner, then preview matched coaches.</p>
+            <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+              <div className="bg-white border border-slate-200 rounded-[30px] p-5 space-y-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-gym-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-gym-700">1. Plan</span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">2. Preview</span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">3. Request</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
+                    <p className="text-sm text-slate-600">Set your recurring PT schedule first, then preview coach matches with the same rules used by live booking.</p>
+                  </div>
+                  <button
+                    onClick={openPlannerModal}
+                    className="px-4 py-2 rounded-xl bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700"
+                  >
+                    Open Schedule Planner
+                  </button>
                 </div>
-                <button
-                  onClick={openPlannerModal}
-                  className="px-4 py-2 rounded-xl bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700"
-                >
-                  Open Schedule Planner
-                </button>
-              </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-                <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                  <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
-                  <span>Repeat end date: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
-                  <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
-                  <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
-                </div>
-                <p className="text-sm text-slate-600">
-                  Coaches have up to 1 week to approve. After approval, sessions start on the next Monday.
-                </p>
-                {weeklySlots.length === 0 && (
-                  <p className="text-sm text-slate-500">No slots selected yet.</p>
-                )}
-                {weeklySlots.length > 0 && (
-                  <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <WeekdayDropdown
-                          id="customer-summary-day"
-                          label="Weekday"
-                          value={selectedWeeklySummaryGroup?.id || ''}
-                          onChange={(nextValue) => setSelectedWeeklySummaryDay(Number(nextValue))}
-                          options={groupedWeeklySlots.map((day) => ({
-                            value: day.id,
-                            label: day.label,
-                            meta: `${day.slots.length} recurring slot(s) selected`,
-                            badge: `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''}`,
-                          }))}
-                          summaryText="Browse each weekday without expanding all selected slots."
-                        />
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 space-y-2">
+                  <div className="flex flex-wrap gap-5 text-xs text-slate-600">
+                    <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
+                    <span>Repeat end date: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
+                    <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
+                    <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
+                  </div>
+                  <p className="text-sm text-slate-600">
+                    The booking preview follows the live PT rule: coaches can take up to 1 week to approve, and approved schedules begin on the next eligible Monday.
+                  </p>
+                  {weeklySlots.length === 0 && (
+                    <p className="text-sm text-slate-500">No recurring slots selected yet.</p>
+                  )}
+                  {weeklySlots.length > 0 && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <WeekdayDropdown
+                            id="customer-summary-day"
+                            label="Weekday"
+                            value={selectedWeeklySummaryGroup?.id || ''}
+                            onChange={(nextValue) => setSelectedWeeklySummaryDay(Number(nextValue))}
+                            options={groupedWeeklySlots.map((day) => ({
+                              value: day.id,
+                              label: day.label,
+                              meta: `${day.slots.length} recurring slot(s) selected`,
+                              badge: `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''}`,
+                            }))}
+                            summaryText="Browse each weekday without expanding all selected slots."
+                          />
+                        </div>
+                        {selectedWeeklySummaryGroup ? (
+                          <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                            {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
+                          </div>
+                        ) : null}
                       </div>
                       {selectedWeeklySummaryGroup ? (
-                        <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                          {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {selectedWeeklySummaryGroup.slots.map((item) => (
+                            <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                              {formatSlotLabel(item.timeSlotId)}
+                            </span>
+                          ))}
                         </div>
                       ) : null}
                     </div>
-                    {selectedWeeklySummaryGroup ? (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {selectedWeeklySummaryGroup.slots.map((item) => (
-                          <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                            {formatSlotLabel(item.timeSlotId)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
+                  )}
+                </div>
+
+                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
+                  {loading ? 'Loading...' : '2) Preview Matches'}
+                </button>
               </div>
 
-              <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
-                {loading ? 'Loading...' : '2) Preview Matches'}
-              </button>
+      <aside className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,_rgba(26,26,36,0.94),_rgba(18,18,26,0.84))] p-5 shadow-ambient-sm backdrop-blur-md">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Booking guide</p>
+                <h4 className="mt-3 text-xl font-bold text-slate-900">What happens next</h4>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Step 1</p>
+                    <p className="mt-1 text-sm text-slate-600">Open the planner, pick weekdays, and set the recurring slots you want the coach to cover each week.</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Step 2</p>
+                    <p className="mt-1 text-sm text-slate-600">Preview coach matches to see which coaches fully or partially fit the exact recurring template you saved.</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Step 3</p>
+                    <p className="mt-1 text-sm text-slate-600">Review a coach calendar match, remove any unresolved conflicts, and then send the booking request.</p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-900">Current blocker check</p>
+                  <p className="mt-2 text-sm text-amber-800">{membershipGate.eligible ? ptBookingGateSummary.detail : membershipGate.reason}</p>
+                </div>
+              </aside>
             </div>
 
             {hasPreviewedMatches && (
               <div className="space-y-4">
                 <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
                   <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
-                  <p className="text-sm text-emerald-700">Coaches whose requested slots are all available through your selected booking end date.</p>
+                  <p className="text-sm text-emerald-700">These coaches can cover every requested recurring slot through your selected booking end date.</p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                     {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
                     {matches.fullMatches.map((coach) => (
@@ -868,7 +1241,7 @@ function CustomerCoachBookingPage() {
 
                 <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
                   <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
-                  <p className="text-sm text-red-700">Coaches with overlap but some requested slots already occupied or unavailable before your selected booking end date.</p>
+                  <p className="text-sm text-red-700">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                     {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
                     {matches.partialMatches.map((coach) => (
@@ -893,7 +1266,7 @@ function CustomerCoachBookingPage() {
                     <div key={r.ptRequestId} className="bg-white rounded-xl border border-amber-200 px-3 py-2 text-sm">
                       <div className="font-semibold text-slate-800">{r.coachName}</div>
                       <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
-                      <div className="text-xs text-amber-700">Sessions begin on the next Monday after coach approval.</div>
+                      <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
                     </div>
                   ))}
                 </div>
@@ -1029,10 +1402,45 @@ function CustomerCoachBookingPage() {
                           {String(s.status || '').toUpperCase() === 'CANCELLED' && s.cancelReason && (
                             <div className="text-xs text-red-700">Cancellation reason: {s.cancelReason}</div>
                           )}
+                          {s.replacementOffer?.status === 'PENDING_CUSTOMER' && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                              <p className="text-sm font-bold text-amber-900">Replacement coach offer</p>
+                              <p className="mt-1 text-sm text-amber-800">
+                                {s.replacementOffer.replacementCoachName} can cover this session for {s.replacementOffer.originalCoachName}.
+                              </p>
+                              {s.replacementOffer.note ? (
+                                <p className="mt-2 text-xs text-amber-700">Note: {s.replacementOffer.note}</p>
+                              ) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleReplacementDecision(s.ptSessionId, 'ACCEPT')}
+                                  disabled={loading}
+                                  className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                  Accept replacement
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReplacementDecision(s.ptSessionId, 'DECLINE')}
+                                  disabled={loading}
+                                  className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                                >
+                                  Decline replacement
+                                </button>
+                              </div>
+                            </div>
+                          )}
                           {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
                             <div className="flex gap-2">
                               <button onClick={() => openCancelModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
-                              <button onClick={() => openRescheduleModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">Reschedule</button>
+                              <button
+                                onClick={() => openRescheduleModal(s)}
+                                disabled={s.replacementOffer?.status === 'PENDING_CUSTOMER'}
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Reschedule
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1078,11 +1486,11 @@ function CustomerCoachBookingPage() {
             <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
               <div className="relative z-10 grid gap-3 xl:grid-cols-[0.72fr_0.92fr_1fr]">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approval rule</p>
-                    <div className="mt-1.5 text-sm font-semibold text-slate-900">{minimumBookingStartValue}</div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-slate-500">Earliest possible start if the coach uses the full 1-week approval window.</div>
-                  </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approval rule</p>
+                  <div className="mt-1.5 text-sm font-semibold text-slate-900">{minimumBookingStartValue}</div>
+                  <div className="mt-1 text-[11px] leading-relaxed text-slate-500">Earliest eligible start date when the coach uses the full 1-week approval window.</div>
+                </div>
                 </div>
                 <div className="relative rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat end date for booking</p>
@@ -1099,7 +1507,7 @@ function CustomerCoachBookingPage() {
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">Edit</span>
                   </button>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-                    After approval, sessions start on the next Monday and continue until this end date.
+                    Once approved, the recurring PT plan starts from the next eligible Monday and continues until this end date.
                   </p>
                   {datePicker.field === 'endDate' && (
                     <DatePickerPopover
@@ -1118,7 +1526,7 @@ function CustomerCoachBookingPage() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planner guide</p>
                   <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                    Choose a weekday from Monday to Sunday, then pick recurring time slots. Approved coaching always starts from the next Monday.
+                    Choose weekdays and recurring time slots first. The match preview and the final booking request both use this exact schedule template.
                   </p>
                 </div>
               </div>
@@ -1323,13 +1731,13 @@ function CustomerCoachBookingPage() {
       )}
 
       {rescheduleModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Reschedule PT session</p>
-              <h4 className="text-2xl font-bold text-slate-900">Request a new date and time</h4>
+              <h4 className="text-2xl font-bold text-slate-900">Update this session now</h4>
               <p className="text-sm leading-relaxed text-slate-600">
-                Your coach will be notified and must approve the new session schedule before it changes.
+                This will move the PT session immediately if the new slot still respects the cutoff and coach availability rules.
               </p>
             </div>
 
@@ -1392,7 +1800,129 @@ function CustomerCoachBookingPage() {
                 disabled={loading}
                 className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:opacity-50"
               >
-                Send reschedule request
+                Update session now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {seriesModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gym-600">Recurring PT change</p>
+                <h4 className="text-2xl font-bold text-slate-900">Change recurring plan</h4>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  Pick the future date when the new weekly template starts, then adjust the recurring slots that should continue through the active PT phase.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSeriesModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+              <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Apply new template from
+                  <input
+                    type="date"
+                    value={seriesModal.cutoverDate}
+                    onChange={(event) => setSeriesModal((prev) => ({ ...prev, cutoverDate: event.target.value }))}
+                    className="mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-700"
+                  />
+                </label>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {DAYS.map((day) => (
+                    <button
+                      key={`series-day-${day.id}`}
+                      type="button"
+                      onClick={() => setSeriesModal((prev) => ({ ...prev, focusDay: day.id }))}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${
+                        seriesModal.focusDay === day.id
+                          ? 'border-gym-600 bg-gym-50 text-gym-900 shadow-sm'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-gym-300 hover:bg-white'
+                      }`}
+                    >
+                      <div className="text-sm font-bold">{day.label}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {seriesModal.slots.filter((slot) => slot.dayOfWeek === day.id).length} slot(s)
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected weekday</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{getDayMeta(seriesModal.focusDay)?.label || '-'}</p>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {timeSlots.map((slot) => {
+                    const selected = isSeriesSlotSelected(seriesModal.focusDay, slot.timeSlotId)
+                    return (
+                      <button
+                        key={`series-slot-${seriesModal.focusDay}-${slot.timeSlotId}`}
+                        type="button"
+                        onClick={() => toggleSeriesSlot(seriesModal.focusDay, slot.timeSlotId)}
+                        className={`rounded-2xl border px-4 py-3 text-left transition ${
+                          selected
+                            ? 'border-gym-600 bg-gym-600 text-white shadow-sm'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-gym-300 hover:bg-gym-50'
+                        }`}
+                      >
+                        <div className="text-sm font-bold">Slot {slot.slotIndex}</div>
+                        <div className={`mt-1 text-xs ${selected ? 'text-white/85' : 'text-slate-500'}`}>
+                          {String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New recurring template</p>
+                  {groupedSeriesSlots.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500">No recurring slots selected yet.</p>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {groupedSeriesSlots.flatMap((day) =>
+                        day.slots.map((slot) => (
+                          <span key={`series-preview-${day.id}-${slot.timeSlotId}`} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+                            {day.label} • {formatSlotLabel(slot.timeSlotId)}
+                          </span>
+                        )),
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeSeriesModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Keep current template
+              </button>
+              <button
+                type="button"
+                onClick={submitSeriesChange}
+                disabled={loading}
+                className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:opacity-50"
+              >
+                Save future series
               </button>
             </div>
           </div>
@@ -1400,8 +1930,8 @@ function CustomerCoachBookingPage() {
       )}
 
       {feedbackModal.open && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl p-5 space-y-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-5">
             <h4 className="text-lg font-bold text-slate-900">Rate Session</h4>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -1418,8 +1948,8 @@ function CustomerCoachBookingPage() {
       )}
 
       {cancelModal.open && cancelModal.session && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Cancel PT session</p>
               <h4 className="text-2xl font-bold text-slate-900">Cancel this coaching session?</h4>
@@ -1468,8 +1998,8 @@ function CustomerCoachBookingPage() {
       )}
 
       {ptBookingBlockedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <button
               type="button"
               aria-label="Close PT booking popup"
@@ -1516,8 +2046,8 @@ function CustomerCoachBookingPage() {
       )}
 
       {membershipBlockedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <button
               type="button"
               aria-label="Close membership popup"

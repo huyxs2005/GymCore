@@ -1,6 +1,7 @@
 package com.gymcore.backend.modules.content.service;
 
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,10 +27,15 @@ public class ContentService {
 
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
+    private final CoachBookingService coachBookingService;
 
-    public ContentService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService) {
+    public ContentService(
+            JdbcTemplate jdbcTemplate,
+            CurrentUserService currentUserService,
+            CoachBookingService coachBookingService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
+        this.coachBookingService = coachBookingService;
     }
 
     public Map<String, Object> execute(String action, Object payload) {
@@ -293,6 +299,8 @@ public class ContentService {
         String question = normalizeText(payload.get("question"));
         String preferredTime = normalizeText(payload.get("preferredTime"));
         String preferredGender = normalizeText(payload.get("preferredGender"));
+        String endDate = normalizeText(payload.get("endDate"));
+        List<Map<String, Object>> requestedSlots = parseRequestedSlotMaps(payload.get("slots"));
         AiContextResolution aiContext = resolveAiContext(payload);
 
         List<String> advice = new ArrayList<>();
@@ -313,16 +321,81 @@ public class ContentService {
         if (!preferences.isEmpty()) {
             advice.add("Ghi chu them: " + String.join(", ", preferences) + ".");
         }
-        if (StringUtils.hasText(question)) {
-            advice.add("Ban co the dung man Coach Booking de preview matched coaches truoc khi gui request.");
-        }
-
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("answer", String.join("\n", advice));
         response.put("goalCodes", aiContext.goalSelection().goalCodes());
         response.put("source", aiContext.goalSelection().source());
         response.put("nextStep", "/customer/coach-booking");
-        return withAiContext(response, aiContext, "ai-coach-booking-assistant");
+        response.put("requestedSlots", requestedSlots);
+
+        List<String> missingFields = new ArrayList<>();
+        if (!StringUtils.hasText(endDate)) {
+            missingFields.add("endDate");
+        }
+        if (requestedSlots.isEmpty()) {
+            missingFields.add("slots");
+        }
+
+        if (!missingFields.isEmpty()) {
+            advice.add("De preview coach match bang luat booking that, hay chon booking end date va it nhat mot recurring slot.");
+            if (StringUtils.hasText(question)) {
+                advice.add("Sau khi co lich mong muon, toi se dung chinh booking matcher de phan biet full match va partial match.");
+            }
+            response.put("answer", String.join("\n", advice));
+            response.put("matchStatus", "NEEDS_SCHEDULE");
+            response.put("missingFields", missingFields);
+            response.put("minimumBookingLeadDays", 7);
+            return withAiContext(response, aiContext, "ai-coach-booking-assistant");
+        }
+
+        Map<String, Object> matchPayload = new LinkedHashMap<>();
+        matchPayload.put("authorizationHeader", payload.get("authorizationHeader"));
+        matchPayload.put("endDate", endDate);
+        matchPayload.put("slots", requestedSlots);
+
+        try {
+            Map<String, Object> preview = coachBookingService.previewCustomerCoachMatches(matchPayload);
+            List<Map<String, Object>> fullMatches = castMapList(preview.get("fullMatches"));
+            List<Map<String, Object>> partialMatches = castMapList(preview.get("partialMatches"));
+            int requestedSlotsCount = requirePositiveInt(
+                    preview.getOrDefault("requestedSlotsCount", requestedSlots.size()),
+                    "Requested slots count is required.");
+
+            advice.add("Booking matcher da duoc chay bang cung luat voi man Coach Booking.");
+            advice.add("Recurring slots yeu cau: " + requestedSlotsCount + ".");
+            advice.add("Earliest coaching start date: " + preview.get("estimatedStartDate") + ".");
+            advice.add("Full matches: " + fullMatches.size() + ". Partial matches: " + partialMatches.size() + ".");
+            if (!fullMatches.isEmpty()) {
+                advice.add("Coach full match dau tien: " + fullMatches.get(0).get("fullName") + ".");
+            } else if (!partialMatches.isEmpty()) {
+                advice.add("Chua co full match. Coach partial match dau tien: " + partialMatches.get(0).get("fullName") + ".");
+            } else {
+                advice.add("Chua tim thay coach phu hop cho lich nay. Hay thu mo rong them weekday hoac doi end date.");
+            }
+            if (StringUtils.hasText(question)) {
+                advice.add("Question focus: " + question + ".");
+            }
+
+            response.put("answer", String.join("\n", advice));
+            response.put("matchStatus", "READY");
+            response.put("requestedSlotsCount", preview.get("requestedSlotsCount"));
+            response.put("estimatedStartDate", preview.get("estimatedStartDate"));
+            response.put("fromDate", preview.get("fromDate"));
+            response.put("toDate", preview.get("toDate"));
+            response.put("items", castMapList(preview.get("items")));
+            response.put("fullMatches", fullMatches);
+            response.put("partialMatches", partialMatches);
+            return withAiContext(response, aiContext, "ai-coach-booking-assistant");
+        } catch (ResponseStatusException exception) {
+            advice.add("Booking matcher dang chan yeu cau nay: " + String.valueOf(exception.getReason()));
+            if (StringUtils.hasText(question)) {
+                advice.add("Sau khi go duoc blocker, ban co the chay lai cung lich nay de xem full match va partial match.");
+            }
+            response.put("answer", String.join("\n", advice));
+            response.put("matchStatus", "BLOCKED");
+            response.put("blockingReason", exception.getReason());
+            response.put("statusCode", exception.getStatusCode().value());
+            return withAiContext(response, aiContext, "ai-coach-booking-assistant");
+        }
     }
 
     private Map<String, Object> getAiFoodPersonalized(Map<String, Object> payload) {
@@ -1095,6 +1168,36 @@ public class ContentService {
             }
         }
         return output.stream().distinct().toList();
+    }
+
+    private static List<Map<String, Object>> parseRequestedSlotMaps(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> output = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> raw)) {
+                continue;
+            }
+            Map<String, Object> slot = new LinkedHashMap<>();
+            raw.forEach((key, slotValue) -> slot.put(String.valueOf(key), slotValue));
+            output.add(slot);
+        }
+        return output;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> castMapList(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<String, Object>> output = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> raw) {
+                Map<String, Object> normalized = new LinkedHashMap<>();
+                raw.forEach((key, innerValue) -> normalized.put(String.valueOf(key), innerValue));
+                output.add(normalized);
+            }
+        }
+        return output;
     }
 
     private List<String> mergePersonalizedFoodTags(List<String> tags, AiContextResolution aiContext) {

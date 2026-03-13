@@ -157,6 +157,8 @@ BEGIN
         PaidAt DATETIME2 NOT NULL,
         EmailSentAt DATETIME2 NULL,
         EmailSendError NVARCHAR(1000) NULL,
+        PickedUpAt DATETIME2 NULL,
+        PickedUpByUserID INT NULL,
         CreatedAt DATETIME2 NOT NULL
             CONSTRAINT DF_OrderInvoices_CreatedAt DEFAULT SYSDATETIME(),
         UpdatedAt DATETIME2 NOT NULL
@@ -166,8 +168,35 @@ BEGIN
         CONSTRAINT FK_OrderInvoices_Payment
             FOREIGN KEY (PaymentID) REFERENCES dbo.Payments(PaymentID),
         CONSTRAINT FK_OrderInvoices_Customer
-            FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID)
+            FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID),
+        CONSTRAINT FK_OrderInvoices_PickedUpByUser
+            FOREIGN KEY (PickedUpByUserID) REFERENCES dbo.Users(UserID)
     );
+END;
+GO
+
+IF COL_LENGTH('dbo.OrderInvoices', 'PickedUpAt') IS NULL
+BEGIN
+    ALTER TABLE dbo.OrderInvoices ADD PickedUpAt DATETIME2 NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.OrderInvoices', 'PickedUpByUserID') IS NULL
+BEGIN
+    ALTER TABLE dbo.OrderInvoices ADD PickedUpByUserID INT NULL;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE parent_object_id = OBJECT_ID('dbo.OrderInvoices')
+      AND name = 'FK_OrderInvoices_PickedUpByUser'
+)
+BEGIN
+    ALTER TABLE dbo.OrderInvoices
+    ADD CONSTRAINT FK_OrderInvoices_PickedUpByUser
+        FOREIGN KEY (PickedUpByUserID) REFERENCES dbo.Users(UserID);
 END;
 GO
 
@@ -344,6 +373,29 @@ WHERE NOT EXISTS (
       AND ii.Quantity = oi.Quantity
       AND ii.UnitPrice = CAST(oi.UnitPrice AS DECIMAL(18,2))
 );
+GO
+
+DECLARE @DefaultPickupUserID INT = (
+    SELECT TOP (1) UserID
+    FROM dbo.Users
+    WHERE Email IN (N'reception@gymcore.local', N'admin@gymcore.local')
+    ORDER BY CASE WHEN Email = N'reception@gymcore.local' THEN 0 ELSE 1 END, UserID
+);
+
+UPDATE i
+SET i.PickedUpAt = COALESCE(i.PickedUpAt, i.PaidAt, i.CreatedAt, SYSDATETIME()),
+    i.PickedUpByUserID = COALESCE(i.PickedUpByUserID, @DefaultPickupUserID),
+    i.UpdatedAt = SYSDATETIME()
+FROM dbo.OrderInvoices i
+WHERE i.PickedUpAt IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM dbo.ProductReviews r
+      JOIN dbo.OrderItems oi ON oi.ProductID = r.ProductID
+      JOIN dbo.Orders o ON o.OrderID = oi.OrderID
+      WHERE o.OrderID = i.OrderID
+        AND o.CustomerID = r.CustomerID
+  );
 GO
 
 IF OBJECT_ID('dbo.TRG_ProductReviews_RequirePurchase', 'TR') IS NOT NULL

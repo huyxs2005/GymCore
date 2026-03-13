@@ -9,7 +9,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,7 +30,8 @@ class ContentServiceTest {
     void execute_shouldReturnNotImplementedForUnsupportedAction() {
         ContentService contentService = new ContentService(
                 org.mockito.Mockito.mock(JdbcTemplate.class),
-                org.mockito.Mockito.mock(CurrentUserService.class));
+                org.mockito.Mockito.mock(CurrentUserService.class),
+                org.mockito.Mockito.mock(CoachBookingService.class));
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
                 () -> contentService.execute("unsupported-action", null));
@@ -42,7 +45,10 @@ class ContentServiceTest {
     void execute_shouldResolveSavedGoalsHealthAndProgressIntoAiContext() {
         JdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class);
         CurrentUserService currentUserService = org.mockito.Mockito.mock(CurrentUserService.class);
-        ContentService contentService = new ContentService(jdbcTemplate, currentUserService);
+        ContentService contentService = new ContentService(
+                jdbcTemplate,
+                currentUserService,
+                org.mockito.Mockito.mock(CoachBookingService.class));
 
         when(currentUserService.findUser("Bearer customer-token"))
                 .thenReturn(Optional.of(new CurrentUserService.UserInfo(42, "Customer", "CUSTOMER")));
@@ -121,7 +127,10 @@ class ContentServiceTest {
     void execute_shouldMarkFallbackSignalsWhenOnlyRequestGoalsAreAvailable() {
         JdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class);
         CurrentUserService currentUserService = org.mockito.Mockito.mock(CurrentUserService.class);
-        ContentService contentService = new ContentService(jdbcTemplate, currentUserService);
+        ContentService contentService = new ContentService(
+                jdbcTemplate,
+                currentUserService,
+                org.mockito.Mockito.mock(CoachBookingService.class));
 
         when(currentUserService.findUser(any())).thenReturn(Optional.empty());
 
@@ -143,7 +152,10 @@ class ContentServiceTest {
     void execute_shouldReturnExplainableRecommendationContract() {
         JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
         CurrentUserService currentUserService = Mockito.mock(CurrentUserService.class);
-        ContentService contentService = new ContentService(jdbcTemplate, currentUserService);
+        ContentService contentService = new ContentService(
+                jdbcTemplate,
+                currentUserService,
+                Mockito.mock(CoachBookingService.class));
         stubAiContext(jdbcTemplate, currentUserService);
         stubCatalogQueries(jdbcTemplate);
 
@@ -171,7 +183,10 @@ class ContentServiceTest {
     void execute_shouldReturnStructuredWeeklyPlanWithinGuidanceScope() {
         JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
         CurrentUserService currentUserService = Mockito.mock(CurrentUserService.class);
-        ContentService contentService = new ContentService(jdbcTemplate, currentUserService);
+        ContentService contentService = new ContentService(
+                jdbcTemplate,
+                currentUserService,
+                Mockito.mock(CoachBookingService.class));
         stubAiContext(jdbcTemplate, currentUserService);
         stubCatalogQueries(jdbcTemplate);
 
@@ -186,6 +201,69 @@ class ContentServiceTest {
         assertTrue(((String) ((Map<String, Object>) response.get("summary")).get("headline")).contains("guidance-level"));
         assertEquals("/customer/coach-booking",
                 ((Map<String, Object>) ((List<?>) response.get("nextActions")).get(3)).get("route"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void execute_shouldUseCoachBookingMatcherForCoachAssistantWhenScheduleProvided() {
+        JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
+        CurrentUserService currentUserService = Mockito.mock(CurrentUserService.class);
+        CoachBookingService coachBookingService = Mockito.mock(CoachBookingService.class);
+        ContentService contentService = new ContentService(jdbcTemplate, currentUserService, coachBookingService);
+        stubAiContext(jdbcTemplate, currentUserService);
+        stubCatalogQueries(jdbcTemplate);
+
+        when(coachBookingService.previewCustomerCoachMatches(any())).thenReturn(Map.of(
+                "requestedSlotsCount", 2,
+                "estimatedStartDate", "2026-03-23",
+                "fromDate", "2026-03-23",
+                "toDate", "2026-04-30",
+                "items", List.of(Map.of("coachId", 5, "fullName", "Coach Linh")),
+                "fullMatches", List.of(Map.of(
+                        "coachId", 5,
+                        "fullName", "Coach Linh",
+                        "matchedSlots", 2,
+                        "requestedSlots", 2)),
+                "partialMatches", List.of(Map.of(
+                        "coachId", 6,
+                        "fullName", "Coach Minh",
+                        "matchedSlots", 1,
+                        "requestedSlots", 2))));
+
+        Map<String, Object> response = contentService.execute(
+                "ai-coach-booking-assistant",
+                Map.of(
+                        "authorizationHeader", "Bearer customer-token",
+                        "question", "Find me a stable evening coach",
+                        "endDate", "2026-04-30",
+                        "slots", List.of(
+                                Map.of("dayOfWeek", 1, "timeSlotId", 2),
+                                Map.of("dayOfWeek", 3, "timeSlotId", 2))));
+
+        assertEquals("READY", response.get("matchStatus"));
+        assertEquals(1, ((List<?>) response.get("fullMatches")).size());
+        assertEquals(1, ((List<?>) response.get("partialMatches")).size());
+        assertEquals("2026-03-23", response.get("estimatedStartDate"));
+        assertTrue(String.valueOf(response.get("answer")).contains("Coach Linh"));
+    }
+
+    @Test
+    void execute_shouldExplainMissingScheduleInputsForCoachAssistant() {
+        JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
+        CurrentUserService currentUserService = Mockito.mock(CurrentUserService.class);
+        CoachBookingService coachBookingService = Mockito.mock(CoachBookingService.class);
+        ContentService contentService = new ContentService(jdbcTemplate, currentUserService, coachBookingService);
+        stubAiContext(jdbcTemplate, currentUserService);
+        stubCatalogQueries(jdbcTemplate);
+
+        Map<String, Object> response = contentService.execute(
+                "ai-coach-booking-assistant",
+                Map.of(
+                        "authorizationHeader", "Bearer customer-token",
+                        "question", "Find me a stable evening coach"));
+
+        assertEquals("NEEDS_SCHEDULE", response.get("matchStatus"));
+        assertEquals(List.of("endDate", "slots"), response.get("missingFields"));
     }
 
     private static void stubAiContext(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService) {
@@ -244,18 +322,40 @@ class ContentServiceTest {
                 ArgumentMatchers.<RowMapper<Map<String, Object>>>any(),
                 ArgumentMatchers.<Object[]>any())).thenAnswer(invocation -> {
                     String sql = invocation.getArgument(0, String.class);
-                    if (sql.contains("FROM dbo.Workouts")) {
+                    if (sql.contains("FROM dbo.CustomerGoals")) {
                         return List.of(Map.of(
+                                "goalId", 9,
+                                "goalCode", "GAIN_MUSCLE",
+                                "name", "Gain muscle",
+                                "description", "Build more lean mass"));
+                    }
+                    if (sql.contains("FROM dbo.CustomerHealthHistory")) {
+                        return List.of(Map.of(
+                                "heightCm", new BigDecimal("170.0"),
+                                "weightKg", new BigDecimal("74.5"),
+                                "bmi", new BigDecimal("25.8"),
+                                "recordedAt", "2026-03-11T09:00:00Z"));
+                    }
+                    if (sql.contains("FROM dbo.PTSessionNotes")) {
+                        return List.of(Map.of(
+                                "noteId", 18,
+                                "noteContent", "Keep one lighter recovery block after heavy lifting",
+                                "createdAt", "2026-03-12T10:30:00Z",
+                                "sessionDate", "2026-03-12",
+                                "coachName", "Coach Linh"));
+                    }
+                    if (sql.contains("FROM dbo.Workouts")) {
+                        return List.of(new LinkedHashMap<>(Map.of(
                                 "workoutId", 11,
                                 "name", "Upper Strength Builder",
                                 "description", "Strength-focused resistance session",
                                 "difficulty", "Intermediate",
                                 "imageUrl", "",
                                 "videoUrl", "",
-                                "createdAt", "2026-03-01T08:00:00Z"));
+                                "createdAt", "2026-03-01T08:00:00Z")));
                     }
                     if (sql.contains("FROM dbo.Foods")) {
-                        return List.of(Map.of(
+                        return List.of(new LinkedHashMap<>(Map.of(
                                 "foodId", 21,
                                 "name", "Chicken Rice Bowl",
                                 "description", "High protein post-workout meal",
@@ -264,7 +364,7 @@ class ContentServiceTest {
                                 "carbs", new BigDecimal("35.0"),
                                 "fat", new BigDecimal("10.0"),
                                 "imageUrl", "",
-                                "createdAt", "2026-03-01T08:00:00Z"));
+                                "createdAt", "2026-03-01T08:00:00Z")));
                     }
                     throw new AssertionError("Unexpected catalog query with args: " + sql);
                 });
@@ -273,18 +373,25 @@ class ContentServiceTest {
                 anyString(),
                 ArgumentMatchers.<RowMapper<Map<String, Object>>>any())).thenAnswer(invocation -> {
                     String sql = invocation.getArgument(0, String.class);
-                    if (sql.contains("FROM dbo.Workouts")) {
+                    if (sql.contains("FROM dbo.FitnessGoals")) {
                         return List.of(Map.of(
+                                "goalId", 9,
+                                "goalCode", "GAIN_MUSCLE",
+                                "name", "Gain muscle",
+                                "description", "Build more lean mass"));
+                    }
+                    if (sql.contains("FROM dbo.Workouts")) {
+                        return List.of(new LinkedHashMap<>(Map.of(
                                 "workoutId", 11,
                                 "name", "Upper Strength Builder",
                                 "description", "Strength-focused resistance session",
                                 "difficulty", "Intermediate",
                                 "imageUrl", "",
                                 "videoUrl", "",
-                                "createdAt", "2026-03-01T08:00:00Z"));
+                                "createdAt", "2026-03-01T08:00:00Z")));
                     }
                     if (sql.contains("FROM dbo.Foods")) {
-                        return List.of(Map.of(
+                        return List.of(new LinkedHashMap<>(Map.of(
                                 "foodId", 21,
                                 "name", "Chicken Rice Bowl",
                                 "description", "High protein post-workout meal",
@@ -293,7 +400,7 @@ class ContentServiceTest {
                                 "carbs", new BigDecimal("35.0"),
                                 "fat", new BigDecimal("10.0"),
                                 "imageUrl", "",
-                                "createdAt", "2026-03-01T08:00:00Z"));
+                                "createdAt", "2026-03-01T08:00:00Z")));
                     }
                     throw new AssertionError("Unexpected catalog query: " + sql);
                 });

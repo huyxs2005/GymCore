@@ -149,7 +149,7 @@ describe('CustomerProductDetailPage', () => {
     })
   })
 
-  it('lets a paid customer submit a first review from the detail page', async () => {
+  it('lets a picked-up customer submit a first review from the detail page', async () => {
     const user = userEvent.setup()
     renderPage()
 

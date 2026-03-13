@@ -16,12 +16,12 @@ function ConfirmDialog({
 
   const toneClasses = tone === 'danger'
     ? {
-        icon: 'bg-rose-100 text-rose-600',
-        confirm: 'bg-rose-600 hover:bg-rose-700 text-white',
+        icon: 'border border-rose-500/20 bg-rose-500/10 text-rose-300',
+        confirm: 'bg-rose-500 hover:bg-rose-400 text-slate-950',
       }
     : {
-        icon: 'bg-gym-100 text-gym-700',
-        confirm: 'bg-gym-600 hover:bg-gym-700 text-white',
+        icon: 'border border-gym-300/30 bg-gym-50 text-gym-700',
+        confirm: 'bg-gym-500 hover:brightness-110 text-slate-950 shadow-glow',
       }
 
   return createPortal(
@@ -35,7 +35,7 @@ function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
+        className="w-full max-w-md rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.94)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -43,15 +43,15 @@ function ConfirmDialog({
               <AlertTriangle size={20} />
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Confirm action</p>
-              <h2 id="confirm-dialog-title" className="mt-2 text-xl font-bold text-slate-900">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Confirm action</p>
+              <h2 id="confirm-dialog-title" className="mt-2 font-display text-xl font-bold tracking-tight text-slate-50">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            className="rounded-full p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-50"
             aria-label="Close confirmation dialog"
           >
             <X size={18} />
@@ -62,7 +62,7 @@ function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-white/15 hover:bg-white/10"
           >
             {cancelLabel}
           </button>
@@ -70,7 +70,7 @@ function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className={`rounded-full px-5 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:bg-slate-300 ${toneClasses.confirm}`}
+            className={`rounded-full px-5 py-2.5 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 ${toneClasses.confirm}`}
           >
             {pending ? 'Working...' : confirmLabel}
           </button>

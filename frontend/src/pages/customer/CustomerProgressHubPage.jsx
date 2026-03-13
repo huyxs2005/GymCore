@@ -69,8 +69,15 @@ function getSignalLabel(signal) {
   return 'Latest coaching signal'
 }
 
+function getSignalSummaryLabel(signal) {
+  const sourceType = String(signal?.sourceType || '').toUpperCase()
+  if (sourceType === 'COACH_NOTE') return 'Coach-note signal'
+  if (sourceType === 'HEALTH_SNAPSHOT') return 'Progress signal'
+  return 'Latest coaching signal'
+}
+
 function getPtStatusLabel(ptContext) {
-  return Boolean(ptContext?.hasActivePt) ? 'PT active' : 'PT not active'
+  return ptContext?.hasActivePt ? 'PT active' : 'PT not active'
 }
 
 function getRecommendedFocusLabel(value) {
@@ -150,7 +157,7 @@ function CustomerProgressHubPage() {
       links={customerNav}
     >
       <div className="space-y-6">
-        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.18),_transparent_38%),linear-gradient(135deg,_#0f172a,_#1e293b_55%,_#14532d)] p-6 text-white shadow-xl">
+      <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_38%),linear-gradient(135deg,_rgba(10,10,15,0.98),_rgba(18,18,26,0.94)_55%,_rgba(38,25,6,0.92))] p-6 text-white shadow-[0_24px_60px_rgba(0,0,0,0.38)] backdrop-blur-xl">
           <div className="grid gap-6 lg:grid-cols-[1.6fr,1fr]">
             <div className="space-y-4">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">Customer follow-up</p>
@@ -175,6 +182,17 @@ function CustomerProgressHubPage() {
                 >
                   Check-in utilities
                 </Link>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                  Read-only overview
+                </span>
+                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                  Coach-led follow-up
+                </span>
+                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                  Live PT context
+                </span>
               </div>
             </div>
 
@@ -202,8 +220,38 @@ function CustomerProgressHubPage() {
           </div>
         </section>
 
+        <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="gc-section-kicker">Today at a glance</p>
+              <h3 className="mt-2 text-2xl font-black text-slate-900">Your latest signal, body snapshot, and PT status are already linked here.</h3>
+            </div>
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Latest focus</p>
+              <p className="mt-1 font-bold">{followUp?.recommendedFocus ? `Next: ${getRecommendedFocusLabel(followUp?.recommendedFocus)}` : 'No next focus recorded yet'}</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(26,26,36,0.92),rgba(18,18,26,0.82))] p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Latest snapshot</p>
+              <p className="mt-3 text-2xl font-black text-slate-900">{formatMetric(currentSnapshot?.weightKg, 'kg')}</p>
+              <p className="mt-1 text-sm text-slate-600">{formatMetric(currentSnapshot?.heightCm, 'cm')} and {formatMetric(currentSnapshot?.bmi, 'BMI')}</p>
+            </div>
+        <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(26,26,36,0.92),rgba(18,18,26,0.82))] p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Latest coach signal</p>
+              <p className="mt-3 text-lg font-black text-slate-900">{getSignalSummaryLabel(latestSignal)}</p>
+              <p className="mt-1 text-sm text-slate-600">{formatDateTime(latestSignal?.recordedAt)}</p>
+            </div>
+        <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(26,26,36,0.92),rgba(18,18,26,0.82))] p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">PT follow-up</p>
+              <p className="mt-3 text-lg font-black text-slate-900">{coach?.coachName || nextSession?.coachName || 'No active coach assigned'}</p>
+              <p className="mt-1 text-sm text-slate-600">{followUp?.nextSessionDate || nextSession?.sessionDate || 'No session scheduled yet'}</p>
+            </div>
+          </div>
+        </section>
+
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="flex items-center gap-2 text-gym-700">
               <Activity className="h-5 w-5" />
               <h3 className="text-sm font-bold uppercase tracking-[0.16em]">Latest coaching signal</h3>
@@ -215,7 +263,7 @@ function CustomerProgressHubPage() {
             </p>
           </article>
 
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="flex items-center gap-2 text-gym-700">
               <Dumbbell className="h-5 w-5" />
               <h3 className="text-sm font-bold uppercase tracking-[0.16em]">PT context</h3>
@@ -229,7 +277,7 @@ function CustomerProgressHubPage() {
             </p>
           </article>
 
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="flex items-center gap-2 text-gym-700">
               <LineChart className="h-5 w-5" />
               <h3 className="text-sm font-bold uppercase tracking-[0.16em]">Progress summary</h3>
@@ -241,7 +289,7 @@ function CustomerProgressHubPage() {
             </p>
           </article>
 
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="flex items-center gap-2 text-gym-700">
               <ClipboardList className="h-5 w-5" />
               <h3 className="text-sm font-bold uppercase tracking-[0.16em]">Recommended focus</h3>
@@ -253,9 +301,65 @@ function CustomerProgressHubPage() {
           </article>
         </section>
 
+        <section className="grid gap-4 lg:grid-cols-3">
+          <article className="gc-card border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white">
+            <div className="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 className="h-5 w-5" />
+              <h3 className="text-sm font-bold uppercase tracking-[0.16em]">Today on GymCore</h3>
+            </div>
+            <p className="mt-4 text-lg font-black text-slate-900">Open your action page</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Use the check-in and health log when you want to record a new metric, show your QR, or inspect raw gym history.
+            </p>
+            <Link
+              to="/customer/checkin-health"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+            >
+              Open check-in & health log
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </article>
+
+          <article className="gc-card border border-gym-100 bg-gradient-to-br from-gym-50 via-white to-white">
+            <div className="flex items-center gap-2 text-gym-700">
+              <Dumbbell className="h-5 w-5" />
+              <h3 className="text-sm font-bold uppercase tracking-[0.16em]">PT workflow</h3>
+            </div>
+            <p className="mt-4 text-lg font-black text-slate-900">Match, request, then follow status</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Jump into the PT dashboard when you want to preview coach matches, send a request, or review your current PT status.
+            </p>
+            <Link
+              to="/customer/coach-booking"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-gym-200 bg-white px-4 py-2 text-sm font-semibold text-gym-800 transition hover:bg-gym-50"
+            >
+              Manage PT dashboard
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </article>
+
+          <article className="gc-card border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-white">
+            <div className="flex items-center gap-2 text-slate-700">
+              <NotebookPen className="h-5 w-5" />
+              <h3 className="text-sm font-bold uppercase tracking-[0.16em]">Knowledge & AI</h3>
+            </div>
+            <p className="mt-4 text-lg font-black text-slate-900">Continue recommendations</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Review workouts, foods, and AI guidance when you need a next-step recommendation based on your saved goals.
+            </p>
+            <Link
+              to="/customer/knowledge"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+            >
+              Open knowledge workspace
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </article>
+        </section>
+
         <section className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
           <div className="space-y-6">
-            <article className="gc-card">
+            <article className="gc-card overflow-hidden">
               <div className="flex items-center gap-2">
                 <HeartPulse className="h-5 w-5 text-gym-600" />
                 <h3 className="text-lg font-bold text-slate-900">Current body snapshot</h3>

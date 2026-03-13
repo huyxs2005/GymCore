@@ -57,6 +57,8 @@ BEGIN TRY
     DECLARE @Slot1 INT;
     DECLARE @Slot2 INT;
     DECLARE @PTRequestID INT;
+    DECLARE @PaymentID INT;
+    DECLARE @InvoiceID INT;
     DECLARE @Start DATE = CAST(GETDATE() AS DATE);
     DECLARE @End DATE = DATEADD(DAY, 179, @Start);
     DECLARE @CurrentActiveEnd DATE;
@@ -828,6 +830,17 @@ BEGIN TRY
             PayOS_Status = N'SUCCESS'
         WHERE OrderID = @OrderID;
 
+        SELECT TOP (1) @PaymentID = PaymentID
+        FROM dbo.Payments
+        WHERE OrderID = @OrderID
+          AND Status = N'SUCCESS'
+        ORDER BY PaymentID DESC;
+
+        IF @PaymentID IS NULL
+        BEGIN
+            THROW 50005, 'Seeded order payment was not found after marking the order paid.', 1;
+        END;
+
         IF NOT EXISTS (
             SELECT 1
             FROM dbo.OrderItems
@@ -840,6 +853,98 @@ BEGIN TRY
             FROM dbo.Products p
             WHERE p.ProductID = 19;
         END;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM dbo.OrderInvoices
+            WHERE PaymentID = @PaymentID
+        )
+        BEGIN
+            INSERT INTO dbo.OrderInvoices (
+                InvoiceCode,
+                OrderID,
+                PaymentID,
+                CustomerID,
+                RecipientEmail,
+                RecipientName,
+                ShippingPhone,
+                ShippingAddress,
+                PaymentMethod,
+                Currency,
+                Subtotal,
+                DiscountAmount,
+                TotalAmount,
+                PaidAt,
+                PickedUpAt,
+                PickedUpByUserID
+            )
+            SELECT
+                CONCAT(
+                    N'INV-',
+                    CONVERT(NVARCHAR(8), CAST(@Start AS DATE), 112),
+                    N'-',
+                    RIGHT(REPLICATE(N'0', 6) + CAST(@PaymentID AS NVARCHAR(20)), 6)
+                ),
+                @OrderID,
+                @PaymentID,
+                @CustomerID,
+                COALESCE(o.ShippingEmail, u.Email),
+                COALESCE(o.ShippingFullName, u.FullName),
+                o.ShippingPhone,
+                o.ShippingAddress,
+                COALESCE(o.PaymentMethod, N'PAYOS'),
+                N'VND',
+                CAST(o.Subtotal AS DECIMAL(18,2)),
+                CAST(o.DiscountApplied AS DECIMAL(18,2)),
+                CAST(o.TotalAmount AS DECIMAL(18,2)),
+                SYSDATETIME(),
+                DATEADD(MINUTE, 15, SYSDATETIME()),
+                @ReceptionistID
+            FROM dbo.Orders o
+            JOIN dbo.Users u ON u.UserID = o.CustomerID
+            WHERE o.OrderID = @OrderID;
+        END;
+
+        SELECT TOP (1) @InvoiceID = InvoiceID
+        FROM dbo.OrderInvoices
+        WHERE PaymentID = @PaymentID
+        ORDER BY InvoiceID DESC;
+
+        MERGE dbo.OrderInvoiceItems AS tgt
+        USING (
+            SELECT
+                @InvoiceID AS InvoiceID,
+                oi.ProductID,
+                p.ProductName,
+                oi.Quantity,
+                CAST(oi.UnitPrice AS DECIMAL(18,2)) AS UnitPrice,
+                CAST(oi.Quantity * oi.UnitPrice AS DECIMAL(18,2)) AS LineTotal
+            FROM dbo.OrderItems oi
+            JOIN dbo.Products p ON p.ProductID = oi.ProductID
+            WHERE oi.OrderID = @OrderID
+        ) AS src
+          ON tgt.InvoiceID = src.InvoiceID
+         AND ISNULL(tgt.ProductID, -1) = ISNULL(src.ProductID, -1)
+         AND tgt.ProductName = src.ProductName
+        WHEN MATCHED THEN
+            UPDATE SET
+                Quantity = src.Quantity,
+                UnitPrice = src.UnitPrice,
+                LineTotal = src.LineTotal
+        WHEN NOT MATCHED THEN
+            INSERT (InvoiceID, ProductID, ProductName, Quantity, UnitPrice, LineTotal)
+            VALUES (src.InvoiceID, src.ProductID, src.ProductName, src.Quantity, src.UnitPrice, src.LineTotal);
+
+        UPDATE dbo.OrderInvoices
+        SET PickedUpAt = COALESCE(
+                PickedUpAt,
+                DATEADD(MINUTE, 15, PaidAt),
+                DATEADD(MINUTE, 15, CreatedAt),
+                DATEADD(MINUTE, 15, SYSDATETIME())
+            ),
+            PickedUpByUserID = COALESCE(PickedUpByUserID, @ReceptionistID),
+            UpdatedAt = SYSDATETIME()
+        WHERE InvoiceID = @InvoiceID;
 
         MERGE dbo.ProductReviews AS tgt
         USING (

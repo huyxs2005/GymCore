@@ -1,12 +1,24 @@
 # GymCore Frontend
 
-This folder contains the React (Vite) frontend for GymCore.
+This folder contains the React + Vite frontend for GymCore.
 
-For full local setup (including Microsoft SQL script run order), read:
-- `../README.md`
+Use the root project guide for the real setup flow:
+- [D:\project\README.md](/D:/project/README.md)
 
-If your SQL Server login/password is different, change backend DB config at:
-- `../backend/src/main/resources/application.properties`
-- `spring.datasource.username`
-- `spring.datasource.password`
-- `spring.datasource.url`
+Frontend-only quick start:
+```powershell
+cd D:\project\frontend
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+Frontend verification:
+```powershell
+cd D:\project\frontend
+npm run lint
+npm run build
+npm run test:run
+```
+
+Optional frontend env file:
+- `frontend/.env.example` -> `frontend/.env.local`

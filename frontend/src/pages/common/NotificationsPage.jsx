@@ -74,11 +74,12 @@ function NotificationsPage() {
     },
   })
 
-  const unreadCount = data?.data?.unreadCount || 0
-  const notifications = useMemo(() => data?.data?.notifications || [], [data?.data?.notifications])
+  const notificationData = data?.data
+  const unreadCount = notificationData?.unreadCount || 0
+  const notifications = useMemo(() => notificationData?.notifications || [], [notificationData])
   const reminderCenter = useMemo(() => {
-    if (data?.data?.reminderCenter) {
-      return data.data.reminderCenter
+    if (notificationData?.reminderCenter) {
+      return notificationData.reminderCenter
     }
     const fallback = partitionReminderCenter(notifications)
     return {
@@ -89,7 +90,7 @@ function NotificationsPage() {
         history: fallback.history.length,
       },
     }
-  }, [data?.data?.reminderCenter, notifications])
+  }, [notificationData, notifications])
 
   const refreshNotifications = () => {
     queryClient.invalidateQueries({ queryKey: ['notifications'] })
@@ -118,11 +119,8 @@ function NotificationsPage() {
     },
   })
 
-  const actionableNotifications = useMemo(
-    () => reminderCenter?.actionable || [],
-    [reminderCenter?.actionable],
-  )
-  const historyNotifications = useMemo(() => reminderCenter?.history || [], [reminderCenter?.history])
+  const actionableNotifications = useMemo(() => reminderCenter?.actionable || [], [reminderCenter])
+  const historyNotifications = useMemo(() => reminderCenter?.history || [], [reminderCenter])
 
   const filteredHistoryNotifications = useMemo(() => {
     if (filter === 'actionable') {

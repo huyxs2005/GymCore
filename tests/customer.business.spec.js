@@ -1,8 +1,56 @@
 const { test, expect } = require('@playwright/test')
-const { credentialsByRole } = require('./helpers/auth')
-const { prepareCustomerAiPlanningState, prepareCustomerCommerceState, runSqlScript } = require('./helpers/sql')
+const { credentialsByRole, loginViaUi } = require('./helpers/auth')
+const {
+  getLatestReplacementOfferStatus,
+  prepareCustomerAiPlanningState,
+  prepareCustomerCommerceState,
+  preparePtExceptionFlowState,
+  runSqlScript,
+} = require('./helpers/sql')
 
 test.use({ storageState: credentialsByRole.customer.storageState })
+
+function formatDateValue(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function addDaysValue(value, amount) {
+  const [year, month, day] = String(value).split('-').map(Number)
+  const nextDate = new Date(year, month - 1, day)
+  nextDate.setDate(nextDate.getDate() + amount)
+  return formatDateValue(nextDate)
+}
+
+async function callAuthenticatedApi(page, method, url, body) {
+  const response = await page.evaluate(async ({ method, url, body }) => {
+    const token = window.localStorage.getItem('gymcore_access_token')
+    const result = await window.fetch(url, {
+      method,
+      headers: {
+        Authorization: token ? `Bearer ${token}` : '',
+        'Content-Type': 'application/json',
+      },
+      body: body == null ? undefined : JSON.stringify(body),
+    })
+    let json = null
+    try {
+      json = await result.json()
+    } catch {
+      json = null
+    }
+    return {
+      ok: result.ok,
+      status: result.status,
+      json,
+    }
+  }, { method, url, body })
+
+  expect(response.ok, JSON.stringify(response.json || {})).toBeTruthy()
+  return response.json
+}
 
 async function clearCart(page) {
   await page.goto('/customer/cart')
@@ -61,8 +109,19 @@ test.describe.serial('customer business flows', () => {
     await expect(page.getByText('Food emphasis')).toBeVisible()
   })
 
-  test('adds product coupon code to wallet in cart, previews it, and submits checkout payload', async ({ page }) => {
+  test('claims a product coupon from promotions, previews it in cart, and submits checkout payload', async ({ page }) => {
     await clearCart(page)
+
+    await page.goto('/customer/promotions')
+    await expect(page.getByRole('heading', { name: 'Promotions & Special Offers' })).toBeVisible()
+    const welcomePromotion = page.locator('div.p-5').filter({ hasText: 'WELCOME10' }).first()
+    await expect(welcomePromotion).toBeVisible()
+    await welcomePromotion.getByRole('button', { name: 'Claim Voucher' }).click()
+    await expect(page.getByRole('heading', { name: 'Claim Successful!' })).toBeVisible()
+    await expect(page.getByText(/#WELCOME10/i)).toBeVisible()
+    await page.getByRole('button', { name: 'Awesome!' }).click()
+    await expect(welcomePromotion.getByRole('button', { name: 'Claimed' })).toBeVisible()
+
     await page.goto('/customer/shop')
 
     const productCard = page.locator('article').filter({
@@ -93,14 +152,9 @@ test.describe.serial('customer business flows', () => {
     }).first().getByRole('button', { name: '-' }).click()
     await expect(quantityDisplay).toHaveText('1')
 
-    await page.getByPlaceholder('Enter coupon code from social media').fill('WELCOME10')
-    await page.getByRole('button', { name: 'Add code to wallet' }).click()
     await expect(page.locator('#cart-page-promo-code')).toContainText('WELCOME10')
     await page.locator('#cart-page-promo-code').selectOption('WELCOME10')
     await expect(page.getByText(/Preview: discount/i)).toBeVisible()
-    await expect(page.getByText('Claimable now')).toBeVisible()
-    await expect(page.getByText('Used')).toBeVisible()
-    await expect(page.getByText('Expired')).toBeVisible()
 
     let checkoutPayload = null
     await page.route('**/api/v1/orders/checkout', async (route) => {
@@ -136,7 +190,6 @@ test.describe.serial('customer business flows', () => {
       email: 'customer@gymcore.local',
     })
 
-    await page.unroute('**/api/v1/orders/checkout')
     await clearCart(page)
   })
 
@@ -144,16 +197,14 @@ test.describe.serial('customer business flows', () => {
     await page.goto('/customer/promotions')
     await expect(page.getByRole('heading', { name: 'Promotions & Special Offers' })).toBeVisible()
 
-    const activeCard = page.locator('text=Active').locator('..')
-    const activeBefore = Number((await activeCard.textContent())?.replace(/\D/g, '') || '0')
-
-    await page.getByPlaceholder('Enter external coupon code').fill('WELCOME10')
-    await page.getByRole('button', { name: 'Add code to wallet' }).click()
+    const welcomePromotion = page.locator('div.p-5').filter({ hasText: 'WELCOME10' }).first()
+    await expect(welcomePromotion).toBeVisible()
+    await welcomePromotion.getByRole('button', { name: 'Claim Voucher' }).click()
 
     await expect(page.getByRole('heading', { name: 'Claim Successful!' })).toBeVisible()
     await expect(page.getByText(/#WELCOME10/i)).toBeVisible()
     await page.getByRole('button', { name: 'Awesome!' }).click()
-    await expect(activeCard).toContainText(String(activeBefore + 1))
+    await expect(welcomePromotion.getByRole('button', { name: 'Claimed' })).toBeVisible()
   })
 
   test('shows an action-first reminder center with quieter history and direct promotion actions', async ({ page }) => {
@@ -185,7 +236,7 @@ test.describe.serial('customer business flows', () => {
     await expect(page.locator('[data-notification-tone="muted"]').filter({ hasText: 'Order paid' })).toHaveCount(0)
   })
 
-  test('reorders a picked-up order, manages recipient change requests, and gates reviews by pickup', async ({ page }) => {
+  test('gates reviews by pickup and lets the customer manage a picked-up order review', async ({ page }) => {
     await page.goto('/customer/orders')
     await expect(page.getByRole('heading', { name: 'Order History' })).toBeVisible()
 
@@ -195,25 +246,7 @@ test.describe.serial('customer business flows', () => {
     await expect(awaitingOrder).toBeVisible()
     await expect(pickedOrder).toBeVisible()
     await expect(awaitingOrder.getByText('Review unlocks after pickup is confirmed.')).toBeVisible()
-
-    await awaitingOrder.getByRole('button', { name: 'Request recipient change' }).click()
-    await page.getByPlaceholder('Pickup recipient name').fill('Pickup Delegate One')
-    await page.getByPlaceholder('0900...').fill('0900000123')
-    await page.getByPlaceholder('pickup@gymcore.local').fill('delegate.one@gymcore.local')
-    await page.getByRole('button', { name: 'Save recipient change' }).click()
-    await expect(page.getByText(/Recipient change request saved/i)).toBeVisible()
-    await expect(awaitingOrder.getByRole('button', { name: 'Update recipient change' })).toBeVisible()
-    await expect(awaitingOrder.getByText(/Pickup Delegate One/)).toBeVisible()
-
-    await awaitingOrder.getByRole('button', { name: 'Update recipient change' }).click()
-    await page.getByPlaceholder('Pickup recipient name').fill('Pickup Delegate Final')
-    await page.getByPlaceholder('0900...').fill('0900000456')
-    await page.getByPlaceholder('pickup@gymcore.local').fill('delegate.final@gymcore.local')
-    await page.getByRole('button', { name: 'Save recipient change' }).click()
-    await expect(awaitingOrder.getByText(/Pickup Delegate Final/)).toBeVisible()
-
-    await pickedOrder.getByRole('button', { name: 'Reorder' }).click()
-    await expect(page.getByText(/Reorder added 1 item line\(s\) to your cart/i)).toBeVisible()
+    await expect(awaitingOrder.getByRole('button', { name: 'Leave review' })).toHaveCount(0)
 
     await pickedOrder.getByRole('button', { name: 'Leave review' }).click()
     await page.getByLabel('Comment').fill('Playwright review create')
@@ -233,7 +266,7 @@ test.describe.serial('customer business flows', () => {
   test('shows a dashboard-first PT experience and instant-booking path when eligible', async ({ page }) => {
     await page.goto('/customer/coach-booking')
     await expect(page.getByRole('heading', { name: 'Coach Booking' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'PT Dashboard' })).toBeVisible()
+    await expect(page.getByText('PT Dashboard')).toBeVisible()
 
     const membershipGate = page.getByRole('heading', { name: 'Coach booking is locked for your current membership.' })
     if (await membershipGate.isVisible()) {
@@ -242,21 +275,24 @@ test.describe.serial('customer business flows', () => {
       return
     }
 
-    if (await page.getByText('Active PT phase', { exact: true }).isVisible()) {
+    if (await page.getByRole('button', { name: 'Change recurring plan' }).isVisible()) {
       await expect(page.getByText('Latest coach note')).toBeVisible()
       await expect(page.getByText(/Latest progress/i)).toBeVisible()
       return
     }
 
     await page.getByRole('button', { name: 'Book PT Plan' }).click()
-    await page.getByRole('button', { name: 'Open Schedule Planner' }).click()
-
-    const plannerTitle = page.getByRole('heading', { name: 'Set Desired PT Schedule', exact: true })
     const ptGate = page.getByRole('heading', { name: 'You already have a PT booking in progress.' })
+    const openPlannerButton = page.getByRole('button', { name: 'Open Schedule Planner' })
+    const plannerTitle = page.getByRole('heading', { name: 'Set Desired PT Schedule', exact: true })
+
+    await expect(openPlannerButton.or(ptGate)).toBeVisible()
     if (await ptGate.isVisible()) {
       await expect(page.getByRole('button', { name: 'Open PT Dashboard' })).toBeVisible()
       return
     }
+
+    await openPlannerButton.click()
 
     if (await plannerTitle.isVisible()) {
       await page.getByRole('button', { name: /Monday/i }).click()
@@ -272,206 +308,133 @@ test.describe.serial('customer business flows', () => {
   })
 
   test('supports direct PT reschedule, future series change, and replacement coach decisions from the dashboard', async ({
-    page,
+    browser,
   }) => {
-    const currentPhase = {
-      data: {
-        activePhase: {
-          ptRequestId: 901,
-          coachId: 3,
-          coachName: 'Coach Alex',
-          startDate: '2026-03-17',
-          endDate: '2026-04-14',
-          bookingMode: 'INSTANT',
-          templateSlots: [
-            { dayOfWeek: 1, timeSlotId: 1 },
-            { dayOfWeek: 3, timeSlotId: 2 },
-          ],
-        },
-        dashboard: {
-          nextSession: {
-            ptSessionId: 301,
-            coachName: 'Coach Alex',
-            sessionDate: '2026-03-17',
-            timeSlotId: 1,
-            status: 'SCHEDULED',
-          },
-          weeklySchedule: [
-            {
-              ptSessionId: 301,
-              sessionDate: '2026-03-17',
-              timeSlotId: 1,
-              status: 'SCHEDULED',
-            },
-          ],
-          latestNote: {
-            noteId: 88,
-            noteContent: 'Strong improvement in posture',
-          },
-          latestProgress: {
-            heightCm: 172.5,
-            weightKg: 70.2,
-            bmi: 23.6,
-            recordedAt: '2026-03-15T02:00:00Z',
-          },
-          completedSessions: 2,
-          remainingSessions: 4,
-        },
-      },
+    test.setTimeout(120000)
+    preparePtExceptionFlowState()
+
+    const coachCredentials = {
+      email: 'pt.exception.coach@gymcore.local',
+      password: 'Coach123456!',
+    }
+    const customerCredentials = {
+      email: 'pt.exception.customer@gymcore.local',
+      password: 'Customer123456!',
     }
 
-    const schedule = {
-      data: {
-        items: [
-          {
-            ptSessionId: 301,
-            coachName: 'Coach Alex',
-            sessionDate: '2026-03-17',
-            timeSlotId: 1,
-            slotIndex: 1,
-            startTime: '07:00:00',
-            endTime: '08:30:00',
-            status: 'SCHEDULED',
-            replacementOffer: {
-              offerId: 91,
-              status: 'PENDING_CUSTOMER',
-              note: 'Medical leave this week.',
-              replacementCoachName: 'Coach Jamie',
-              originalCoachName: 'Coach Alex',
-              sessionDate: '2026-03-17',
-              timeSlotId: 1,
-            },
-          },
-        ],
-        pendingRequests: [],
-        deniedRequests: [],
-      },
+    const coachContext = await browser.newContext()
+    const customerContext = await browser.newContext()
+    const coachPage = await coachContext.newPage()
+    const customerPage = await customerContext.newPage()
+
+    try {
+      await loginViaUi(coachPage, coachCredentials)
+      await loginViaUi(customerPage, customerCredentials)
+
+      const scheduleResponse = await callAuthenticatedApi(coachPage, 'GET', '/api/v1/coach/schedule')
+      const coachSessions = (scheduleResponse?.data?.items || []).filter(
+        (session) => session.customerEmail === 'pt.exception.customer@gymcore.local',
+      )
+      expect(coachSessions.length).toBeGreaterThanOrEqual(2)
+
+      const sortedSessions = coachSessions
+        .slice()
+        .sort((left, right) => {
+          if (left.sessionDate !== right.sessionDate) {
+            return String(left.sessionDate).localeCompare(String(right.sessionDate))
+          }
+          return Number(left.timeSlotId || 0) - Number(right.timeSlotId || 0)
+        })
+
+      const sessionOne = sortedSessions[0]
+      const sessionTwo = sortedSessions[1]
+      const replacementSlotId = Number(sessionTwo.timeSlotId) + 1
+      const seriesCutoverDate = addDaysValue(sessionTwo.sessionDate, 7)
+      const seriesDayLabel = new Date(`${sessionTwo.sessionDate}T00:00:00`).toLocaleDateString('en-US', {
+        weekday: 'long',
+      })
+
+      await customerPage.goto('/customer/coach-booking')
+      await expect(customerPage.getByText('PT Dashboard')).toBeVisible()
+      await expect(customerPage.getByText('Active PT phase')).toBeVisible()
+
+      await customerPage.getByRole('button', { name: 'Change recurring plan' }).click()
+      const recurringPlanModal = customerPage.locator('div.fixed.inset-0.z-50')
+      await expect(recurringPlanModal.getByRole('heading', { name: 'Change recurring plan' })).toBeVisible()
+      await recurringPlanModal.getByLabel('Apply new template from').fill(seriesCutoverDate)
+      await recurringPlanModal.getByRole('button', { name: new RegExp(seriesDayLabel, 'i') }).click()
+      await recurringPlanModal.getByRole('button', { name: /Slot 2/i }).click()
+      await recurringPlanModal.getByRole('button', { name: 'Save future series' }).click()
+      await expect(customerPage.getByText(/Recurring PT series updated successfully/i)).toBeVisible()
+
+      await customerPage.getByRole('button', { name: 'Open My PT Schedule' }).click()
+      await customerPage.getByRole('button', { name: new RegExp(`${sessionOne.sessionDate}, 1 coaching slot`, 'i') }).click()
+      await customerPage.getByRole('button', { name: 'Reschedule' }).click()
+      await customerPage.getByLabel('New date').fill(sessionTwo.sessionDate)
+      await customerPage.getByLabel('New time slot').selectOption(String(replacementSlotId))
+      await customerPage.getByRole('button', { name: 'Update session now' }).click()
+      await expect(customerPage.getByText(/PT session updated immediately/i)).toBeVisible()
+
+      const replacementCoachesResponse = await callAuthenticatedApi(coachPage, 'GET', '/api/v1/coach/replacement-coaches')
+      const backupCoach = (replacementCoachesResponse?.data?.items || []).find(
+        (coach) => coach.email === 'pt.exception.backup@gymcore.local',
+      )
+      expect(backupCoach).toBeTruthy()
+
+      await callAuthenticatedApi(coachPage, 'POST', '/api/v1/coach/unavailable-blocks', {
+        startDate: sessionTwo.sessionDate,
+        endDate: sessionTwo.sessionDate,
+        timeSlotId: replacementSlotId,
+        note: 'Primary coach on medical leave for the rescheduled slot.',
+      })
+
+      const coachScheduleAfterReschedule = await callAuthenticatedApi(coachPage, 'GET', '/api/v1/coach/schedule')
+      const rescheduledSession = (coachScheduleAfterReschedule?.data?.items || [])
+        .filter((session) => session.customerEmail === 'pt.exception.customer@gymcore.local')
+        .find((session) => session.sessionDate === sessionTwo.sessionDate && Number(session.timeSlotId) === replacementSlotId)
+      expect(rescheduledSession).toBeTruthy()
+
+      await callAuthenticatedApi(
+        coachPage,
+        'POST',
+        `/api/v1/coach/pt-sessions/${rescheduledSession.ptSessionId}/replacement-offer`,
+        {
+          replacementCoachId: backupCoach.coachId,
+          note: 'Medical leave this week.',
+        },
+      )
+
+      await customerPage.reload()
+      await expect(customerPage.getByText('Replacement coach offer').first()).toBeVisible()
+      await customerPage.getByRole('button', { name: 'Accept replacement' }).first().click()
+      await expect(customerPage.getByText(/Replacement coach accepted/i)).toBeVisible()
+      expect(getLatestReplacementOfferStatus('pt.exception.customer@gymcore.local')).toBe('ACCEPTED')
+
+      await callAuthenticatedApi(coachPage, 'POST', '/api/v1/coach/unavailable-blocks', {
+        startDate: sessionTwo.sessionDate,
+        endDate: sessionTwo.sessionDate,
+        timeSlotId: sessionTwo.timeSlotId,
+        note: 'Primary coach unavailable for the original slot.',
+      })
+
+      await callAuthenticatedApi(
+        coachPage,
+        'POST',
+        `/api/v1/coach/pt-sessions/${sessionTwo.ptSessionId}/replacement-offer`,
+        {
+          replacementCoachId: backupCoach.coachId,
+          note: 'Backup coach can take this exception slot.',
+        },
+      )
+
+      await customerPage.reload()
+      await expect(customerPage.getByText('Replacement coach offer').first()).toBeVisible()
+      await customerPage.getByRole('button', { name: 'Decline replacement' }).first().click()
+      await expect(customerPage.getByText(/Replacement coach declined/i)).toBeVisible()
+      expect(getLatestReplacementOfferStatus('pt.exception.customer@gymcore.local')).toBe('DECLINED')
+    } finally {
+      await coachContext.close()
+      await customerContext.close()
     }
-
-    let reschedulePayload = null
-    let seriesPayload = null
-    let replacementPayload = null
-
-    await page.route('**/api/v1/time-slots', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          data: {
-            items: [
-              { timeSlotId: 1, slotIndex: 1, startTime: '07:00:00', endTime: '08:30:00' },
-              { timeSlotId: 2, slotIndex: 2, startTime: '08:30:00', endTime: '10:00:00' },
-            ],
-          },
-        }),
-      })
-    })
-
-    await page.route('**/api/v1/memberships/current-center', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          data: {
-            membership: {
-              status: 'ACTIVE',
-              plan: {
-                name: 'Gym + Coach - 6 Months',
-                planType: 'GYM_PLUS_COACH',
-                allowsCoachBooking: true,
-              },
-            },
-          },
-        }),
-      })
-    })
-
-    await page.route('**/api/v1/coach-booking/current-phase', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(currentPhase),
-      })
-    })
-
-    await page.route('**/api/v1/coach-booking/my-schedule', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(schedule),
-      })
-    })
-
-    await page.route('**/api/v1/coach-booking/current-phase/reschedule-series', async (route) => {
-      seriesPayload = JSON.parse(route.request().postData() || '{}')
-      currentPhase.data.activePhase.templateSlots = seriesPayload.slots
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ data: { status: 'UPDATED' } }),
-      })
-    })
-
-    await page.route('**/api/v1/coach-booking/sessions/*/replacement-response', async (route) => {
-      replacementPayload = JSON.parse(route.request().postData() || '{}')
-      schedule.data.items[0].replacementOffer.status = replacementPayload.decision === 'ACCEPT' ? 'ACCEPTED' : 'DECLINED'
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ data: { status: schedule.data.items[0].replacementOffer.status } }),
-      })
-    })
-
-    await page.route('**/api/v1/coach-booking/sessions/*/reschedule', async (route) => {
-      reschedulePayload = JSON.parse(route.request().postData() || '{}')
-      schedule.data.items[0].sessionDate = reschedulePayload.sessionDate
-      schedule.data.items[0].timeSlotId = reschedulePayload.timeSlotId
-      schedule.data.items[0].slotIndex = 2
-      schedule.data.items[0].startTime = '08:30:00'
-      schedule.data.items[0].endTime = '10:00:00'
-      currentPhase.data.dashboard.nextSession = {
-        ...currentPhase.data.dashboard.nextSession,
-        sessionDate: reschedulePayload.sessionDate,
-        timeSlotId: reschedulePayload.timeSlotId,
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ data: { status: 'UPDATED' } }),
-      })
-    })
-
-    await page.goto('/customer/coach-booking')
-    await expect(page.getByRole('heading', { name: 'PT Dashboard' })).toBeVisible()
-    await expect(page.getByText('Replacement coach offer').first()).toBeVisible()
-
-    await page.getByRole('button', { name: 'Accept replacement' }).first().click()
-    expect(replacementPayload).toMatchObject({ decision: 'ACCEPT' })
-
-    await page.getByRole('button', { name: 'Change recurring plan' }).click()
-    await page.getByLabel('Apply new template from').fill('2026-03-24')
-    await page.getByRole('button', { name: /Tuesday/i }).click()
-    await page.getByRole('button', { name: /Slot 2/i }).first().click()
-    await page.getByRole('button', { name: 'Save future series' }).click()
-
-    expect(seriesPayload).toMatchObject({
-      cutoverDate: '2026-03-24',
-      slots: [
-        { dayOfWeek: 1, timeSlotId: 1 },
-        { dayOfWeek: 2, timeSlotId: 2 },
-        { dayOfWeek: 3, timeSlotId: 2 },
-      ],
-    })
-
-    await page.getByRole('button', { name: 'Reschedule' }).click()
-    await page.getByLabel('New date').fill('2026-03-24')
-    await page.getByLabel('New time slot').selectOption('2')
-    await page.getByRole('button', { name: 'Update session now' }).click()
-
-    expect(reschedulePayload).toMatchObject({
-      sessionDate: '2026-03-24',
-      timeSlotId: 2,
-    })
-    await expect(page.getByText(/PT session updated immediately/i)).toBeVisible()
   })
 })

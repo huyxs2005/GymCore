@@ -7,7 +7,6 @@ import static org.mockito.Mockito.mock;
 
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.AdminService;
-import com.gymcore.backend.modules.auth.service.AuthMailService;
 import com.gymcore.backend.modules.auth.service.AuthService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.checkin.service.CheckinHealthService;
@@ -25,16 +24,15 @@ class UnsupportedActionDispatchTest {
 
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final AuthService authService = mock(AuthService.class);
-    private final AuthMailService authMailService = mock(AuthMailService.class);
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final UserNotificationService notificationService = mock(UserNotificationService.class);
+    private final CoachBookingService delegatedCoachBookingService = mock(CoachBookingService.class);
 
     @Test
     void userManagementService_shouldRejectUnsupportedAction() {
         UserManagementService service =
-                new UserManagementService(
-                        jdbcTemplate, authService, authMailService, currentUserService, passwordEncoder);
+                new UserManagementService(jdbcTemplate, authService, currentUserService, passwordEncoder);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));
@@ -45,7 +43,8 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void checkinHealthService_shouldRejectUnsupportedAction() {
-        CheckinHealthService service = new CheckinHealthService(jdbcTemplate, authService);
+        CheckinHealthService service =
+                new CheckinHealthService(jdbcTemplate, authService, delegatedCoachBookingService);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));
@@ -56,7 +55,7 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void contentService_shouldRejectUnsupportedAction() {
-        ContentService service = new ContentService(jdbcTemplate, currentUserService);
+        ContentService service = new ContentService(jdbcTemplate, currentUserService, delegatedCoachBookingService);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));

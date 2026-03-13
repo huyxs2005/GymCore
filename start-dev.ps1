@@ -25,7 +25,7 @@ $backendArgs = @(
 $frontendArgs = @(
     '-NoExit',
     '-ExecutionPolicy', 'Bypass',
-    '-Command', 'npm run dev'
+    '-Command', 'npm run dev -- --host 127.0.0.1'
 )
 
 if ($DryRun) {

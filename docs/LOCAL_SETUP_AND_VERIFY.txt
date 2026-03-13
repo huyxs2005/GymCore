@@ -1,0 +1,68 @@
+GymCore local setup and verify
+
+1. Prerequisites
+- Java 21
+- Node.js 20+ with npm
+- Microsoft SQL Server
+- sqlcmd in PATH
+- Playwright browsers installed
+
+2. Install dependencies
+- Root:
+  cd D:\project
+  npm install
+- Frontend:
+  cd D:\project\frontend
+  npm install
+
+3. Seed SQL from scratch
+- Recommended:
+  cd D:\project
+  .\seed-db.ps1
+- Manual order if needed:
+  1. docs/GymCore.txt
+  2. docs/alter.txt
+  3. docs/InsertValues.txt
+  4. docs/InsertTestingValues.txt
+
+4. Default local SQL config
+- Server: tcp:localhost,1433
+- Database: GymCore
+- Username: sa
+- Password: 5
+
+5. Optional env files
+- backend/.env.example -> backend/.env.local
+- frontend/.env.example -> frontend/.env.local
+
+6. Run the project
+- cd D:\project
+- .\start-dev.ps1
+
+7. Full local verification
+- Recommended:
+  cd D:\project
+  .\verify-local.ps1
+
+- Manual:
+  cd D:\project\frontend
+  npm run lint
+  npm run build
+  npm run test:run
+
+  cd D:\project\backend
+  .\mvnw.cmd test
+
+  cd D:\project
+  npx playwright test --config playwright.config.js --workers=1
+
+8. Seeded accounts
+- Admin: admin@gymcore.local / Admin123456!
+- Receptionist: reception@gymcore.local / Reception123456!
+- Coach: coach@gymcore.local / Coach123456!
+- Customer: customer@gymcore.local / Customer123456!
+
+9. Important rules
+- Product reviews unlock only after pickup is confirmed.
+- PT booking AI uses the same match logic as the real booking flow.
+- Google login is optional and needs VITE_GOOGLE_CLIENT_ID.

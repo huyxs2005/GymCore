@@ -12,6 +12,23 @@ import { useSession } from '../../features/auth/useSession'
 
 const REVIEWS_PER_PAGE = 10
 
+function buildProductTrustPoints(canReview) {
+  return [
+    {
+      label: 'Front-desk pickup',
+      detail: 'Product orders are handed over at the gym reception desk.',
+    },
+    {
+      label: 'Review rule',
+      detail: canReview ? 'Pickup is confirmed, so your review is now unlocked.' : 'Reviews unlock only after the receptionist confirms pickup.',
+    },
+    {
+      label: 'Cart ready',
+      detail: 'You can keep shopping and manage quantity later from the dedicated cart page.',
+    },
+  ]
+}
+
 function CustomerProductDetailPage() {
   const { productId } = useParams()
   const navigate = useNavigate()
@@ -84,6 +101,7 @@ function CustomerProductDetailPage() {
 
   const effectiveReviewRating = reviewDraft?.rating ?? Number(ownReview?.rating || 5)
   const effectiveReviewText = reviewDraft?.comment ?? (ownReview?.comment || '')
+  const trustPoints = buildProductTrustPoints(canReview)
 
   const pagedReviews = useMemo(() => {
     const startIndex = (currentReviewPage - 1) * REVIEWS_PER_PAGE
@@ -115,7 +133,7 @@ function CustomerProductDetailPage() {
     event.preventDefault()
     if (!product) return
     if (!canReview) {
-      toast.error('You can review this product only after you have a PAID order for it.')
+      toast.error('You can review this product only after pickup is confirmed.')
       return
     }
     reviewMutation.mutate({
@@ -163,9 +181,42 @@ function CustomerProductDetailPage() {
 
       {product ? (
         <div className="space-y-6">
+      <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.1),_transparent_28%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.94)_45%,_rgba(34,24,10,0.94))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+            <div className="grid gap-5 lg:grid-cols-[1.5fr,1fr]">
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {(product.categories || []).map((category) => (
+                    <span key={`hero-${product.productId}-${category.productCategoryId}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">
+                      {category.name}
+                    </span>
+                  ))}
+                </div>
+                <div>
+                  <h1 className="text-4xl font-black tracking-tight text-slate-900">{product.name}</h1>
+                  {product.shortDescription ? <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">{product.shortDescription}</p> : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <ProductRating rating={Number(product.averageRating || 0)} count={Number(product.reviewCount || 0)} />
+                  <span className="text-2xl font-black text-slate-900">{Number(product.price || 0).toLocaleString('en-US')} VND</span>
+                </div>
+              </div>
+        <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 shadow-ambient-sm backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Why this page matters</p>
+                <div className="mt-4 space-y-3">
+                  {trustPoints.map((point) => (
+                    <div key={point.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-sm font-bold text-slate-900">{point.label}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">{point.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
           <div className="grid gap-6 xl:grid-cols-2">
-            <section className="gc-card-compact space-y-4">
-              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+            <section className="gc-card-compact space-y-4 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm">
                 {activeImageUrl ? <img src={activeImageUrl} alt={product.name} className="h-[420px] w-full object-cover" /> : null}
               </div>
               {galleryImages.length > 1 ? (
@@ -184,21 +235,18 @@ function CustomerProductDetailPage() {
               ) : null}
             </section>
 
-            <section className="gc-card-compact space-y-6">
-              <div className="flex flex-wrap gap-2">
-                {(product.categories || []).map((category) => (
-                  <span key={`${product.productId}-${category.productCategoryId}`} className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">
-                    {category.name}
-                  </span>
-                ))}
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
-                {product.shortDescription ? <p className="mt-2 text-base text-slate-600">{product.shortDescription}</p> : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-4">
-                <ProductRating rating={Number(product.averageRating || 0)} count={Number(product.reviewCount || 0)} />
-                <span className="text-sm font-semibold text-slate-900">{Number(product.price || 0).toLocaleString('en-US')} VND</span>
+            <section className="gc-card-compact space-y-6 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="gc-section-kicker">Purchase summary</p>
+                    <p className="mt-2 text-3xl font-black text-slate-900">{Number(product.price || 0).toLocaleString('en-US')} VND</p>
+                  </div>
+                  <div className="rounded-2xl border border-gym-100 bg-gym-50 px-4 py-3 text-right">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gym-700">Review status</p>
+                    <p className="mt-2 text-sm font-bold text-gym-900">{canReview ? 'Unlocked' : 'Unlocks after pickup'}</p>
+                  </div>
+                </div>
               </div>
               <p className="text-sm leading-6 text-slate-700">{product.description || 'No description provided yet.'}</p>
               <div className="rounded-2xl border border-gym-100 bg-gym-50 p-4">
@@ -225,11 +273,31 @@ function CustomerProductDetailPage() {
                   <div>
                     <p className="gc-section-kicker">Your review</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {canReview ? 'You can review this product because you already purchased it.' : 'Reviews are unlocked after you complete a paid order for this product.'}
+                      {canReview ? 'You can review this product because pickup has been confirmed.' : 'Reviews unlock after the receptionist confirms pickup for this product.'}
                     </p>
                   </div>
                   {ownReview ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">Already reviewed</span> : null}
                 </div>
+
+                {!canReview ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <p className="text-sm font-semibold text-amber-900">Review is locked until pickup is confirmed.</p>
+                    <p className="mt-2 text-sm leading-6 text-amber-900/80">
+                      Finish pickup at the front desk first, then come back here or open your order history to review the product.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link
+                        to="/customer/orders"
+                        className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+                      >
+                        Check pickup status
+                      </Link>
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">
+                        Pickup first
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
 
                 <form onSubmit={handleSubmitReview} className="space-y-4">
                   <label className="block space-y-1">
@@ -260,7 +328,7 @@ function CustomerProductDetailPage() {
             </section>
           </div>
 
-          <article className="gc-card-compact space-y-4">
+          <article className="gc-card-compact space-y-4 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="gc-section-kicker">Customer reviews</p>

@@ -1,0 +1,162 @@
+GymCore 15-minute demo script
+
+Goal:
+- Cover the most important user-facing business flows without rushing.
+- Use seeded local accounts and data that already exist in the local SQL scripts.
+
+Environment before demo:
+- Seed DB with .\seed-db.ps1
+- Start app with .\start-dev.ps1
+- Frontend: http://127.0.0.1:5173
+
+Seeded accounts:
+- Admin: admin@gymcore.local / Admin123456!
+- Receptionist: reception@gymcore.local / Reception123456!
+- Coach: coach@gymcore.local / Coach123456!
+- Customer: customer@gymcore.local / Customer123456!
+
+Suggested timeline:
+- 00:00 - 01:00: intro + login
+- 01:00 - 05:00: customer membership + promotions + shop
+- 05:00 - 07:00: receptionist pickup confirmation
+- 07:00 - 09:00: customer review after pickup
+- 09:00 - 12:00: coach + customer progress/PT flow
+- 12:00 - 15:00: admin support/goals/insights wrap-up
+
+Part 1 - Customer login and membership/promotion/shop flow
+
+1. Open http://127.0.0.1:5173
+2. Click Login
+3. Enter:
+- Email: customer@gymcore.local
+- Password: Customer123456!
+4. Click Login
+
+What to say:
+- "We start as the customer because this is where membership, PT, and commerce come together."
+
+5. Open Membership from the top navigation.
+6. Click the Gym + Coach plan card.
+7. If the coupon dropdown is visible, choose MEMBERBOOST.
+8. Point at the checkout summary and pricing preview.
+
+What to say:
+- "The membership page supports day pass, gym-only, and gym-plus-coach. Coupons are validated before checkout, and the page explains the exact commercial impact before payment."
+
+9. Open Promotions.
+10. Find the WELCOME10 promotion card.
+11. Click Claim Voucher.
+12. In the success modal, mention the wallet update, then click Awesome!.
+
+What to say:
+- "Promotions are not just banners. Customers can claim a coupon directly, and it immediately becomes available inside checkout."
+
+13. Open Product Shop.
+14. Click Add to cart on the first product card.
+15. Click View cart.
+16. In cart, select promo code WELCOME10.
+17. Point at the discount preview and the Checkout with PayOS button.
+
+What to say:
+- "The commerce flow is tied to wallet coupons, and checkout is ready for hosted PayOS payment."
+
+Part 2 - Reception pickup confirmation
+
+18. Logout.
+19. Login as receptionist:
+- Email: reception@gymcore.local
+- Password: Reception123456!
+20. Open Pickup Desk.
+21. In the queue, select the awaiting pickup invoice.
+22. Point at invoice detail, paid items, recipient info, and the Confirm pickup button.
+23. Click Confirm pickup.
+
+What to say:
+- "Product handoff is confirmed at the front desk. This matters because review eligibility is locked behind pickup completion, not just payment."
+
+Part 3 - Customer review after pickup
+
+24. Logout.
+25. Login again as customer.
+26. Open Order History.
+27. Point out that the picked-up order now shows Leave review.
+28. Click Leave review.
+29. Keep rating at 5.
+30. In Comment, type: Demo review after pickup
+31. Click Submit review.
+32. Show Edit review, update the comment to: Demo review updated after pickup
+33. Click Update review.
+
+What to say:
+- "This demonstrates the current business rule clearly: the customer can review only after pickup is confirmed. The review can also be edited later."
+
+Part 4 - Coach writes progress and customer sees it
+
+34. Logout.
+35. Login as coach:
+- Email: coach@gymcore.local
+- Password: Coach123456!
+36. Open Customers.
+37. Select the first customer in the list.
+38. Open the Progress tab.
+39. Update:
+- Height: 180
+- Weight: 79
+40. Click Save progress.
+41. Open Notes.
+42. Pick any session in the first dropdown.
+43. Type note: Session pacing improved and squat depth is more stable.
+44. Click Add note.
+
+What to say:
+- "Coaches can update measurable progress and add session notes from their own workspace. Those updates flow forward to the customer view."
+
+45. Logout.
+46. Login as customer again.
+47. Open Progress Hub.
+48. Point at the latest coach note and latest progress block.
+49. Click Open PT dashboard.
+
+What to say:
+- "The customer does not have to search for updates. Progress Hub brings together PT context, coach notes, and the latest health/progress signal in one place."
+
+Part 5 - Customer PT dashboard / AI / booking
+
+50. On the PT page, point at the dashboard first.
+51. If Book PT Plan is visible, click it, then Open Schedule Planner.
+52. Choose Monday and one available slot.
+53. Click Save and Search.
+54. Point at Fully Match or Partial Match results.
+
+Alternative if an active PT phase is already visible:
+- Show Change recurring plan.
+- Show My PT Schedule.
+- Point out pending/active PT state and exception handling surfaces.
+
+What to say:
+- "The PT experience is dashboard-first. The matching preview and the actual booking flow share the same rules, and the AI assistant is aligned with that same matching logic."
+
+Part 6 - Admin support, goals, and coach insights
+
+55. Logout.
+56. Login as admin:
+- Email: admin@gymcore.local
+- Password: Admin123456!
+57. Open Support Console.
+58. Search for customer@gymcore.local
+59. Open the customer detail/result.
+60. Point at the consolidated lifecycle view: account, membership, PT, commerce, notifications.
+
+What to say:
+- "Support Console is the fastest place for admin staff to understand the full customer lifecycle without jumping blindly across modules."
+
+61. Open Goals.
+62. Show one existing goal card.
+63. Open Coach Insights.
+64. Point at the summary cards, watchlist, and roster/feedback view.
+
+What to say:
+- "Admin can manage recommendation goals and also monitor coach load and review quality from separate but connected admin surfaces."
+
+Closing line:
+- "In one system, GymCore covers account management, memberships, PT booking, customer progress, product sales, pickup, reviews, staff operations, and admin support workflows with shared business rules across the whole app."

@@ -1,74 +1,123 @@
 # GymCore
 
-GymCore is a full-stack gym management project:
-- Backend: Spring Boot
-- Frontend: React (Vite)
+GymCore is a full-stack gym management system with:
+- Backend: Spring Boot 4
+- Frontend: React 19 + Vite + Tailwind
 - Database: Microsoft SQL Server
+- E2E: Playwright
 
-## Folder Layout
-- `backend`: Spring Boot app
-- `frontend`: React app
-- `docs/GymCore.txt`: database schema script
-- `docs/alter.txt`: idempotent alter/migration script
-- `docs/InsertValues.txt`: baseline seed data script
-- `docs/InsertTestingValues.txt`: optional testing seed data
-- `start-dev.ps1`: script to start backend + frontend together
+## Project Structure
+- `backend` - Spring Boot API
+- `frontend` - React app
+- `docs/GymCore.txt` - fresh SQL schema
+- `docs/alter.txt` - idempotent alter script
+- `docs/InsertValues.txt` - baseline seed data
+- `docs/InsertTestingValues.txt` - extra local demo/test data
+- `seed-db.ps1` - PowerShell helper to drop and reseed the database
+- `verify-local.ps1` - PowerShell helper to run local verification
 
 ## Prerequisites
-1. Install Java 25.
-2. Install Node.js (includes npm).
-3. Install Microsoft SQL Server.
-4. Install SQL Server Management Studio (SSMS).
+1. Java 21
+2. Node.js 20+ with npm
+3. Microsoft SQL Server
+4. `sqlcmd` available in `PATH`
+5. Playwright browsers installed
 
-## First-Time Setup (Step By Step)
-1. Open SSMS.
-2. Connect to your SQL Server instance using:
-- Login: `sa`
-- Password: `1`
-3. Run database scripts in this exact order:
-   1. `docs/GymCore.txt`
-   2. `docs/alter.txt`
-   3. `docs/InsertValues.txt`
-   4. `docs/InsertTestingValues.txt` (optional for extra test/demo data)
-4. Open the project root folder (`GymCore`) in VS Code.
-5. In VS Code, open Terminal (`Terminal` > `New Terminal`).
-6. Run:
-```bash
-cd frontend
+## Local Setup
+1. Install root Playwright dependencies:
+```powershell
+cd D:\project
 npm install
 ```
-7. After install finishes, go back to project root:
-```bash
-cd ..
+2. Install frontend dependencies:
+```powershell
+cd D:\project\frontend
+npm install
+```
+3. Seed the database from scratch:
+```powershell
+cd D:\project
+.\seed-db.ps1
+```
+4. Optional: create local env files from the examples:
+- `backend/.env.example` -> `backend/.env.local`
+- `frontend/.env.example` -> `frontend/.env.local`
+
+## Default Local SQL Settings
+- Server: `tcp:localhost,1433`
+- Database: `GymCore`
+- Username: `sa`
+- Password: `5`
+
+The backend now supports overriding DB settings with environment variables:
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+
+## Run The App
+Use the helper script:
+```powershell
+cd D:\project
+.\start-dev.ps1
 ```
 
-## Run Project (Daily Use)
-1. In VS Code Explorer, open `start-dev.ps1`.
-2. Right-click inside the file and choose `Run PowerShell File in Terminal` (or click the run button for PowerShell).
-3. Two terminals/windows will start:
-- Backend on `http://localhost:8080`
-- Frontend on `http://localhost:5173`
-4. Open browser at `http://localhost:5173`.
+This starts:
+- Backend: `http://localhost:8080`
+- Frontend: `http://127.0.0.1:5173`
 
-## Stop Project
-1. Go to running terminals/windows.
-2. Press `Ctrl + C` to stop both backend and frontend.
+## Full Local Verification
+Run everything in sequence:
+```powershell
+cd D:\project
+.\verify-local.ps1
+```
 
-## Change SQL Server Login/Password (`sa`)
-If your SQL Server account is not `sa` / `1`, update backend DB config here:
+Manual command equivalents:
+```powershell
+cd D:\project\frontend
+npm run lint
+npm run build
+npm run test:run
 
-- File: `backend/src/main/resources/application.properties`
-- Keys:
-  - `spring.datasource.username`
-  - `spring.datasource.password`
-  - `spring.datasource.url` (change host/port/database if needed)
+cd D:\project\backend
+.\mvnw.cmd test
 
-Current default values in that file are:
-- `spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=GymCore;encrypt=true;trustServerCertificate=true`
-- `spring.datasource.username=sa`
-- `spring.datasource.password=1`
+cd D:\project
+npx playwright test --config playwright.config.js --workers=1
+```
 
-## For Teammates
-1. After cloning, run `npm install` in `frontend` once.
-2. Run `npm install` again only when `package.json` or `package-lock.json` changes.
-3. Do not commit `node_modules/`.
+## Seeded Demo Accounts
+- Admin: `admin@gymcore.local` / `Admin123456!`
+- Receptionist: `reception@gymcore.local` / `Reception123456!`
+- Coach: `coach@gymcore.local` / `Coach123456!`
+- Customer: `customer@gymcore.local` / `Customer123456!`
+
+## Important Current Business Rules
+- Product reviews unlock only after pickup is confirmed.
+- The PT booking AI assistant uses the same matching rules as the real PT booking flow.
+- Google login is optional and appears only when `VITE_GOOGLE_CLIENT_ID` is configured.
+
+## Optional Integrations
+These are optional for local development, but needed to test the real external flows:
+- Google login:
+  - Frontend: `VITE_GOOGLE_CLIENT_ID`
+  - Backend: `APP_AUTH_GOOGLE_CLIENT_ID`
+- Email:
+  - `MAIL_HOST`
+  - `MAIL_PORT`
+  - `MAIL_USERNAME`
+  - `MAIL_PASSWORD`
+  - `MAIL_FROM`
+- PayOS:
+  - `PAYOS_CLIENT_ID`
+  - `PAYOS_API_KEY`
+  - `PAYOS_CHECKSUM_KEY`
+  - `PAYOS_BASE_URL`
+  - `PAYOS_RETURN_URL`
+  - `PAYOS_CANCEL_URL`
+
+## Additional Handoff Notes
+- `docs/LOCAL_SETUP_AND_VERIFY.txt`
+- `docs/CODING_AGENT_PROMPT.txt`
+- `docs/DEMO_SCRIPT_15_MIN.txt`
+- `docs/CHANGE_SUMMARY.txt`

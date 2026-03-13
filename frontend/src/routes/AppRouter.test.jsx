@@ -25,6 +25,18 @@ vi.mock('../pages/admin/AdminSupportConsolePage', () => ({
   default: () => <div>Admin Support Console</div>,
 }))
 
+vi.mock('../pages/admin/AdminGoalsPage', () => ({
+  default: () => <div>Admin Goals</div>,
+}))
+
+vi.mock('../pages/admin/AdminInvoicesPage', () => ({
+  default: () => {
+    const rawUser = globalThis.localStorage?.getItem('gymcore_auth_user')
+    const user = rawUser ? JSON.parse(rawUser) : null
+    return <div>{user?.role === 'ADMIN' ? 'Admin Invoice Center' : 'Reception Invoice Center'}</div>
+  },
+}))
+
 vi.mock('../pages/customer/CustomerProductDetailPage', () => ({
   default: () => <div>Customer Product Detail</div>,
 }))
@@ -236,6 +248,20 @@ describe('AppRouter role guards', () => {
     })
     renderAt('/admin/support')
     expect(await screen.findByText(/GymCore Platform/i)).toBeInTheDocument()
+  })
+
+  it('allows admin to open the admin goals route', async () => {
+    act(() => {
+      setAccessToken('token')
+      setAuthUser({
+        userId: 1,
+        fullName: 'Admin GymCore',
+        email: 'admin@gymcore.local',
+        role: 'ADMIN',
+      })
+    })
+    renderAt('/admin/goals')
+    expect(await screen.findByText(/Admin Goals/i)).toBeInTheDocument()
   })
 
   it('allows customer to open order history route', async () => {

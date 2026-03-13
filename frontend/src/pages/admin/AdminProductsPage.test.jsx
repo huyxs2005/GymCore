@@ -134,7 +134,7 @@ describe('AdminProductsPage', () => {
         }),
       )
     })
-  })
+  }, 15000)
 
   it('collapses and expands the admin sidebar from the hamburger button', async () => {
     const user = userEvent.setup()

@@ -73,7 +73,7 @@ test.describe.serial('customer progress hub flows', () => {
       await expect(customerPage.getByRole('link', { name: 'Open PT dashboard' })).toHaveAttribute('href', '/customer/coach-booking')
 
       await customerPage.goto('/customer/checkin-health')
-      await expect(customerPage.getByRole('heading', { name: 'Check-in and Health Tracking' })).toBeVisible()
+      await expect(customerPage.getByRole('heading', { name: 'Check-in & Health Log' })).toBeVisible()
       await expect(customerPage.getByRole('link', { name: 'Open Progress Hub' })).toHaveAttribute('href', '/customer/progress-hub')
     } finally {
       await coachContext.close()
