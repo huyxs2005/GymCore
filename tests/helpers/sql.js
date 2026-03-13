@@ -61,26 +61,37 @@ function resolveSqlConnection() {
 
 function runSqlScript(script, label = 'sql-script') {
   const connection = resolveSqlConnection()
-  const tempFile = path.join(os.tmpdir(), `gymcore-${label}-${Date.now()}.sql`)
+  const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const tempFile = path.join(os.tmpdir(), `gymcore-${label}-${nonce}.sql`)
 
   fs.writeFileSync(tempFile, script, 'utf8')
   try {
-    execFileSync(
-      'sqlcmd',
-      [
-        '-S', connection.server,
-        '-d', connection.database,
-        '-U', connection.username,
-        '-P', connection.password,
-        '-b',
-        '-C',
-        '-i', tempFile,
-      ],
-      {
-        stdio: 'pipe',
-        encoding: 'utf8',
-      },
-    )
+    try {
+      execFileSync(
+        'sqlcmd',
+        [
+          '-S', connection.server,
+          '-d', connection.database,
+          '-U', connection.username,
+          '-P', connection.password,
+          '-b',
+          '-C',
+          '-i', tempFile,
+        ],
+        {
+          stdio: 'pipe',
+          encoding: 'utf8',
+        },
+      )
+    } catch (error) {
+      const stdout = String(error?.stdout || '').trim()
+      const stderr = String(error?.stderr || '').trim()
+      const details = [stderr, stdout].filter(Boolean).join('\n')
+      if (details) {
+        error.message = `${error.message}\n${details}`
+      }
+      throw error
+    }
   } finally {
     try {
       fs.rmSync(tempFile, { force: true })
@@ -815,11 +826,30 @@ VALUES (@CompletedSessionID, @CustomerID, @CoachID, 5, N'Very supportive coach.'
 `, 'prepare-coach-management-flow')
 }
 
-function prepareCoachCustomersFlowState() {
+function prepareCoachCustomersFlowState(options = {}) {
+  const scope = String(options.scope || 'coach.customers')
+  const normalizedScope = scope.replace(/[^a-z0-9]+/gi, '.').replace(/^\.+|\.+$/g, '') || 'coach.customers'
+  const coachEmail = escapeSqlString(options.coachEmail || `${normalizedScope}.coach@gymcore.local`)
+  const customerEmail = escapeSqlString(options.customerEmail || `${normalizedScope}.customer@gymcore.local`)
+  const coachName = escapeSqlString(options.coachName || 'Coach Customers Coach')
+  const customerName = escapeSqlString(options.customerName || 'Coach Customers Customer')
+  const coachPhone = escapeSqlString(options.coachPhone || '0900000333')
+  const customerPhone = escapeSqlString(options.customerPhone || '0900000222')
+  const coachBio = escapeSqlString(options.coachBio || 'Dedicated coach-customer management fixture for end-to-end workflow coverage.')
+  const lockResource = escapeSqlString(`gymcore-${normalizedScope}-flow`)
+
   runSqlScript(`
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 SET NOCOUNT ON;
+
+DECLARE @LockResult INT;
+EXEC @LockResult = sp_getapplock
+    @Resource = N'${lockResource}',
+    @LockMode = N'Exclusive',
+    @LockOwner = N'Session',
+    @LockTimeout = 10000;
+IF @LockResult < 0 THROW 51069, 'Could not acquire coach customer fixture lock.', 1;
 
 DECLARE @CoachRoleID INT = (SELECT TOP (1) RoleID FROM dbo.Roles WHERE RoleName = N'COACH');
 DECLARE @CustomerRoleID INT = (SELECT TOP (1) RoleID FROM dbo.Roles WHERE RoleName = N'CUSTOMER');
@@ -833,8 +863,8 @@ DECLARE @CustomerPasswordHash NVARCHAR(255) = (
     FROM dbo.Users
     WHERE Email = N'customer@gymcore.local'
 );
-DECLARE @CoachID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'coach.customers.coach@gymcore.local');
-DECLARE @CustomerID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'coach.customers.customer@gymcore.local');
+DECLARE @CoachID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'${coachEmail}');
+DECLARE @CustomerID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'${customerEmail}');
 DECLARE @AdminID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'admin@gymcore.local');
 DECLARE @ReceptionID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'reception@gymcore.local');
 DECLARE @CoachPlanID INT = (
@@ -873,7 +903,7 @@ BEGIN
         RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt, IsActive, IsLocked
     )
     VALUES (
-        @CoachRoleID, N'Coach Customers Coach', N'coach.customers.coach@gymcore.local', N'0900000333', @CoachPasswordHash, 1, SYSDATETIME(), 1, 0
+        @CoachRoleID, N'${coachName}', N'${coachEmail}', N'${coachPhone}', @CoachPasswordHash, 1, SYSDATETIME(), 1, 0
     );
     SET @CoachID = SCOPE_IDENTITY();
 END
@@ -881,8 +911,8 @@ ELSE
 BEGIN
     UPDATE dbo.Users
     SET RoleID = @CoachRoleID,
-        FullName = N'Coach Customers Coach',
-        Phone = N'0900000333',
+        FullName = N'${coachName}',
+        Phone = N'${coachPhone}',
         PasswordHash = @CoachPasswordHash,
         IsEmailVerified = 1,
         EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME()),
@@ -895,7 +925,7 @@ END;
 IF NOT EXISTS (SELECT 1 FROM dbo.Coaches WHERE CoachID = @CoachID)
 BEGIN
     INSERT INTO dbo.Coaches (CoachID, DateOfBirth, Gender, ExperienceYears, Bio)
-    VALUES (@CoachID, '1995-08-20', N'OTHER', 7, N'Dedicated coach-customer management fixture for end-to-end workflow coverage.');
+    VALUES (@CoachID, '1995-08-20', N'OTHER', 7, N'${coachBio}');
 END
 ELSE
 BEGIN
@@ -903,7 +933,7 @@ BEGIN
     SET DateOfBirth = '1995-08-20',
         Gender = N'OTHER',
         ExperienceYears = 7,
-        Bio = N'Dedicated coach-customer management fixture for end-to-end workflow coverage.'
+        Bio = N'${coachBio}'
     WHERE CoachID = @CoachID;
 END;
 
@@ -913,7 +943,7 @@ BEGIN
         RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt, IsActive, IsLocked
     )
     VALUES (
-        @CustomerRoleID, N'Coach Customers Customer', N'coach.customers.customer@gymcore.local', N'0900000222', @CustomerPasswordHash, 1, SYSDATETIME(), 1, 0
+        @CustomerRoleID, N'${customerName}', N'${customerEmail}', N'${customerPhone}', @CustomerPasswordHash, 1, SYSDATETIME(), 1, 0
     );
     SET @CustomerID = SCOPE_IDENTITY();
 END
@@ -921,8 +951,8 @@ ELSE
 BEGIN
     UPDATE dbo.Users
     SET RoleID = @CustomerRoleID,
-        FullName = N'Coach Customers Customer',
-        Phone = N'0900000222',
+        FullName = N'${customerName}',
+        Phone = N'${customerPhone}',
         PasswordHash = @CustomerPasswordHash,
         IsEmailVerified = 1,
         EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME()),

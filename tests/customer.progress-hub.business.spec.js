@@ -3,12 +3,12 @@ const { loginViaUi } = require('./helpers/auth')
 const { prepareCoachCustomersFlowState } = require('./helpers/sql')
 
 const coachFlowCredentials = {
-  email: 'coach.customers.coach@gymcore.local',
+  email: 'progress.hub.flow.coach@gymcore.local',
   password: 'Coach123456!',
 }
 
 const customerFlowCredentials = {
-  email: 'coach.customers.customer@gymcore.local',
+  email: 'progress.hub.flow.customer@gymcore.local',
   password: 'Customer123456!',
 }
 
@@ -24,7 +24,13 @@ test.describe.serial('customer progress hub flows', () => {
   test.setTimeout(60000)
 
   test.beforeEach(() => {
-    prepareCoachCustomersFlowState()
+    prepareCoachCustomersFlowState({
+      scope: 'progress.hub.flow',
+      coachName: 'Progress Hub Coach',
+      customerName: 'Progress Hub Customer',
+      coachPhone: '0988555001',
+      customerPhone: '0988666001',
+    })
   })
 
   test('customer sees the latest coach-authored progress and note in the progress hub', async ({ browser }) => {
@@ -39,9 +45,9 @@ test.describe.serial('customer progress hub flows', () => {
 
       await coachPage.goto('/coach/customers')
       await expect(coachPage.getByRole('heading', { name: 'Customer Management' })).toBeVisible()
-      await coachPage.getByRole('button', { name: /Coach Customers Customer/i }).first().click()
+      await coachPage.getByRole('button', { name: /Progress Hub Customer/i }).first().click()
 
-      await coachPage.getByRole('button', { name: 'Progress' }).click()
+      await coachPage.getByRole('button', { name: 'Progress', exact: true }).click()
       await coachPage.getByPlaceholder('Example: 170').fill(updatedProgress.heightCm)
       await coachPage.getByPlaceholder('Example: 65').fill(updatedProgress.weightKg)
       await coachPage.getByRole('button', { name: /Save progress/i }).click()
@@ -58,7 +64,7 @@ test.describe.serial('customer progress hub flows', () => {
       await expect(customerPage.getByText('One place for your current progress and PT follow-up')).toBeVisible()
       await expect(customerPage.getByText('Latest coach note')).toBeVisible()
       await expect(customerPage.getByText(latestCoachNote).first()).toBeVisible()
-      await expect(customerPage.getByText('Coach Customers Coach').first()).toBeVisible()
+      await expect(customerPage.getByText('Progress Hub Coach').first()).toBeVisible()
       await expect(customerPage.getByText(`${updatedProgress.weightKg}.0 kg`).first()).toBeVisible()
       await expect(customerPage.getByText(`${updatedProgress.heightCm}.0 cm`).first()).toBeVisible()
       await expect(customerPage.getByText(updatedProgress.bmi).first()).toBeVisible()
