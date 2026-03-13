@@ -118,6 +118,8 @@ describe('NotificationsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Act now' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'History' })).toBeInTheDocument()
     expect(screen.getByText(/Membership expires in 3 days/i)).toBeInTheDocument()
+    expect(screen.getByTestId('page-notification-101')).toHaveAttribute('data-notification-tone', 'primary')
+    expect(screen.getByTestId('page-notification-103')).toHaveAttribute('data-notification-tone', 'muted')
     expect(screen.getByRole('link', { name: 'View membership' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open promotions' })).toBeInTheDocument()
     expect(screen.getByText(/Your order payment was confirmed/i)).toBeInTheDocument()

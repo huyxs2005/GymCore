@@ -243,6 +243,9 @@ function NotificationsPage() {
                       return (
                         <article
                           key={notification.notificationId}
+                          data-testid={`page-notification-${notification.notificationId}`}
+                          data-notification-bucket="actionable"
+                          data-notification-tone="primary"
                           className="rounded-3xl border border-gym-200 bg-gradient-to-br from-gym-50 via-white to-gym-100/50 p-5 shadow-sm shadow-gym-900/5"
                         >
                           <div className="flex items-start gap-4">
@@ -329,6 +332,9 @@ function NotificationsPage() {
                           return (
                             <div
                               key={notification.notificationId}
+                              data-testid={`page-notification-${notification.notificationId}`}
+                              data-notification-bucket="history"
+                              data-notification-tone={notification.isRead ? 'muted' : 'secondary'}
                               className={`border-b border-slate-200 px-6 py-5 last:border-b-0 ${notification.isRead ? 'bg-slate-50/80 opacity-80' : 'bg-white'}`}
                             >
                               <div className="flex items-start gap-4">
