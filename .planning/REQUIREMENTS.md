@@ -76,4 +76,4 @@ This milestone expands GymCore through focused improvements to commerce, members
 - Commerce and notification work should reuse the current wallet, order, pickup, and notification infrastructure where possible.
 - PT work should preserve historical PT data while migrating new bookings to the improved model.
 - Membership lifecycle rules are explicitly driven by the business decisions already locked during product discussions.
-- Execution status: `AI-01` and `AI-02` are now covered by Phase 8 Plans `08-01` and `08-02` through the backend-owned `ai-context.v1` context, explainable recommendation contracts, and structured weekly-plan payloads; `AI-03` remains planned for later Phase 8 work.
+- Execution status: `AI-01` is covered by Phase 8 Plan `08-01`; `AI-02` is now fully covered through Plans `08-02` and `08-03` with the backend-owned weekly-plan contract plus customer knowledge-page rendering; `AI-03` is now covered through Plan `08-03` via inline workout/food detail actions and coach-booking/progress-hub routing from AI outputs, while Plan `08-04` remains for consultative chat expansion and Phase 8 verification.

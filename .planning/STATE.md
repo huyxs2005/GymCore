@@ -7,10 +7,10 @@
 
 ## Current Position
 - Phase: 8 of 8 (AI and Weekly Planning in progress)
-- Plan Execution: 2 of 4 in current phase
-- Status: Phase 1 through Phase 7 executed; Phase 8 has 08-01 and 08-02 complete
-- Last activity: 2026-03-13 - executed Plan 08-02 (recommendation and weekly-plan backend contracts) with richer explainable recommendation payloads, a new structured `ai-weekly-plan.v1` contract, and backend contract coverage for both surfaces
-- Progress: [#########-] 93.5%
+- Plan Execution: 3 of 4 in current phase
+- Status: Phase 1 through Phase 7 executed; Phase 8 has 08-01, 08-02, and 08-03 complete
+- Last activity: 2026-03-13 - executed Plan 08-03 (customer knowledge and weekly-planner UX integration) with inline weekly guidance, explainable recommendation sections, reusable AI action bridges, and frontend coverage for planner/action routing
+- Progress: [##########] 96.9%
 
 ## Performance Metrics
 - Total phases in roadmap: 8
@@ -32,6 +32,8 @@
 - Phase 8 AI context is backend-owned as `ai-context.v1`, reuses Phase 7 progress-hub signals, and exposes explainable `contextMeta` so frontend surfaces do not guess context quality.
 - Phase 8 recommendation responses must stay backward-compatible at the top level while adding structured `summary`, `sections`, and `nextActions` for frontend rendering.
 - Phase 8 weekly planning is a guidance-only backend contract with deterministic sections, explicit disclaimers, and route-ready next actions instead of open-ended prose.
+- Phase 8 customer AI must stay embedded in the existing knowledge page, with weekly plans and recommendation rationale rendered inline rather than on a separate AI-only screen.
+- Frontend AI action routes like `/customer/knowledge/workouts/:id` and `/customer/knowledge/foods/:id` should resolve locally inside the knowledge page so backend-owned actions can open inline content detail without extra router churn.
 - Phase 7 keeps legacy customer health and coach-note endpoints live while the new progress hub contract rolls out incrementally.
 - Phase 7 progress-hub aggregates use additive aliases like `currentSnapshot` and `recentCoachNotes` instead of breaking legacy response keys during migration.
 - Customer progress-hub follow-up remains explicitly read-only; coach-owned progress and note writes stay authoritative.
@@ -53,10 +55,10 @@
 - `backend\\mvnw.cmd` still fails in this shell environment; targeted backend verification currently depends on the local Maven installation plus `.codex-maven-settings.xml`.
 - `gsd-tools` could update `ROADMAP.md`, but its `STATE.md`/`REQUIREMENTS.md` helpers do not match this repo's custom planning-file format, so state position updates for 07-03 were applied manually.
 - Unrelated backend tests `UnsupportedActionDispatchTest` and `MembershipServiceCustomerFlowTest` still instantiate `CheckinHealthService` with an outdated constructor, which blocks repo-wide `mvn test` style verification before the new content tests can run.
-- Later execution order should continue to respect roadmap dependencies; Phase 8 Plan 08-03 is the next safe execution target.
+- Later execution order should continue to respect roadmap dependencies; Phase 8 Plan 08-04 is the next safe execution target.
 
 ## Session Continuity
-- Last completed session: Phase 8 recommendation and weekly-plan backend contracts
-- Stopped at: Plan 08-02 execution, summary creation, and manual roadmap/state/requirements updates after backend compile verification and contract-test additions
+- Last completed session: Phase 8 customer knowledge and weekly-planner UX integration
+- Stopped at: Plan 08-03 execution, summary creation, and manual roadmap/state/requirements updates after targeted frontend verification
 - Resume action: run `$gsd-execute-phase 8`
-- Continue file: [.planning/phases/08-ai-and-weekly-planning/08-03-PLAN.md](D:\project\GymCore-beta-test-0.2\.planning\phases\08-ai-and-weekly-planning\08-03-PLAN.md)
+- Continue file: [.planning/phases/08-ai-and-weekly-planning/08-04-PLAN.md](D:\project\GymCore-beta-test-0.2\.planning\phases\08-ai-and-weekly-planning\08-04-PLAN.md)
