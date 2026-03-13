@@ -4,8 +4,17 @@ export const coachBookingApi = {
   matchCoaches(payload) {
     return apiClient.post('/v1/coach-booking/match', payload).then((response) => response.data)
   },
+  createInstantBooking(payload) {
+    return apiClient.post('/v1/coach-booking/bookings', payload).then((response) => response.data)
+  },
   createRequest(payload) {
     return apiClient.post('/v1/coach-booking/requests', payload).then((response) => response.data)
+  },
+  getProgressContext() {
+    return apiClient.get('/v1/coach-booking/current-phase').then((response) => response.data)
+  },
+  getCurrentPhase() {
+    return apiClient.get('/v1/coach-booking/current-phase').then((response) => response.data)
   },
   getMySchedule() {
     return apiClient.get('/v1/coach-booking/my-schedule').then((response) => response.data)
@@ -24,6 +33,16 @@ export const coachBookingApi = {
       .patch(`/v1/coach-booking/sessions/${sessionId}/reschedule`, payload)
       .then((response) => response.data)
   },
+  rescheduleSeries(payload) {
+    return apiClient
+      .patch('/v1/coach-booking/current-phase/reschedule-series', payload)
+      .then((response) => response.data)
+  },
+  respondToReplacementOffer(sessionId, payload) {
+    return apiClient
+      .post(`/v1/coach-booking/sessions/${sessionId}/replacement-response`, payload)
+      .then((response) => response.data)
+  },
   submitFeedback(payload) {
     return apiClient.post('/v1/coach-booking/feedback', payload).then((response) => response.data)
   },
@@ -31,6 +50,22 @@ export const coachBookingApi = {
   getPendingRequests() {
     return apiClient.get('/v1/coach/pt-requests').then((response) => response.data)
   },
+  getUnavailableBlocks() {
+    return apiClient.get('/v1/coach/unavailable-blocks').then((response) => response.data)
+  },
+  createUnavailableBlock(payload) {
+    return apiClient.post('/v1/coach/unavailable-blocks', payload).then((response) => response.data)
+  },
+  getExceptionSessions() {
+    return apiClient.get('/v1/coach/exceptions').then((response) => response.data)
+  },
+  getReplacementCoaches() {
+    return apiClient.get('/v1/coach/replacement-coaches').then((response) => response.data)
+  },
+  createReplacementOffer(sessionId, body) {
+    return apiClient.post(`/v1/coach/pt-sessions/${sessionId}/replacement-offer`, body || {}).then((response) => response.data)
+  },
+  // Legacy coach reschedule approval wrappers retained for old flows.
   getRescheduleRequests() {
     return apiClient.get('/v1/coach/reschedule-requests').then((response) => response.data)
   },

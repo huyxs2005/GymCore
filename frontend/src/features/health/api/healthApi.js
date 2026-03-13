@@ -1,6 +1,9 @@
 import { apiClient } from '../../../api/client'
 
 export const healthApi = {
+  getProgressHub() {
+    return apiClient.get('/v1/health/progress-hub').then((response) => response.data)
+  },
   getCurrent() {
     return apiClient.get('/v1/health/current').then((response) => response.data)
   },
