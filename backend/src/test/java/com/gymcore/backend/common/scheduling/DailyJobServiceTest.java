@@ -32,6 +32,7 @@ class DailyJobServiceTest {
         order.verify(jdbcTemplate).execute(DailyJobService.ACTIVATE_DUE_SCHEDULED_MEMBERSHIPS_SQL);
         order.verify(jdbcTemplate).execute(DailyJobService.CANCEL_PT_SESSIONS_FOR_EXPIRED_MEMBERSHIPS_SQL);
         order.verify(jdbcTemplate).execute(DailyJobService.PT_CANCELLATION_NOTIFICATION_SQL);
+        order.verify(jdbcTemplate).execute(DailyJobService.PICKUP_WAITING_REMINDER_SQL);
     }
 
     @Test

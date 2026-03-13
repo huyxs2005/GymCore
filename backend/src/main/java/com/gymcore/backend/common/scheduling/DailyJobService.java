@@ -144,6 +144,7 @@ public class DailyJobService {
      * - Countdown notifications (7/3/1 days left)
      * - Expire memberships
      * - Cancel PT sessions if membership expires
+     * - Remind customers to pick up paid orders on a low-noise cadence
      */
     @Scheduled(cron = "0 0 0 * * *")
     @Transactional
@@ -155,6 +156,7 @@ public class DailyJobService {
             runStep("activate-scheduled-memberships", ACTIVATE_DUE_SCHEDULED_MEMBERSHIPS_SQL);
             runStep("cancel-pt-sessions", CANCEL_PT_SESSIONS_FOR_EXPIRED_MEMBERSHIPS_SQL);
             runStep("notify-cancelled-pt-sessions", PT_CANCELLATION_NOTIFICATION_SQL);
+            runStep("pickup-waiting-reminders", PICKUP_WAITING_REMINDER_SQL);
             System.out.println("Daily membership jobs completed successfully.");
         } catch (Exception e) {
             System.err.println("Error running daily membership jobs: " + e.getMessage());
