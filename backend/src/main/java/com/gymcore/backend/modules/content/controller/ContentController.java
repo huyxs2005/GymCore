@@ -135,6 +135,7 @@ public class ContentController {
         Map<String, Object> responseContextMeta = new java.util.LinkedHashMap<>(
                 (Map<String, Object>) aiContextEnvelope.getOrDefault("contextMeta", Map.of()));
         responseContextMeta.put("entryPoint", "ai-chat");
+        responseContextMeta.put("responseType", "chat");
         context.put("contextMeta", responseContextMeta);
         String reply = geminiChatService.chat(messages, context);
         return ApiResponse.ok("AI chat response generated", java.util.Map.of(

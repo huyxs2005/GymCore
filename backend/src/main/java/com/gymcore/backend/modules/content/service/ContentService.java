@@ -951,6 +951,10 @@ public class ContentService {
         contextMeta.put("missingSignals", missingSignals);
         contextMeta.put("fallbackSignals", fallbackSignals.stream().distinct().toList());
         contextMeta.put("fallbackUsed", !fallbackSignals.isEmpty());
+        contextMeta.put("signalSources", Map.of(
+                "goals", "REQUEST".equals(goalSelection.source()) ? "request.goalCodes" : "dbo.CustomerGoals",
+                "health", "phase-07.progress-hub.currentSnapshot",
+                "progress", "phase-07.progress-hub.latestSignals"));
         contextMeta.put("signals", List.of(
                 explainabilitySignal(
                         "goals",
@@ -976,6 +980,11 @@ public class ContentService {
                         normalizeText(mostRecentSignal.get("summary")) == null
                                 ? "No progress signal recorded yet."
                                 : String.valueOf(mostRecentSignal.get("summary")))));
+        contextMeta.put("signalStatus", Map.of(
+                "goalCount", goalSelection.goalCodes().size(),
+                "hasCurrentHealth", !currentHealth.isEmpty(),
+                "healthHistoryCount", healthHistoryItems.size(),
+                "coachNoteCount", coachNoteItems.size()));
 
         return new AiContextResolution(
                 goalSelection,
