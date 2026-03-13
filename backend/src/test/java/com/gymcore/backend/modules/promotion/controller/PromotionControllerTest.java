@@ -54,6 +54,25 @@ class PromotionControllerTest {
     }
 
     @Test
+    void getNotifications_shouldDelegateReminderViewAndUnreadFilter() {
+        when(promotionService.execute(
+                "customer-get-notifications",
+                "Bearer customer",
+                Map.of("unreadOnly", true, "view", "actionable")))
+                .thenReturn(Map.of("notifications", java.util.List.of(), "unreadCount", 0));
+
+        ApiResponse<Map<String, Object>> response =
+                controller.getNotifications("Bearer customer", true, "actionable");
+
+        assertEquals("Notifications retrieved", response.message());
+        assertEquals(0, response.data().get("unreadCount"));
+        verify(promotionService).execute(
+                "customer-get-notifications",
+                "Bearer customer",
+                Map.of("unreadOnly", true, "view", "actionable"));
+    }
+
+    @Test
     void handleResponseStatusException_shouldReturnApiErrorBody() {
         ResponseStatusException exception = new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promotion banner file is required.");
 
