@@ -158,7 +158,7 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 
 **Plans**:
 - [x] 08-01: AI context-assembly backend foundation
-- [ ] 08-02: Recommendation refinement and weekly-plan backend contracts
+- [x] 08-02: Recommendation refinement and weekly-plan backend contracts
 - [ ] 08-03: Customer knowledge and weekly-planner UX integration
 - [ ] 08-04: Consultative chat context, action bridges, and Phase 8 verification
 
@@ -173,4 +173,4 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 | 5. PT Reschedule and Exceptions | 5/5 | Executed | 2026-03-13 |
 | 6. Reminder and Notification Discipline | 4/4 | Executed | 2026-03-13 |
 | 7. Customer Progress Hub | 4/4 | Executed | 2026-03-13 |
-| 8. AI and Weekly Planning | 1/4 | In Progress | 2026-03-13 |
+| 8. AI and Weekly Planning | 2/4 | In Progress | 2026-03-13 |
