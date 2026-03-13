@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test')
 const { credentialsByRole } = require('./helpers/auth')
-const { prepareCustomerCommerceState, runSqlScript } = require('./helpers/sql')
+const { prepareCustomerAiPlanningState, prepareCustomerCommerceState, runSqlScript } = require('./helpers/sql')
 
 test.use({ storageState: credentialsByRole.customer.storageState })
 
@@ -45,6 +45,7 @@ test.describe.serial('customer business flows', () => {
   })
 
   test('saves fitness goals and fetches saved-goal recommendations', async ({ page }) => {
+    prepareCustomerAiPlanningState()
     await page.goto('/customer/knowledge')
 
     await expect(page.getByText('Saved fitness goals')).toBeVisible()
@@ -55,8 +56,9 @@ test.describe.serial('customer business flows', () => {
     await expect(page.getByText(/Saved goals:/i)).toContainText(/LOSE_FAT|GAIN_MUSCLE/i)
 
     await page.getByRole('button', { name: 'Recommend from saved goals' }).click()
-    await expect(page.getByText('Workout recommendations')).toBeVisible()
-    await expect(page.getByText('Food recommendations')).toBeVisible()
+    await expect(page.getByText('Recommendation brief')).toBeVisible()
+    await expect(page.getByText('Workout focus')).toBeVisible()
+    await expect(page.getByText('Food emphasis')).toBeVisible()
   })
 
   test('adds product coupon code to wallet in cart, previews it, and submits checkout payload', async ({ page }) => {

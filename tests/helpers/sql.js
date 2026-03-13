@@ -2120,7 +2120,148 @@ VALUES
 `, 'prepare-pt-exception-schedule')
 }
 
+function prepareCustomerAiPlanningState() {
+  runSqlScript(`
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
+
+DECLARE @CustomerID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'customer@gymcore.local');
+DECLARE @CoachID INT = (
+    SELECT TOP (1) c.CoachID
+    FROM dbo.Coaches c
+    JOIN dbo.Users u ON u.UserID = c.CoachID
+    WHERE u.Email = N'coach@gymcore.local'
+);
+DECLARE @AdminID INT = (SELECT TOP (1) UserID FROM dbo.Users WHERE Email = N'admin@gymcore.local');
+DECLARE @CoachPlanID INT = (
+    SELECT TOP (1) MembershipPlanID
+    FROM dbo.MembershipPlans
+    WHERE PlanType = N'GYM_PLUS_COACH'
+      AND AllowsCoachBooking = 1
+      AND IsActive = 1
+    ORDER BY DurationDays DESC, MembershipPlanID DESC
+);
+DECLARE @MembershipID INT;
+DECLARE @RequestID INT;
+DECLARE @CompletedSessionID INT;
+DECLARE @Today DATE = CAST(GETDATE() AS DATE);
+DECLARE @CompletedDate DATE = DATEADD(DAY, -2, @Today);
+DECLARE @Slot1 INT = (SELECT TOP (1) TimeSlotID FROM dbo.TimeSlots WHERE SlotIndex = 1 ORDER BY TimeSlotID);
+DECLARE @GoalGainMuscleID INT = (
+    SELECT TOP (1) GoalID
+    FROM dbo.FitnessGoals
+    WHERE GoalCode = N'GAIN_MUSCLE'
+      AND IsActive = 1
+);
+DECLARE @GoalLoseFatID INT = (
+    SELECT TOP (1) GoalID
+    FROM dbo.FitnessGoals
+    WHERE GoalCode = N'LOSE_FAT'
+      AND IsActive = 1
+);
+
+IF @CustomerID IS NULL THROW 51400, 'Seed customer account was not found.', 1;
+IF @CoachPlanID IS NULL THROW 51401, 'A Gym + Coach membership plan was not found.', 1;
+IF @Slot1 IS NULL THROW 51402, 'Time slot 1 was not found.', 1;
+
+SET @MembershipID = (
+    SELECT TOP (1) CustomerMembershipID
+    FROM dbo.CustomerMemberships
+    WHERE CustomerID = @CustomerID
+    ORDER BY
+        CASE Status WHEN N'ACTIVE' THEN 0 WHEN N'SCHEDULED' THEN 1 ELSE 2 END,
+        EndDate DESC,
+        CustomerMembershipID DESC
+);
+
+IF @MembershipID IS NULL
+BEGIN
+    INSERT INTO dbo.CustomerMemberships (
+        CustomerID, MembershipPlanID, Status, StartDate, EndDate, UpdatedBy
+    )
+    VALUES (
+        @CustomerID, @CoachPlanID, N'ACTIVE', @Today, DATEADD(DAY, 90, @Today), @AdminID
+    );
+    SET @MembershipID = SCOPE_IDENTITY();
+END;
+
+UPDATE dbo.CustomerMemberships
+SET Status = CASE
+        WHEN CustomerMembershipID = @MembershipID THEN N'ACTIVE'
+        WHEN Status IN (N'ACTIVE', N'SCHEDULED', N'PENDING') THEN N'EXPIRED'
+        ELSE Status
+    END,
+    MembershipPlanID = CASE
+        WHEN CustomerMembershipID = @MembershipID THEN @CoachPlanID
+        ELSE MembershipPlanID
+    END,
+    StartDate = CASE
+        WHEN CustomerMembershipID = @MembershipID THEN DATEADD(DAY, -14, @Today)
+        ELSE StartDate
+    END,
+    EndDate = CASE
+        WHEN CustomerMembershipID = @MembershipID THEN DATEADD(DAY, 90, @Today)
+        ELSE EndDate
+    END,
+    UpdatedBy = @AdminID,
+    UpdatedAt = SYSDATETIME()
+WHERE CustomerID = @CustomerID;
+
+DELETE FROM dbo.CustomerGoals WHERE CustomerID = @CustomerID;
+IF @GoalGainMuscleID IS NOT NULL
+BEGIN
+    INSERT INTO dbo.CustomerGoals (CustomerID, GoalID, IsActive)
+    VALUES (@CustomerID, @GoalGainMuscleID, 1);
+END;
+IF @GoalLoseFatID IS NOT NULL
+BEGIN
+    INSERT INTO dbo.CustomerGoals (CustomerID, GoalID, IsActive)
+    VALUES (@CustomerID, @GoalLoseFatID, 1);
+END;
+
+DELETE FROM dbo.CustomerHealthCurrent WHERE CustomerID = @CustomerID;
+DELETE FROM dbo.CustomerHealthHistory WHERE CustomerID = @CustomerID;
+
+INSERT INTO dbo.CustomerHealthHistory (CustomerID, HeightCm, WeightKg, RecordedAt)
+VALUES (@CustomerID, 172, 69, DATEADD(DAY, -1, SYSDATETIME()));
+
+DELETE FROM dbo.PTSessionNotes
+WHERE PTSessionID IN (SELECT PTSessionID FROM dbo.PTSessions WHERE CustomerID = @CustomerID);
+DELETE FROM dbo.PTSessions WHERE CustomerID = @CustomerID;
+DELETE prs
+FROM dbo.PTRequestSlots prs
+JOIN dbo.PTRecurringRequests r ON r.PTRequestID = prs.PTRequestID
+WHERE r.CustomerID = @CustomerID;
+DELETE FROM dbo.PTRecurringRequests WHERE CustomerID = @CustomerID;
+
+IF @CoachID IS NOT NULL
+BEGIN
+    INSERT INTO dbo.PTRecurringRequests (
+        CustomerID, CoachID, CustomerMembershipID, StartDate, EndDate, Status, BookingMode
+    )
+    VALUES (
+        @CustomerID, @CoachID, @MembershipID, DATEADD(DAY, -14, @Today), DATEADD(DAY, 14, @Today), N'APPROVED', N'INSTANT'
+    );
+
+    SET @RequestID = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.PTRequestSlots (PTRequestID, DayOfWeek, TimeSlotID)
+    VALUES (@RequestID, 1, @Slot1);
+
+    INSERT INTO dbo.PTSessions (PTRequestID, CustomerID, CoachID, SessionDate, DayOfWeek, TimeSlotID, Status)
+    VALUES (@RequestID, @CustomerID, @CoachID, @CompletedDate, 1, @Slot1, N'COMPLETED');
+
+    SET @CompletedSessionID = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.PTSessionNotes (PTSessionID, NoteContent, CreatedAt)
+    VALUES (@CompletedSessionID, N'Coach note: keep the strength work progressive and protect recovery quality this week.', DATEADD(DAY, -1, SYSDATETIME()));
+END;
+`, 'prepare-customer-ai-planning')
+}
+
 module.exports = {
+  prepareCustomerAiPlanningState,
   prepareCheckinFlowCustomerState,
   prepareCoachCustomersFlowState,
   prepareCoachManagementFlowState,
