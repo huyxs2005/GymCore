@@ -453,7 +453,8 @@ public class PromotionService {
 
     private Map<String, Object> customerGetNotifications(String auth, Map<String, Object> payload) {
         boolean unreadOnly = payload != null && Boolean.TRUE.equals(payload.get("unreadOnly"));
-        return notificationService.getCurrentUserNotifications(auth, unreadOnly);
+        String view = payload == null ? "all" : String.valueOf(payload.getOrDefault("view", "all"));
+        return notificationService.getCurrentUserNotifications(auth, unreadOnly, view);
     }
 
     private Map<String, Object> customerMarkRead(String auth, Map<String, Object> payload) {

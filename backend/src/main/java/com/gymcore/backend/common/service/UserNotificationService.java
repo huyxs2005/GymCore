@@ -60,6 +60,10 @@ public class UserNotificationService {
     }
 
     public Map<String, Object> getCurrentUserNotifications(String authorizationHeader, boolean unreadOnly) {
+        return getCurrentUserNotifications(authorizationHeader, unreadOnly, "all");
+    }
+
+    public Map<String, Object> getCurrentUserNotifications(String authorizationHeader, boolean unreadOnly, String view) {
         CurrentUserService.UserInfo user = currentUserService.requireUser(authorizationHeader);
         String sql = """
                 SELECT NotificationID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey, IsRead, CreatedAt
@@ -70,12 +74,18 @@ public class UserNotificationService {
                 """;
         List<Map<String, Object>> notifications = jdbcTemplate.query(sql, this::mapNotification, user.userId(),
                 unreadOnly ? 1 : 0);
+        ReminderFeedView requestedView = ReminderFeedView.from(view);
         List<Map<String, Object>> actionable = notifications.stream()
                 .filter(notification -> notificationHasBucket(notification, ReminderBucket.ACTIONABLE))
                 .toList();
         List<Map<String, Object>> history = notifications.stream()
                 .filter(notification -> notificationHasBucket(notification, ReminderBucket.HISTORY))
                 .toList();
+        List<Map<String, Object>> selectedNotifications = switch (requestedView) {
+            case ACTIONABLE -> actionable;
+            case HISTORY -> history;
+            case ALL -> notifications;
+        };
         long unreadCount = notifications.stream().filter(item -> !Boolean.TRUE.equals(item.get("isRead"))).count();
 
         Map<String, Object> counts = new LinkedHashMap<>();
@@ -92,10 +102,15 @@ public class UserNotificationService {
         reminderCenter.put("history", history);
         reminderCenter.put("counts", counts);
 
+        Map<String, Object> appliedFilters = new LinkedHashMap<>();
+        appliedFilters.put("unreadOnly", unreadOnly);
+        appliedFilters.put("view", requestedView.apiValue());
+
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("notifications", notifications);
+        response.put("notifications", selectedNotifications);
         response.put("unreadCount", unreadCount);
         response.put("reminderCenter", reminderCenter);
+        response.put("appliedFilters", appliedFilters);
         return response;
     }
 
@@ -255,6 +270,34 @@ public class UserNotificationService {
             return "Open PT schedule";
         }
         return "Open notification";
+    }
+
+    private enum ReminderFeedView {
+        ALL("all"),
+        ACTIONABLE("actionable"),
+        HISTORY("history");
+
+        private final String apiValue;
+
+        ReminderFeedView(String apiValue) {
+            this.apiValue = apiValue;
+        }
+
+        private String apiValue() {
+            return apiValue;
+        }
+
+        private static ReminderFeedView from(String value) {
+            if (value == null || value.isBlank()) {
+                return ALL;
+            }
+            for (ReminderFeedView candidate : values()) {
+                if (candidate.apiValue.equalsIgnoreCase(value.trim())) {
+                    return candidate;
+                }
+            }
+            return ALL;
+        }
     }
 
     private enum ReminderIntent {
