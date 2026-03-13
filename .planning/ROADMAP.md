@@ -141,7 +141,7 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 **Plans**:
 - [x] 07-01: Progress-hub backend aggregation foundation
 - [x] 07-02: PT context and coaching-signal backend enrichment
-- [ ] 07-03: Customer progress-hub UI integration
+- [x] 07-03: Customer progress-hub UI integration
 - [ ] 07-04: Phase 7 verification and route migration cleanup
 
 ### Phase 8: AI and Weekly Planning
@@ -172,5 +172,5 @@ This roadmap captures the next expansion milestone for GymCore. The plan strengt
 | 4. Support and Ops Console | 4/4 | Executed | 2026-03-13 |
 | 5. PT Reschedule and Exceptions | 5/5 | Executed | 2026-03-13 |
 | 6. Reminder and Notification Discipline | 4/4 | Executed | 2026-03-13 |
-| 7. Customer Progress Hub | 2/4 | In Progress | 2026-03-13 |
+| 7. Customer Progress Hub | 3/4 | In Progress | 2026-03-13 |
 | 8. AI and Weekly Planning | 0/4 | Planned | - |
