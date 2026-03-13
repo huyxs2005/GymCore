@@ -1,21 +1,35 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: expansion
+status: archived_with_gaps
+last_updated: "2026-03-13T21:20:00+07:00"
+progress:
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 31
+  completed_plans: 31
+---
+
 # Project State
 
 ## Project Reference
-- See: [.planning/PROJECT.md](D:\project\GymCore-beta-test-0.2\.planning\PROJECT.md) (updated 2026-03-12)
+- See: [.planning/PROJECT.md](D:\project\GymCore-beta-test-0.2\.planning\PROJECT.md) (updated 2026-03-13)
 - Core value: Make GymCore operationally safe, low-friction, and worth returning to weekly through clearer lifecycle logic, stronger PT continuity, safer commerce handoff, better support visibility, and useful AI guidance.
-- Current focus: Phase 8 (AI and Weekly Planning) is complete with consultative chat grounding, weekly-plan action bridges, and end-to-end customer AI verification.
+- Current focus: `v1.0` is archived. The next milestone is not defined yet.
 
 ## Current Position
-- Phase: 8 of 8 (AI and Weekly Planning complete)
-- Plan Execution: 4 of 4 in current phase
-- Status: Phase 1 through Phase 8 executed; roadmap milestone is implementation-complete pending any separate milestone wrap-up
-- Last activity: 2026-03-13 - executed Plan 08-04 (consultative chat context, shared action bridges, and Phase 8 verification) with grounded Gemini prompt context, widget action handoff, dedicated AI business-flow coverage, and full customer-suite verification
+- Milestone: `v1.0 Expansion`
+- Phase status: `8 of 8` executed
+- Plan execution: `31 of 31` complete
+- Status: milestone archived with accepted audit gaps
+- Last activity: 2026-03-13 - archived `v1.0`, recorded accepted audit debt, and prepared the planning workspace for the next milestone definition
 - Progress: [##########] 100.0%
 
 ## Performance Metrics
-- Total phases in roadmap: 8
-- Planned phases complete: 8
-- Executed phases complete: 8
+- Total phases completed: 8
+- Total plans completed: 31
+- Total summary-tracked tasks: 38
 - Pending todos captured: 0
 - Active debug sessions: 0
 
@@ -29,37 +43,16 @@
 - Reminder center surfaces direct next actions first while preserving read notifications as quieter visible history across the dropdown and full page.
 - Sensitive admin actions require reason notes, and customer-facing sensitive account actions must send explanation emails.
 - AI must use goals, health, and progress, and can produce mini weekly plans while routing users back to real flows.
-- Phase 8 AI context is backend-owned as `ai-context.v1`, reuses Phase 7 progress-hub signals, and exposes explainable `contextMeta` so frontend surfaces do not guess context quality.
-- Phase 8 recommendation responses must stay backward-compatible at the top level while adding structured `summary`, `sections`, and `nextActions` for frontend rendering.
-- Phase 8 weekly planning is a guidance-only backend contract with deterministic sections, explicit disclaimers, and route-ready next actions instead of open-ended prose.
-- Phase 8 customer AI must stay embedded in the existing knowledge page, with weekly plans and recommendation rationale rendered inline rather than on a separate AI-only screen.
-- Frontend AI action routes like `/customer/knowledge/workouts/:id` and `/customer/knowledge/foods/:id` should resolve locally inside the knowledge page so backend-owned actions can open inline content detail without extra router churn.
-- Phase 8 chat prompts should consume the same route-ready action vocabulary as recommendations and weekly plans, and chat must never imply it completed booking or other operational flows itself.
-- Phase 7 keeps legacy customer health and coach-note endpoints live while the new progress hub contract rolls out incrementally.
-- Phase 7 progress-hub aggregates use additive aliases like `currentSnapshot` and `recentCoachNotes` instead of breaking legacy response keys during migration.
-- Customer progress-hub follow-up remains explicitly read-only; coach-owned progress and note writes stay authoritative.
-- Phase 7 PT context should be sourced from the existing coach booking read model instead of duplicating booking logic inside the progress hub.
-- Phase 7 latest coaching semantics should be consumed through explicit `latestNoteSignal`, `latestProgressSignal`, and `latestSignals.mostRecent` fields instead of frontend timestamp guessing.
-- Customer progress follow-up now has a dedicated `/customer/progress-hub` destination while the legacy `/customer/checkin-health` page remains available for QR and manual utility workflows during migration.
-- Customer navigation should surface progress-first follow-up before the older utility page, and the older page should explicitly point customers back to the hub.
-- Phase 7 verification must prove the full coach-to-customer loop with real writes, not just mocked customer reads.
-- Cross-role Playwright verification that shares SQL setup should isolate seeded identities so the suite stays stable under parallel workers.
 
-### Source Documents
-- [docs/PRODUCT_DIRECTION_SUMMARY.md](D:\project\GymCore-beta-test-0.2\docs\PRODUCT_DIRECTION_SUMMARY.md)
-- [docs/PT_EXPANSION_SPEC.md](D:\project\GymCore-beta-test-0.2\docs\PT_EXPANSION_SPEC.md)
-- [docs/EXPANSION_PHASE_PLAN.md](D:\project\GymCore-beta-test-0.2\docs\EXPANSION_PHASE_PLAN.md)
-
-### Blockers and Concerns
-- No phase-specific CONTEXT.md exists yet; all phases were planned from roadmap, requirements, and research.
-- A dedicated multi-context Playwright follow-up for coach replacement acceptance/decline is currently skipped locally because it is flaky on the local dev-server/browser-context combination.
-- `backend\\mvnw.cmd` still fails in this shell environment; targeted backend verification currently depends on the local Maven installation plus `.codex-maven-settings.xml`.
-- `gsd-tools` could update `ROADMAP.md`, but its `STATE.md`/`REQUIREMENTS.md` helpers do not match this repo's custom planning-file format, so state position updates for 07-03 were applied manually.
-- Unrelated backend tests `UnsupportedActionDispatchTest` and `MembershipServiceCustomerFlowTest` still instantiate `CheckinHealthService` with an outdated constructor, which blocks repo-wide `mvn test` style verification before the new content tests can run.
-- The Phase 8 code path is complete, but targeted backend Maven verification remains blocked by unrelated pre-existing tests `UnsupportedActionDispatchTest` and `MembershipServiceCustomerFlowTest`, which still instantiate `CheckinHealthService` with an outdated constructor.
+### Open Blockers And Concerns
+- Phases `01` through `05` still lack phase-level `VERIFICATION.md` artifacts, which is why the milestone audit remained `gaps_found`.
+- `backend\\mvnw.cmd` still fails in this shell environment; backend verification depends on the local Maven installation plus `.codex-maven-settings.xml`.
+- Unrelated backend tests `UnsupportedActionDispatchTest` and `MembershipServiceCustomerFlowTest` still instantiate `CheckinHealthService` with an outdated constructor, blocking clean repo-wide Maven verification.
+- The real multi-role `PT-08` replacement-coach acceptance flow is still skipped at E2E level.
+- Some Playwright flows are only stable with isolated identities or `--workers=1`, so local verification remains environment-sensitive.
 
 ## Session Continuity
-- Last completed session: Phase 8 consultative chat context and final AI verification
-- Stopped at: Plan 08-04 execution, summary creation, and manual roadmap/state/requirements updates after frontend and Playwright verification
-- Resume action: milestone is implementation-complete; use verification or cleanup workflows if additional closure is needed
-- Continue file: [.planning/phases/08-ai-and-weekly-planning/08-04-SUMMARY.md](D:\project\GymCore-beta-test-0.2\.planning\phases\08-ai-and-weekly-planning\08-04-SUMMARY.md)
+- Last completed session: v1.0 milestone archival
+- Stopped at: roadmap collapsed, milestone archives written, accepted audit debt recorded, and next milestone planning left intentionally undefined
+- Resume action: run `$gsd-new-milestone`
+- Continue file: [.planning/MILESTONES.md](D:\project\GymCore-beta-test-0.2\.planning\MILESTONES.md)
