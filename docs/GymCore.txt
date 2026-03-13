@@ -7,7 +7,7 @@
    - Membership renew vs upgrade supported (logic in backend)
    - Day pass: active until midnight (StartDate=EndDate)
    - Daily job SP included for:
-       + membership expiry countdown notifications
+       + membership expiry countdown notifications on the 7/3/1 cadence
        + expire memberships
        + cancel PT sessions if no ACTIVE membership
 Recommended run order:
@@ -1243,7 +1243,7 @@ GO
 
 /* =========================
    DAILY JOB STORED PROCEDURE
-   - create membership expiry countdown notifications (7..1 days left)
+   - create membership expiry countdown notifications (7/3/1 days left)
    - activate due SCHEDULED memberships (StartDate <= today)
    - expire memberships (EndDate < today)
    - cancel PT sessions if customer has NO ACTIVE membership after expiry
@@ -1255,7 +1255,7 @@ BEGIN
 
     DECLARE @today DATE = CAST(GETDATE() AS DATE);
 
-    /* 1) Countdown notifications (7..1 days left) for ACTIVE memberships */
+    /* 1) Countdown notifications (7/3/1 days left) for ACTIVE memberships */
     ;WITH ActiveM AS (
         SELECT m.CustomerMembershipID, m.CustomerID, m.EndDate,
                DATEDIFF(DAY, @today, m.EndDate) AS DaysLeft
@@ -1272,7 +1272,7 @@ BEGIN
         a.CustomerMembershipID,
         CONCAT('DAYSLEFT_', a.DaysLeft)
     FROM ActiveM a
-    WHERE a.DaysLeft BETWEEN 1 AND 7
+    WHERE a.DaysLeft IN (7, 3, 1)
       AND NOT EXISTS (
             SELECT 1 FROM dbo.Notifications n
             WHERE n.UserID = a.CustomerID

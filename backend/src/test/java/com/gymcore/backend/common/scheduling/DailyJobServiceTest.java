@@ -2,11 +2,13 @@ package com.gymcore.backend.common.scheduling;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.mockito.InOrder;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class DailyJobServiceTest {
@@ -21,10 +23,15 @@ class DailyJobServiceTest {
     }
 
     @Test
-    void runMembershipJobs_shouldExecuteDailyMembershipProcedure() {
+    void runMembershipJobs_shouldExecuteMembershipDisciplineStepsInOrder() {
         dailyJobService.runMembershipJobs();
 
-        verify(jdbcTemplate).execute(DailyJobService.LEGACY_DAILY_MEMBERSHIP_JOB_SQL);
+        InOrder order = inOrder(jdbcTemplate);
+        order.verify(jdbcTemplate).execute(DailyJobService.MEMBERSHIP_EXPIRY_REMINDER_SQL);
+        order.verify(jdbcTemplate).execute(DailyJobService.EXPIRE_MEMBERSHIPS_SQL);
+        order.verify(jdbcTemplate).execute(DailyJobService.ACTIVATE_DUE_SCHEDULED_MEMBERSHIPS_SQL);
+        order.verify(jdbcTemplate).execute(DailyJobService.CANCEL_PT_SESSIONS_FOR_EXPIRED_MEMBERSHIPS_SQL);
+        order.verify(jdbcTemplate).execute(DailyJobService.PT_CANCELLATION_NOTIFICATION_SQL);
     }
 
     @Test
