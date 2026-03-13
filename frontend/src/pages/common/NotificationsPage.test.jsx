@@ -89,18 +89,34 @@ describe('NotificationsPage', () => {
         },
       },
     })
+    const unreadHistoryNotification = buildNotification({
+      notificationId: 104,
+      title: 'Coupon added to your wallet',
+      message: 'Your promotion claim was saved successfully.',
+      linkUrl: '/customer/promotions',
+      createdAt: '2026-03-01T09:30:00Z',
+      isRead: false,
+      type: 'COUPON_CLAIMED',
+      reminder: {
+        bucket: 'HISTORY',
+        category: 'PROMOTION',
+        destination: {
+          label: 'Open promotions',
+        },
+      },
+    })
 
     notificationApi.getNotifications.mockResolvedValue({
       data: {
-        unreadCount: 2,
-        notifications: [membershipReminder, promotionReminder, paidOrderHistory],
+        unreadCount: 3,
+        notifications: [membershipReminder, promotionReminder, unreadHistoryNotification, paidOrderHistory],
         reminderCenter: {
           actionable: [membershipReminder, promotionReminder],
-          history: [paidOrderHistory],
+          history: [unreadHistoryNotification, paidOrderHistory],
           counts: {
-            total: 3,
+            total: 4,
             actionable: 2,
-            history: 1,
+            history: 2,
           },
         },
       },
@@ -121,7 +137,7 @@ describe('NotificationsPage', () => {
     expect(screen.getByTestId('page-notification-101')).toHaveAttribute('data-notification-tone', 'primary')
     expect(screen.getByTestId('page-notification-103')).toHaveAttribute('data-notification-tone', 'muted')
     expect(screen.getByRole('link', { name: 'View membership' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open promotions' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Open promotions' })).toHaveLength(2)
     expect(screen.getByText(/Your order payment was confirmed/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^Mark Read$/i }))
@@ -141,6 +157,19 @@ describe('NotificationsPage', () => {
     expect(screen.getByText(/Membership expires soon/i)).toBeInTheDocument()
     expect(screen.getByText(/New promotion available/i)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'History' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Order paid/i)).not.toBeInTheDocument()
+  })
+
+  it('shows only unread history when the history filter is selected', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText(/Coupon added to your wallet/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Unread history/i }))
+
+    expect(screen.queryByRole('heading', { name: 'Act now' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Coupon added to your wallet/i)).toBeInTheDocument()
+    expect(screen.getByTestId('page-notification-104')).toHaveAttribute('data-notification-tone', 'secondary')
     expect(screen.queryByText(/Order paid/i)).not.toBeInTheDocument()
   })
 

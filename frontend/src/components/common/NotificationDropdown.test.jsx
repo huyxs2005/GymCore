@@ -114,6 +114,16 @@ describe('NotificationDropdown', () => {
     expect(screen.getByTestId('dropdown-notification-12')).toHaveAttribute('data-notification-tone', 'muted')
   })
 
+  it('keeps read history actions accessible from the muted section', async () => {
+    const user = userEvent.setup()
+    renderDropdown()
+
+    await user.click(screen.getByRole('button', { name: /open notifications/i }))
+    await user.click(screen.getByRole('button', { name: 'Open promotions' }))
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/customer/promotions')
+  })
+
   it('marks an actionable reminder as read from the dropdown', async () => {
     const user = userEvent.setup()
     renderDropdown()
