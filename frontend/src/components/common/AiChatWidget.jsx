@@ -12,6 +12,18 @@ function normalizeMessages(messages, limit = 12) {
   })).filter((m) => m.content.length > 0)
 }
 
+function normalizeAvailableActions(actions) {
+  return (Array.isArray(actions) ? actions : [])
+    .filter((action) => action?.label && action?.route)
+    .map((action) => ({
+      id: action.id || action.route,
+      label: String(action.label).trim(),
+      route: String(action.route).trim(),
+      type: action.type || 'route',
+    }))
+    .filter((action) => action.label && action.route)
+}
+
 function AiChatWidget({ context = {}, quickActions = [], onAction }) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
@@ -30,7 +42,7 @@ function AiChatWidget({ context = {}, quickActions = [], onAction }) {
     }
   }, [context])
   const visibleQuickActions = useMemo(() => {
-    return (Array.isArray(quickActions) ? quickActions : []).filter((action) => action?.label && action?.route)
+    return normalizeAvailableActions(quickActions)
   }, [quickActions])
 
   useEffect(() => {
@@ -58,7 +70,10 @@ function AiChatWidget({ context = {}, quickActions = [], onAction }) {
     try {
       const payload = {
         messages: normalizeMessages([...messages, { role: 'user', content: text }], 12),
-        context: safeContext,
+        context: {
+          ...safeContext,
+          availableActions: visibleQuickActions,
+        },
       }
       const res = await apiClient.post('/v1/ai/chat', payload)
       const reply = res?.data?.data?.reply || res?.data?.reply || ''

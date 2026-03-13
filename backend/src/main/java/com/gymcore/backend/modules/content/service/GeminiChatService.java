@@ -1,6 +1,7 @@
 package com.gymcore.backend.modules.content.service;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -240,13 +241,19 @@ public class GeminiChatService {
 
     private String buildSystemInstruction(Map<String, Object> context, String foodCatalog) {
         String mode = context == null ? "" : String.valueOf(context.getOrDefault("mode", "")).trim();
+        String consultativeContext = buildConsultativeContext(context);
+        String allowedActions = buildAllowedActionContext(context);
+        String selectedContext = buildSelectedItemContext(context);
         return """
                 You are GymCore AI assistant.
 
-                Respond in Vietnamese. Be concise and practical.
-                Scope: workouts, foods, basic fitness guidance.
+                Respond in Vietnamese. Be concise, practical, and consultative.
+                Scope: workouts, foods, weekly guidance, and routing users into real GymCore flows.
+                Never claim an action was completed inside chat. You can only explain or route the user to supported GymCore screens.
                 If user asks for medical advice, respond with general guidance and advise consulting a professional.
-                
+                When recommending next steps, only use the allowed GymCore actions below. Do not invent unsupported routes, bookings, workouts, foods, or product capabilities.
+                PT booking must remain a receiving flow. Do not act like chat itself can replace coach programming or complete booking.
+
                 IMPORTANT FOOD CONSTRAINT:
                 - When suggesting foods, you MUST ONLY recommend food names from the allowed catalog below.
                 - Do NOT invent new food names.
@@ -254,10 +261,197 @@ public class GeminiChatService {
                 - Prefer answers in bullet points with exact food names.
 
                 Current screen: %s
-                
+                Consultative customer context:
+                %s
+
+                Current page selections:
+                %s
+
+                Allowed GymCore actions:
+                %s
+
                 Allowed food catalog from database:
                 %s
-                """.formatted(mode, foodCatalog);
+                """.formatted(mode, consultativeContext, selectedContext, allowedActions, foodCatalog);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildConsultativeContext(Map<String, Object> context) {
+        if (context == null || context.isEmpty()) {
+            return "- No resolved customer context provided.";
+        }
+
+        List<String> lines = new ArrayList<>();
+        Map<String, Object> contextMeta = asMap(context.get("contextMeta"));
+        Map<String, Object> aiContext = asMap(context.get("aiContext"));
+        Map<String, Object> goals = asMap(aiContext.get("goals"));
+        Map<String, Object> health = asMap(aiContext.get("health"));
+        Map<String, Object> progress = asMap(aiContext.get("progress"));
+        Map<String, Object> latestProgressSignal = asMap(progress.get("latestProgressSignal"));
+        Map<String, Object> latestNoteSignal = asMap(progress.get("latestNoteSignal"));
+        Map<String, Object> currentSnapshot = asMap(health.get("currentSnapshot"));
+
+        List<String> usedSignals = toStringList(contextMeta.get("usedSignals"));
+        if (!usedSignals.isEmpty()) {
+            lines.add("- Active customer signals: " + String.join(", ", usedSignals) + ".");
+        }
+
+        List<String> goalCodes = toStringList(goals.get("effectiveGoalCodes"));
+        if (!goalCodes.isEmpty()) {
+            lines.add("- Effective goals: " + String.join(", ", goalCodes) + ".");
+        }
+
+        String goalSource = normalizeText(goals.get("source"));
+        if (goalSource != null) {
+            lines.add("- Goal source: " + goalSource + ".");
+        }
+
+        String healthSummary = buildHealthSummary(currentSnapshot);
+        if (StringUtils.hasText(healthSummary)) {
+            lines.add("- Health snapshot: " + healthSummary + ".");
+        }
+
+        String progressSummary = normalizeText(latestProgressSignal.get("summary"));
+        if (StringUtils.hasText(progressSummary) && !progressSummary.startsWith("No ")) {
+            lines.add("- Latest progress signal: " + progressSummary + ".");
+        }
+
+        String noteSummary = normalizeText(latestNoteSignal.get("summary"));
+        if (StringUtils.hasText(noteSummary) && !noteSummary.startsWith("No ")) {
+            lines.add("- Latest coach note: " + noteSummary + ".");
+        }
+
+        List<String> missingSignals = toStringList(contextMeta.get("missingSignals"));
+        if (!missingSignals.isEmpty()) {
+            lines.add("- Missing signals: " + String.join(", ", missingSignals) + ".");
+        }
+
+        return lines.isEmpty() ? "- No resolved customer context provided." : String.join("\n", lines);
+    }
+
+    private String buildSelectedItemContext(Map<String, Object> context) {
+        if (context == null || context.isEmpty()) {
+            return "- No workout or food detail is currently selected.";
+        }
+
+        List<String> lines = new ArrayList<>();
+        Map<String, Object> workout = asMap(context.get("selectedWorkout"));
+        Map<String, Object> food = asMap(context.get("selectedFood"));
+
+        String workoutName = normalizeText(workout.get("name"));
+        if (workoutName != null) {
+            lines.add("- Selected workout: " + workoutName + summarizeSelectionDetail(workout.get("description")));
+        }
+
+        String foodName = normalizeText(food.get("name"));
+        if (foodName != null) {
+            List<String> nutrition = new ArrayList<>();
+            if (food.get("calories") != null) nutrition.add("calories " + food.get("calories"));
+            if (food.get("protein") != null) nutrition.add("protein " + food.get("protein"));
+            if (food.get("carbs") != null) nutrition.add("carbs " + food.get("carbs"));
+            if (food.get("fat") != null) nutrition.add("fat " + food.get("fat"));
+            String suffix = nutrition.isEmpty() ? summarizeSelectionDetail(food.get("description")) : " (" + String.join(", ", nutrition) + ")";
+            lines.add("- Selected food: " + foodName + suffix);
+        }
+
+        return lines.isEmpty() ? "- No workout or food detail is currently selected." : String.join("\n", lines);
+    }
+
+    private String buildAllowedActionContext(Map<String, Object> context) {
+        List<Map<String, Object>> actions = extractActionList(context == null ? null : context.get("availableActions"));
+        if (actions.isEmpty()) {
+            return """
+                    - view-workout-detail -> /customer/knowledge/workouts/:id
+                    - view-food-detail -> /customer/knowledge/foods/:id
+                    - open-progress-hub -> /customer/progress-hub
+                    - open-coach-booking -> /customer/coach-booking""";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (Map<String, Object> action : actions) {
+            String actionId = normalizeText(action.get("id"));
+            String label = normalizeText(action.get("label"));
+            String route = normalizeText(action.get("route"));
+            if (route == null) continue;
+            builder.append("- ")
+                    .append(actionId != null ? actionId : "route")
+                    .append(" -> ")
+                    .append(route);
+            if (label != null) {
+                builder.append(" (").append(label).append(")");
+            }
+            builder.append('\n');
+        }
+        String text = builder.toString().trim();
+        return text.isEmpty() ? "- No route-ready GymCore actions are currently available." : text;
+    }
+
+    private List<Map<String, Object>> extractActionList(Object rawActions) {
+        if (!(rawActions instanceof Collection<?> collection)) {
+            return List.of();
+        }
+
+        List<Map<String, Object>> actions = new ArrayList<>();
+        for (Object item : collection) {
+            Map<String, Object> action = asMap(item);
+            String route = normalizeText(action.get("route"));
+            String label = normalizeText(action.get("label"));
+            if (route == null || label == null) continue;
+            Map<String, Object> copy = new LinkedHashMap<>();
+            copy.put("id", normalizeText(action.get("id")));
+            copy.put("label", label);
+            copy.put("route", route);
+            actions.add(copy);
+        }
+        return actions;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    }
+
+    private List<String> toStringList(Object value) {
+        if (!(value instanceof Collection<?> collection)) {
+            return List.of();
+        }
+        List<String> items = new ArrayList<>();
+        for (Object item : collection) {
+            String text = normalizeText(item);
+            if (text != null) {
+                items.add(text);
+            }
+        }
+        return items;
+    }
+
+    private String buildHealthSummary(Map<String, Object> currentSnapshot) {
+        if (currentSnapshot == null || currentSnapshot.isEmpty()) {
+            return null;
+        }
+
+        List<String> parts = new ArrayList<>();
+        if (currentSnapshot.get("weightKg") != null) {
+            parts.add("weight " + currentSnapshot.get("weightKg") + "kg");
+        }
+        if (currentSnapshot.get("bmi") != null) {
+            parts.add("BMI " + currentSnapshot.get("bmi"));
+        }
+        if (currentSnapshot.get("heightCm") != null) {
+            parts.add("height " + currentSnapshot.get("heightCm") + "cm");
+        }
+        return parts.isEmpty() ? "current health snapshot available" : String.join(", ", parts);
+    }
+
+    private String summarizeSelectionDetail(Object rawValue) {
+        String detail = normalizeText(rawValue);
+        return detail == null ? "" : " (" + detail + ")";
+    }
+
+    private String normalizeText(Object rawValue) {
+        if (rawValue == null) return null;
+        String text = String.valueOf(rawValue).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private String buildFoodCatalogContext() {

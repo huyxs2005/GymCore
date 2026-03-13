@@ -64,6 +64,11 @@ describe('AiChatWidget', () => {
           mode: 'FOODS',
           selectedFood: { foodId: 21, name: 'Chicken Rice Bowl' },
         }}
+        quickActions={[
+          { id: 'review-progress-hub', label: 'Review latest progress signals', route: '/customer/progress-hub', type: 'route' },
+          { label: 'Open selected food', route: '/customer/knowledge/foods/21' },
+          { label: '', route: '/customer/knowledge/foods/404' },
+        ]}
       />,
     )
 
@@ -81,6 +86,20 @@ describe('AiChatWidget', () => {
           mode: 'FOODS',
           selectedWorkout: null,
           selectedFood: { foodId: 21, name: 'Chicken Rice Bowl' },
+          availableActions: [
+            {
+              id: 'review-progress-hub',
+              label: 'Review latest progress signals',
+              route: '/customer/progress-hub',
+              type: 'route',
+            },
+            {
+              id: '/customer/knowledge/foods/21',
+              label: 'Open selected food',
+              route: '/customer/knowledge/foods/21',
+              type: 'route',
+            },
+          ],
         },
       })
     })
