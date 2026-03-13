@@ -153,6 +153,13 @@ public class CheckinHealthService {
 
         List<Map<String, Object>> historyItems = listOfMaps(healthHistory.get("items"));
         List<Map<String, Object>> noteItems = listOfMaps(coachNotes.get("items"));
+        Map<String, Object> latestCoachNote = noteItems.isEmpty() ? Map.of() : new LinkedHashMap<>(noteItems.get(0));
+
+        Map<String, Object> historySummary = new LinkedHashMap<>();
+        historySummary.put("totalRecords", historyItems.size());
+        historySummary.put("latestRecordedAt", asText(firstItemValue(historyItems, "recordedAt")));
+        historySummary.put("latestBmi", firstItemValue(historyItems, "bmi"));
+        historySummary.put("latestWeightKg", firstItemValue(historyItems, "weightKg"));
 
         Map<String, Object> followUp = new LinkedHashMap<>();
         followUp.put("historyCount", historyItems.size());
@@ -160,15 +167,36 @@ public class CheckinHealthService {
         followUp.put("hasCurrentHealth", !currentHealth.isEmpty());
         followUp.put("hasHealthHistory", !historyItems.isEmpty());
         followUp.put("hasCoachNotes", !noteItems.isEmpty());
+        followUp.put("readOnly", true);
+        followUp.put("customerCanWriteProgress", false);
+        followUp.put("customerCanWriteCoachNotes", false);
         followUp.put("lastProgressSignalAt", latestTimestamp(
                 asText(currentHealth.get("updatedAt")),
                 asText(firstItemValue(historyItems, "recordedAt")),
                 asText(firstItemValue(noteItems, "createdAt"))));
+        followUp.put("recommendedFocus", recommendedFocus(currentHealth, historyItems, noteItems));
+
+        Map<String, Object> latestCoachingSignal = new LinkedHashMap<>();
+        latestCoachingSignal.put("sourceType", noteItems.isEmpty() ? "HEALTH_SNAPSHOT" : "COACH_NOTE");
+        latestCoachingSignal.put("recordedAt", noteItems.isEmpty()
+                ? followUp.get("lastProgressSignalAt")
+                : latestCoachNote.get("createdAt"));
+        latestCoachingSignal.put("summary", noteItems.isEmpty()
+                ? buildHealthSummary(currentHealth)
+                : latestCoachNote.get("noteContent"));
+        latestCoachingSignal.put("coachName", latestCoachNote.getOrDefault("coachName", null));
+        latestCoachingSignal.put("sessionDate", latestCoachNote.getOrDefault("sessionDate", null));
+        latestCoachingSignal.put("noteId", latestCoachNote.getOrDefault("noteId", null));
 
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("contractVersion", "progress-hub.v1");
+        data.put("currentSnapshot", currentHealth);
         data.put("currentHealth", currentHealth);
+        data.put("historySummary", historySummary);
         data.put("healthHistory", healthHistory);
+        data.put("recentCoachNotes", coachNotes);
         data.put("coachNotes", coachNotes);
+        data.put("latestCoachingSignal", latestCoachingSignal);
         data.put("followUp", followUp);
         return data;
     }
@@ -620,6 +648,30 @@ public class CheckinHealthService {
             }
         }
         return latest;
+    }
+
+    private String recommendedFocus(
+            Map<String, Object> currentHealth,
+            List<Map<String, Object>> historyItems,
+            List<Map<String, Object>> noteItems) {
+        if (!noteItems.isEmpty()) {
+            return "REVIEW_LATEST_COACH_NOTE";
+        }
+        if (!currentHealth.isEmpty() || !historyItems.isEmpty()) {
+            return "TRACK_HEALTH_TREND";
+        }
+        return "COMPLETE_BASELINE_CHECK_IN";
+    }
+
+    private String buildHealthSummary(Map<String, Object> currentHealth) {
+        if (currentHealth.isEmpty()) {
+            return "No coaching signal recorded yet.";
+        }
+        return "Latest health snapshot recorded with BMI "
+                + currentHealth.get("bmi")
+                + " and weight "
+                + currentHealth.get("weightKg")
+                + "kg.";
     }
 
     private record CustomerLookup(int customerId, String fullName, String email, String phone) {
