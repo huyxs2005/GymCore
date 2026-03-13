@@ -12,7 +12,7 @@ function normalizeMessages(messages, limit = 12) {
   })).filter((m) => m.content.length > 0)
 }
 
-function AiChatWidget({ context = {} }) {
+function AiChatWidget({ context = {}, quickActions = [], onAction }) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
   const [input, setInput] = useState('')
@@ -29,6 +29,9 @@ function AiChatWidget({ context = {} }) {
       selectedFood: context?.selectedFood || null,
     }
   }, [context])
+  const visibleQuickActions = useMemo(() => {
+    return (Array.isArray(quickActions) ? quickActions : []).filter((action) => action?.label && action?.route)
+  }, [quickActions])
 
   useEffect(() => {
     if (!open) return
@@ -103,6 +106,23 @@ function AiChatWidget({ context = {} }) {
           </header>
 
           <div ref={listRef} className="gc-scrollbar-hidden max-h-[50vh] space-y-3 overflow-y-auto px-4 py-4">
+            {visibleQuickActions.length ? (
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Quick actions</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {visibleQuickActions.map((action) => (
+                    <button
+                      key={action.id || action.route}
+                      type="button"
+                      onClick={() => onAction?.(action)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-gym-300 hover:text-gym-700"
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {messages.map((m, idx) => (
               <div key={`${m.role}-${idx}`} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
