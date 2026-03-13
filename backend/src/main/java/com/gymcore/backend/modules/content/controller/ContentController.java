@@ -105,6 +105,14 @@ public class ContentController {
                 contentService.execute("ai-recommendations", withAuthorization(authorizationHeader, payload)));
     }
 
+    @PostMapping("/ai/weekly-plan")
+    public ApiResponse<Map<String, Object>> getAiWeeklyPlan(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("AI weekly plan generated",
+                contentService.execute("ai-weekly-plan", withAuthorization(authorizationHeader, payload)));
+    }
+
     @PostMapping("/ai/food-personalized")
     public ApiResponse<Map<String, Object>> getPersonalizedFoodRecommendations(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,

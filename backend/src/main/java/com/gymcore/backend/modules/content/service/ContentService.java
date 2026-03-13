@@ -56,6 +56,7 @@ public class ContentService {
             case "update-customer-goals" -> updateCustomerGoals(safePayload);
             case "resolve-ai-context" -> buildAiContextPayload(safePayload);
             case "ai-recommendations" -> getAiRecommendations(safePayload);
+            case "ai-weekly-plan" -> getAiWeeklyPlan(safePayload);
             case "ai-food-personalized" -> getAiFoodPersonalized(safePayload);
             case "ai-workout-assistant" -> getWorkoutAssistantAnswer(safePayload);
             case "ai-coach-booking-assistant" -> getCoachBookingAssistantAnswer(safePayload);
@@ -220,6 +221,29 @@ public class ContentService {
         response.put("workouts", workouts);
         response.put("foods", foods);
         return withAiContext(response, aiContext, "ai-recommendations");
+    }
+
+    private Map<String, Object> getAiWeeklyPlan(Map<String, Object> payload) {
+        AiContextResolution aiContext = resolveAiContext(payload);
+        int workoutLimit = clampInt(payload.get("workoutLimit"), 3, 1, 6);
+        int foodLimit = clampInt(payload.get("foodLimit"), 3, 1, 6);
+
+        List<Map<String, Object>> workouts = recommendWorkouts(aiContext, workoutLimit);
+        List<Map<String, Object>> foods = recommendFoods(aiContext, foodLimit);
+        List<Map<String, Object>> sections = new ArrayList<>();
+        sections.add(buildWeeklyPlanWorkoutSection(aiContext, workouts));
+        sections.add(buildWeeklyPlanFoodSection(aiContext, foods));
+        sections.add(buildWeeklyPlanRecoverySection(aiContext));
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("contractVersion", "ai-weekly-plan.v1");
+        response.put("goalCodes", aiContext.goalSelection().goalCodes());
+        response.put("source", aiContext.goalSelection().source());
+        response.put("summary", buildWeeklyPlanSummary(aiContext, sections));
+        response.put("sections", sections);
+        response.put("nextActions", buildWeeklyPlanNextActions(workouts, foods));
+        response.put("scopeGuardrails", buildWeeklyPlanScopeGuardrails());
+        return withAiContext(response, aiContext, "ai-weekly-plan");
     }
 
     private Map<String, Object> getWorkoutAssistantAnswer(Map<String, Object> payload) {
@@ -1679,12 +1703,110 @@ public class ContentService {
         return "Balanced training consistency";
     }
 
+    private Map<String, Object> buildWeeklyPlanSummary(
+            AiContextResolution aiContext,
+            List<Map<String, Object>> sections) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("headline",
+                "A guidance-level weekly plan centered on "
+                        + buildPlanFocusLabel(aiContext).toLowerCase(Locale.ROOT) + ".");
+        summary.put("coachNote",
+                "Use this as a weekly direction setter, then confirm execution details inside the relevant workout, food, or coach-booking flows.");
+        summary.put("sectionCount", sections.size());
+        return summary;
+    }
+
+    private Map<String, Object> buildWeeklyPlanWorkoutSection(
+            AiContextResolution aiContext,
+            List<Map<String, Object>> workouts) {
+        Map<String, Object> section = new LinkedHashMap<>();
+        section.put("id", "workout-focus");
+        section.put("title", "Workout focus");
+        section.put("intent", buildPlanFocusLabel(aiContext));
+        section.put("guidance", workouts.isEmpty()
+                ? "No workout catalog match is available yet, so keep training conservative and review the knowledge library."
+                : "Prioritize 2 to 3 sessions built around the top suggested movements instead of chasing volume.");
+        section.put("items", workouts);
+        return section;
+    }
+
+    private Map<String, Object> buildWeeklyPlanFoodSection(
+            AiContextResolution aiContext,
+            List<Map<String, Object>> foods) {
+        Map<String, Object> section = new LinkedHashMap<>();
+        section.put("id", "food-emphasis");
+        section.put("title", "Food emphasis");
+        section.put("intent", aiContext.goalSelection().goalCodes().contains("GAIN_MUSCLE")
+                ? "Support training with protein-forward meals."
+                : "Keep meals supportive of steady training and recovery.");
+        section.put("guidance", foods.isEmpty()
+                ? "Use familiar balanced meals and review the food catalog for options."
+                : "Repeat a few easy-to-execute meals this week instead of over-optimizing variety.");
+        section.put("items", foods);
+        return section;
+    }
+
+    private Map<String, Object> buildWeeklyPlanRecoverySection(AiContextResolution aiContext) {
+        Map<String, Object> section = new LinkedHashMap<>();
+        section.put("id", "recovery-cues");
+        section.put("title", "Recovery cues");
+        section.put("intent", "Keep recovery aligned with the latest visible signals.");
+        section.put("guidance", buildRecoveryCue(aiContext));
+        section.put("items", buildRecoveryItems(aiContext));
+        return section;
+    }
+
     private String buildRecoveryCue(AiContextResolution aiContext) {
         String signalText = signalText(aiContext);
         if (containsAny(signalText, "recovery", "mobility", "rest", "sore", "fatigue")) {
             return "Recent signals suggest a lighter recovery bias, so keep one session mobility-first and avoid stacking hard days back to back.";
         }
         return "Leave room for at least one lighter day so the plan stays sustainable and inside GymCore's guidance scope.";
+    }
+
+    private List<Map<String, Object>> buildRecoveryItems(AiContextResolution aiContext) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(Map.of(
+                "id", "recovery-day",
+                "label", "Recovery day",
+                "detail", buildRecoveryCue(aiContext)));
+        String latestProgressSummary = normalizeText(aiContext.latestProgressSignal().get("summary"));
+        if (StringUtils.hasText(latestProgressSummary) && !latestProgressSummary.startsWith("No ")) {
+            items.add(Map.of(
+                    "id", "progress-signal",
+                    "label", "Latest progress signal",
+                    "detail", latestProgressSummary));
+        }
+        String latestNoteSummary = normalizeText(aiContext.latestNoteSignal().get("summary"));
+        if (StringUtils.hasText(latestNoteSummary) && !latestNoteSummary.startsWith("No ")) {
+            items.add(Map.of(
+                    "id", "coach-signal",
+                    "label", "Coach cue",
+                    "detail", latestNoteSummary));
+        }
+        return items;
+    }
+
+    private List<Map<String, Object>> buildWeeklyPlanNextActions(
+            List<Map<String, Object>> workouts,
+            List<Map<String, Object>> foods) {
+        List<Map<String, Object>> actions = new ArrayList<>(buildRecommendationNextActions(workouts, foods));
+        actions.add(Map.of(
+                "id", "book-coach-support",
+                "label", "Get coach support if the week feels overloaded",
+                "route", "/customer/coach-booking",
+                "type", "route"));
+        return actions;
+    }
+
+    private Map<String, Object> buildWeeklyPlanScopeGuardrails() {
+        Map<String, Object> guardrails = new LinkedHashMap<>();
+        guardrails.put("level", "guidance-only");
+        guardrails.put("medicalDisclaimer", "This weekly plan does not replace medical advice.");
+        guardrails.put("coachDisclaimer", "This weekly plan does not replace a coach's individualized programming.");
+        guardrails.put("allowedActions",
+                List.of("view-workout-detail", "view-food-detail", "open-progress-hub", "open-coach-booking"));
+        return guardrails;
     }
 
     private record ScoreResult(int score, List<String> reasons) {
