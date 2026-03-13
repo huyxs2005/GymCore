@@ -54,6 +54,7 @@ public class PromotionService {
             case "admin-get-revenue-report" -> adminGetRevenueReport(auth);
             case "customer-get-promotion-posts" -> customerGetPosts(auth);
             case "customer-claim-coupon" -> customerClaimCoupon(auth, payload);
+            case "customer-claim-coupon-code" -> customerClaimCouponCode(auth, payload);
             case "customer-get-my-claims" -> customerGetMyClaims(auth);
             case "customer-apply-coupon" -> customerApplyCoupon(auth, payload);
             case "customer-get-notifications" -> customerGetNotifications(auth, payload);
@@ -235,10 +236,12 @@ public class PromotionService {
 
     private Map<String, Object> adminCreatePost(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
+        int isActive = requireBit(payload.getOrDefault("isActive", 1));
+        int isImportant = requireBit(payload.getOrDefault("isImportant", 0));
         jdbcTemplate.update(
                 """
-                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, CreatedBy)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO dbo.PromotionPosts (Title, Content, BannerUrl, PromotionID, StartAt, EndAt, IsActive, IsImportant, CreatedBy)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 payload.get("title"),
                 payload.get("content"),
@@ -246,32 +249,27 @@ public class PromotionService {
                 requireInt(payload.get("promotionId"), "Promotion ID is required."),
                 payload.get("startAt"),
                 payload.get("endAt"),
-                requireBit(payload.getOrDefault("isActive", 1)),
+                isActive,
+                isImportant,
                 admin.userId());
         Integer postId = jdbcTemplate.queryForObject("SELECT TOP (1) PromotionPostID FROM dbo.PromotionPosts ORDER BY PromotionPostID DESC",
                 Integer.class);
-        if (postId != null && requireBit(payload.getOrDefault("isActive", 1)) == 1) {
-            String title = String.valueOf(payload.getOrDefault("title", "New promotion"));
-            notificationService.notifyAllCustomers(
-                    "PROMOTION_POST_PUBLISHED",
-                    "New promotion available",
-                    title + " is now live. Open Promotions to claim it before it expires.",
-                    "/customer/promotions",
-                    postId,
-                    "PROMOTION_POST_" + postId);
-        }
+        publishPromotionPostIfNeeded(postId, payload.get("title"), isActive, isImportant);
         return Map.of("success", true);
     }
 
     private Map<String, Object> adminUpdatePost(String auth, Map<String, Object> payload) {
         currentUserService.requireAdmin(auth);
         int postId = requireInt(payload.get("postId"), "Post ID is required.");
+        Map<String, Object> existingPostState = findPromotionPostState(postId);
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
+        int isActive = requireBit(body.getOrDefault("isActive", 1));
+        int isImportant = requireBit(body.getOrDefault("isImportant", 0));
 
         jdbcTemplate.update("""
                 UPDATE dbo.PromotionPosts
-                SET Title = ?, Content = ?, BannerUrl = ?, StartAt = ?, EndAt = ?, IsActive = ?, PromotionID = ?
+                SET Title = ?, Content = ?, BannerUrl = ?, StartAt = ?, EndAt = ?, IsActive = ?, IsImportant = ?, PromotionID = ?
                 WHERE PromotionPostID = ?
                 """,
                 body.get("title"),
@@ -279,9 +277,13 @@ public class PromotionService {
                 body.get("bannerUrl"),
                 body.get("startAt"),
                 body.get("endAt"),
-                requireBit(body.getOrDefault("isActive", 1)),
+                isActive,
+                isImportant,
                 requireInt(body.get("promotionId"), "Promotion ID is required."),
                 postId);
+        if (!isPromotionPostBroadcastEligible(existingPostState)) {
+            publishPromotionPostIfNeeded(postId, body.get("title"), isActive, isImportant);
+        }
         return Map.of("success", true);
     }
 
@@ -352,7 +354,11 @@ public class PromotionService {
                 Integer.class, user.userId(), promotionId);
 
         if (existing != null && existing > 0) {
-            return Map.of("success", true, "message", "You have already claimed this coupon!");
+            Map<String, Object> response = new java.util.LinkedHashMap<>();
+            response.put("success", true);
+            response.put("message", "You have already claimed this coupon!");
+            response.putAll(buildCouponWalletResponse(user.userId()));
+            return response;
         }
 
         jdbcTemplate.update("""
@@ -369,20 +375,65 @@ public class PromotionService {
                 promotionId,
                 "COUPON_CLAIM_" + promotionId);
 
-        return Map.of("success", true, "message", "Coupon added to your wallet!");
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("success", true);
+        response.put("message", "Coupon added to your wallet!");
+        response.putAll(buildCouponWalletResponse(user.userId()));
+        return response;
     }
 
     private Map<String, Object> customerGetMyClaims(String auth) {
         CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
-        String sql = """
-                SELECT c.*, p.PromoCode, p.Description, p.DiscountPercent, p.DiscountAmount, p.ApplyTarget, p.BonusDurationMonths
-                FROM dbo.UserPromotionClaims c
-                JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
-                WHERE c.UserID = ? AND c.UsedAt IS NULL
-                AND p.IsActive = 1
-                AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
-                """;
-        return Map.of("claims", jdbcTemplate.queryForList(sql, user.userId()));
+        return buildCouponWalletResponse(user.userId());
+    }
+
+    private Map<String, Object> customerClaimCouponCode(String auth, Map<String, Object> payload) {
+        CurrentUserService.UserInfo user = currentUserService.requireCustomer(auth);
+        String promoCode = requireText(payload.get("promoCode"), "Promo code is required.");
+
+        List<Map<String, Object>> promotions = jdbcTemplate.queryForList("""
+                SELECT TOP (1) PromotionID, PromoCode
+                FROM dbo.Promotions
+                WHERE PromoCode = ?
+                  AND IsActive = 1
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(ValidFrom AS DATE) AND CAST(ValidTo AS DATE)
+                ORDER BY PromotionID DESC
+                """, promoCode);
+        if (promotions.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon code is invalid or expired.");
+        }
+
+        Map<String, Object> promotion = promotions.get(0);
+        int promotionId = requireInt(promotion.get("PromotionID"), "Promotion ID is required.");
+        Integer existing = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dbo.UserPromotionClaims WHERE UserID = ? AND PromotionID = ?",
+                Integer.class, user.userId(), promotionId);
+        if (existing != null && existing > 0) {
+            Map<String, Object> response = new java.util.LinkedHashMap<>();
+            response.put("success", true);
+            response.put("message", "This coupon is already in your wallet.");
+            response.putAll(buildCouponWalletResponse(user.userId()));
+            return response;
+        }
+
+        jdbcTemplate.update("""
+                INSERT INTO dbo.UserPromotionClaims (UserID, PromotionID, SourcePostID)
+                VALUES (?, ?, NULL)
+                """, user.userId(), promotionId);
+        notificationService.notifyUser(
+                user.userId(),
+                "COUPON_CODE_CLAIMED",
+                "Coupon code added to your wallet",
+                "Your manually entered coupon code is now available in wallet and can be used at checkout.",
+                "/customer/promotions",
+                promotionId,
+                "COUPON_CODE_CLAIM_" + promotionId);
+
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("success", true);
+        response.put("message", "Coupon code added to your wallet!");
+        response.putAll(buildCouponWalletResponse(user.userId()));
+        return response;
     }
 
     private Map<String, Object> customerApplyCoupon(String auth, Map<String, Object> payload) {
@@ -451,6 +502,143 @@ public class PromotionService {
         return response;
     }
 
+    private Map<String, Object> buildCouponWalletResponse(int userId) {
+        List<Map<String, Object>> activeClaims = loadActiveClaims(userId);
+        List<Map<String, Object>> walletClaims = jdbcTemplate.query("""
+                SELECT
+                    c.ClaimID,
+                    c.PromotionID,
+                    c.SourcePostID,
+                    c.ClaimedAt,
+                    c.UsedAt,
+                    c.UsedPaymentID,
+                    p.PromoCode,
+                    p.Description,
+                    p.DiscountPercent,
+                    p.DiscountAmount,
+                    p.ApplyTarget,
+                    p.BonusDurationMonths,
+                    p.ValidFrom,
+                    p.ValidTo,
+                    p.IsActive,
+                    CASE
+                        WHEN c.UsedAt IS NOT NULL THEN 'USED'
+                        WHEN p.IsActive = 1
+                             AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
+                             THEN 'ACTIVE'
+                        ELSE 'EXPIRED'
+                    END AS WalletState
+                FROM dbo.UserPromotionClaims c
+                JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                WHERE c.UserID = ?
+                ORDER BY c.ClaimedAt DESC, c.ClaimID DESC
+                """, (rs, rowNum) -> mapWalletClaim(rs), userId);
+
+        List<Map<String, Object>> claimableOffers = jdbcTemplate.query("""
+                SELECT
+                    p.PromotionID,
+                    p.PromoCode,
+                    p.Description,
+                    p.DiscountPercent,
+                    p.DiscountAmount,
+                    p.ApplyTarget,
+                    p.BonusDurationMonths,
+                    p.ValidFrom,
+                    p.ValidTo,
+                    post.PromotionPostID,
+                    post.Title,
+                    post.BannerUrl,
+                    post.StartAt,
+                    post.EndAt
+                FROM dbo.PromotionPosts post
+                JOIN dbo.Promotions p ON p.PromotionID = post.PromotionID
+                LEFT JOIN dbo.UserPromotionClaims c
+                    ON c.PromotionID = p.PromotionID
+                   AND c.UserID = ?
+                WHERE post.IsActive = 1
+                  AND p.IsActive = 1
+                  AND c.ClaimID IS NULL
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(post.StartAt AS DATE) AND CAST(post.EndAt AS DATE)
+                  AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
+                ORDER BY post.CreatedAt DESC, post.PromotionPostID DESC
+                """, (rs, rowNum) -> mapClaimableOffer(rs), userId);
+
+        List<Map<String, Object>> usedClaims = walletClaims.stream()
+                .filter(claim -> "USED".equals(claim.get("walletState")))
+                .toList();
+        List<Map<String, Object>> expiredClaims = walletClaims.stream()
+                .filter(claim -> "EXPIRED".equals(claim.get("walletState")))
+                .toList();
+
+        Map<String, Object> wallet = new java.util.LinkedHashMap<>();
+        wallet.put("claimableOffers", claimableOffers);
+        wallet.put("activeClaims", walletClaims.stream()
+                .filter(claim -> "ACTIVE".equals(claim.get("walletState")))
+                .toList());
+        wallet.put("usedClaims", usedClaims);
+        wallet.put("expiredClaims", expiredClaims);
+        wallet.put("allClaims", walletClaims);
+
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("claims", activeClaims);
+        response.put("claimableOffers", claimableOffers);
+        response.put("wallet", wallet);
+        return response;
+    }
+
+    private List<Map<String, Object>> loadActiveClaims(int userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT c.*, p.PromoCode, p.Description, p.DiscountPercent, p.DiscountAmount, p.ApplyTarget, p.BonusDurationMonths
+                FROM dbo.UserPromotionClaims c
+                JOIN dbo.Promotions p ON p.PromotionID = c.PromotionID
+                WHERE c.UserID = ? AND c.UsedAt IS NULL
+                AND p.IsActive = 1
+                AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.ValidFrom AS DATE) AND CAST(p.ValidTo AS DATE)
+                """, userId);
+    }
+
+    private Map<String, Object> mapWalletClaim(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Map<String, Object> claim = new java.util.LinkedHashMap<>();
+        claim.put("claimId", rs.getInt("ClaimID"));
+        claim.put("promotionId", rs.getInt("PromotionID"));
+        claim.put("sourcePostId", rs.getObject("SourcePostID"));
+        claim.put("claimedAt", rs.getTimestamp("ClaimedAt"));
+        claim.put("usedAt", rs.getTimestamp("UsedAt"));
+        claim.put("usedPaymentId", rs.getObject("UsedPaymentID"));
+        claim.put("promoCode", rs.getString("PromoCode"));
+        claim.put("description", rs.getString("Description"));
+        claim.put("discountPercent", rs.getBigDecimal("DiscountPercent"));
+        claim.put("discountAmount", rs.getBigDecimal("DiscountAmount"));
+        claim.put("applyTarget", rs.getString("ApplyTarget"));
+        claim.put("bonusDurationMonths", rs.getInt("BonusDurationMonths"));
+        claim.put("validFrom", rs.getObject("ValidFrom"));
+        claim.put("validTo", rs.getObject("ValidTo"));
+        claim.put("walletState", rs.getString("WalletState"));
+        claim.put("entrySource", rs.getObject("SourcePostID") == null ? "MANUAL" : "POST");
+        claim.put("claimableNow", "ACTIVE".equals(rs.getString("WalletState")));
+        return claim;
+    }
+
+    private Map<String, Object> mapClaimableOffer(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Map<String, Object> offer = new java.util.LinkedHashMap<>();
+        offer.put("promotionId", rs.getInt("PromotionID"));
+        offer.put("promotionPostId", rs.getInt("PromotionPostID"));
+        offer.put("promoCode", rs.getString("PromoCode"));
+        offer.put("description", rs.getString("Description"));
+        offer.put("discountPercent", rs.getBigDecimal("DiscountPercent"));
+        offer.put("discountAmount", rs.getBigDecimal("DiscountAmount"));
+        offer.put("applyTarget", rs.getString("ApplyTarget"));
+        offer.put("bonusDurationMonths", rs.getInt("BonusDurationMonths"));
+        offer.put("validFrom", rs.getObject("ValidFrom"));
+        offer.put("validTo", rs.getObject("ValidTo"));
+        offer.put("title", rs.getString("Title"));
+        offer.put("bannerUrl", rs.getString("BannerUrl"));
+        offer.put("startAt", rs.getObject("StartAt"));
+        offer.put("endAt", rs.getObject("EndAt"));
+        offer.put("walletState", "CLAIMABLE");
+        return offer;
+    }
+
     private Map<String, Object> customerGetNotifications(String auth, Map<String, Object> payload) {
         boolean unreadOnly = payload != null && Boolean.TRUE.equals(payload.get("unreadOnly"));
         String view = payload == null ? "all" : String.valueOf(payload.getOrDefault("view", "all"));
@@ -469,6 +657,39 @@ public class PromotionService {
 
     private Map<String, Object> customerMarkAllRead(String auth) {
         return notificationService.markAllNotificationsRead(auth);
+    }
+
+    private Map<String, Object> findPromotionPostState(int postId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT TOP (1) IsActive, IsImportant
+                FROM dbo.PromotionPosts
+                WHERE PromotionPostID = ?
+                """, postId);
+        if (rows.isEmpty()) {
+            return Map.of("IsActive", 0, "IsImportant", 0);
+        }
+        return rows.get(0);
+    }
+
+    private boolean isPromotionPostBroadcastEligible(Map<String, Object> postState) {
+        if (postState == null) {
+            return false;
+        }
+        return requireBit(postState.get("IsActive")) == 1 && requireBit(postState.get("IsImportant")) == 1;
+    }
+
+    private void publishPromotionPostIfNeeded(Integer postId, Object title, int isActive, int isImportant) {
+        if (postId == null || isActive != 1 || isImportant != 1) {
+            return;
+        }
+        String normalizedTitle = String.valueOf(title == null ? "New promotion" : title);
+        notificationService.notifyAllCustomers(
+                "PROMOTION_POST_PUBLISHED",
+                "New promotion available",
+                normalizedTitle + " is now live. Open Promotions to claim it before it expires.",
+                "/customer/promotions",
+                postId,
+                "PROMOTION_POST_" + postId);
     }
 
     private int requireInt(Object value, String message) {

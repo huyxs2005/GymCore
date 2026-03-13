@@ -1394,6 +1394,24 @@ END;
 GO
 
 --- =========================================================
+--- Section 4b: Promotion post broadcast discipline
+--- =========================================================
+IF OBJECT_ID('dbo.PromotionPosts', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.PromotionPosts was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+GO
+
+IF COL_LENGTH('dbo.PromotionPosts', 'IsImportant') IS NULL
+BEGIN
+    ALTER TABLE dbo.PromotionPosts
+    ADD IsImportant BIT NOT NULL
+        CONSTRAINT DF_PromotionPosts_IsImportant DEFAULT 0;
+END;
+GO
+
+--- =========================================================
 --- Section 5: Seed data moved out of alter script
 --- =========================================================
 --- Coupon and product seed/test records are maintained in:

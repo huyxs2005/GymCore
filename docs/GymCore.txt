@@ -458,6 +458,7 @@ CREATE TABLE dbo.PromotionPosts (
     StartAt DATETIME2 NOT NULL,
     EndAt DATETIME2 NOT NULL,
     IsActive BIT NOT NULL CONSTRAINT DF_PromotionPosts_IsActive DEFAULT 1,
+    IsImportant BIT NOT NULL CONSTRAINT DF_PromotionPosts_IsImportant DEFAULT 0,
 
     CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_PromotionPosts_CreatedAt DEFAULT SYSDATETIME(),
     CreatedBy INT NULL,
