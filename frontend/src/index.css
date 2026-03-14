@@ -314,6 +314,11 @@
   color: #ffd78f !important;
 }
 
+.hover\:text-emerald-400:hover,
+.hover\:\!text-emerald-400:hover {
+  color: #34d399 !important;
+}
+
 .hover\:border-gym-300:hover,
 .hover\:border-gym-200:hover {
   border-color: rgba(245, 158, 11, 0.38) !important;

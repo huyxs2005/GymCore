@@ -608,3 +608,55 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - archive/restore actions
   - gallery reorder/remove
   - conservative file cleanup for removed managed uploads
+
+## 32) Shared customer shell + AI widget refinements (Mar 14, 2026)
+- Customer/global header navigation order is now:
+  1. `Check-in & Health`
+  2. `Progress Hub`
+  3. `Coach Booking`
+  4. `Promotions`
+  5. `Membership`
+  6. `Product Shop`
+  7. `Workout/Food/AI`
+- Header layout was flattened:
+  - desktop nav no longer uses the old card-like capsule treatment
+  - header spacing was widened so nav/actions use more of the available row
+- AI chat widget is now mounted from the shared shell instead of only one page.
+  - It appears across authenticated workspace pages.
+  - It is no longer limited to the customer knowledge page.
+- AI chat intro and language behavior:
+  - intro now shows two paragraphs:
+    - English
+    - Vietnamese
+  - actual assistant replies should default to the user's language
+  - Gemini prompt now explicitly requests plain-text responses with language consistency
+  - frontend strips markdown artifacts like `**bold**` before rendering assistant text
+- Gemini local-runtime hardening:
+  - backend chat config now resolves Gemini settings from:
+    - Spring-bound properties
+    - OS env vars
+    - local `.env` files
+  - this was added so local chat still works when `.env` loading differs across startup flows
+
+## 33) Public landing page direction (Mar 14, 2026)
+- Landing page hero is now moving toward an image/video-led marketing layout rather than a grid of feature cards.
+- Current hero decisions:
+  - no hero CTA button for now
+  - customer-facing marketing copy only; remove internal/editorial wording
+  - background media slot is a looping local video placeholder:
+    - `frontend/public/media/landing-hero.mp4`
+  - video should remain:
+    - muted
+    - looped
+    - inline
+    - slightly blurred/darkened for text readability
+- Hero support row under the main copy now uses three theme words:
+  - `Train`
+  - `Recover`
+  - `Belong`
+- Important UI preference captured from current iteration:
+  - do not solve wrapping complaints by rewriting approved copy first
+  - prefer layout/width adjustments before changing the sentence itself
+- Contact strip under hero:
+  - opening hours / hotline / address remain
+  - old boxed card treatment was removed in favor of a flatter row

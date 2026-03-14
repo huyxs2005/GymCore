@@ -1,28 +1,19 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LandingPage from './LandingPage'
 
-vi.mock('../../features/auth/useSession', () => ({
-  useSession: vi.fn(),
-}))
-
-const { useSession } = await import('../../features/auth/useSession')
-
 describe('LandingPage', () => {
-  it('uses a role-specific CTA for authenticated customers without workspace wording', () => {
-    useSession.mockReturnValue({
-      isAuthenticated: true,
-      user: { role: 'CUSTOMER', fullName: 'Customer Minh' },
-    })
-
+  it('renders the image-first hero without a hero CTA', () => {
     render(
       <MemoryRouter>
         <LandingPage />
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: /Go to Membership/i })).toHaveAttribute('href', '/customer/membership')
-    expect(screen.queryByRole('link', { name: /Workspace/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Go to Membership/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Explore Products/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Your fitness journey starts here/i })).toBeInTheDocument()
+    expect(screen.getByText(/Step into a gym environment built for strength/i)).toBeInTheDocument()
   })
 })

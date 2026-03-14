@@ -82,6 +82,15 @@
     - pickup confirmation
   - Keep this aligned with existing pickup-only product business rules.
 
+## Current Frontend Content Handoff
+- [ ] Replace the temporary landing-page hero media slot with the final asset.
+  - Expected local path:
+    - `frontend/public/media/landing-hero.mp4`
+  - Current implementation expects:
+    - muted looped playback
+    - background-style usage in the public landing hero
+    - readability preserved by blur + dark overlay
+
 ## Selective Merge Plan: `origin/feature/coupon` -> `beta-test-0.2`
 - [x] Keep `beta-test-0.2` as source of truth during merge.
   - Do not overwrite newer membership, PT, notification, auth, or coupon-target logic that already exists on this branch.

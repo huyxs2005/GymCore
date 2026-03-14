@@ -128,7 +128,7 @@ describe('AppShell cart button', () => {
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
 
     renderShell('/customer/shop')
-    const footer = screen.getByText(/Quick Links/i).closest('section')
+    const footer = screen.getByText(/Explore/i).closest('section')
     await user.click(within(footer).getByRole('link', { name: /^membership$/i }))
 
     expect(scrollSpy).toHaveBeenCalledWith(0, 0)
