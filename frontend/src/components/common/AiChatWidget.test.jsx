@@ -29,30 +29,13 @@ describe('AiChatWidget', () => {
     })
   })
 
-  it('shows quick actions and forwards the selected action', async () => {
+  it('does not render the quick actions section', async () => {
     const user = userEvent.setup()
-    const onAction = vi.fn()
 
-    render(
-      <AiChatWidget
-        context={{ mode: 'WORKOUTS' }}
-        quickActions={[
-          { id: 'progress', label: 'Review latest progress signals', route: '/customer/progress-hub', type: 'route' },
-        ]}
-        onAction={onAction}
-      />,
-    )
+    render(<AiChatWidget context={{ mode: 'WORKOUTS' }} />)
 
     await user.click(screen.getByRole('button', { name: 'Open AI chat' }))
-    expect(await screen.findByText('Quick actions')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Review latest progress signals' }))
-    expect(onAction).toHaveBeenCalledWith({
-      id: 'progress',
-      label: 'Review latest progress signals',
-      route: '/customer/progress-hub',
-      type: 'route',
-    })
+    expect(screen.queryByText(/Quick actions/i)).not.toBeInTheDocument()
   })
 
   it('posts normalized chat context when sending a message', async () => {
@@ -64,11 +47,6 @@ describe('AiChatWidget', () => {
           mode: 'FOODS',
           selectedFood: { foodId: 21, name: 'Chicken Rice Bowl' },
         }}
-        quickActions={[
-          { id: 'review-progress-hub', label: 'Review latest progress signals', route: '/customer/progress-hub', type: 'route' },
-          { label: 'Open selected food', route: '/customer/knowledge/foods/21' },
-          { label: '', route: '/customer/knowledge/foods/404' },
-        ]}
       />,
     )
 
@@ -86,24 +64,59 @@ describe('AiChatWidget', () => {
           mode: 'FOODS',
           selectedWorkout: null,
           selectedFood: { foodId: 21, name: 'Chicken Rice Bowl' },
-          availableActions: [
-            {
-              id: 'review-progress-hub',
-              label: 'Review latest progress signals',
-              route: '/customer/progress-hub',
-              type: 'route',
-            },
-            {
-              id: '/customer/knowledge/foods/21',
-              label: 'Open selected food',
-              route: '/customer/knowledge/foods/21',
-              type: 'route',
-            },
-          ],
+          preferredLanguage: 'vi',
         },
       })
     })
 
     expect(await screen.findByText('Tap squat va theo doi phuc hoi.')).toBeInTheDocument()
+  })
+
+  it('uses browser language for the greeting and strips markdown artifacts from replies', async () => {
+    const user = userEvent.setup()
+    const originalLanguage = window.localStorage.getItem('gymcore.ai.language')
+
+    window.localStorage.removeItem('gymcore.ai.language')
+    Object.defineProperty(window.navigator, 'language', {
+      configurable: true,
+      value: 'vi-VN',
+    })
+    Object.defineProperty(window.navigator, 'languages', {
+      configurable: true,
+      value: ['vi-VN'],
+    })
+    apiClient.post.mockResolvedValueOnce({
+      data: {
+        data: {
+          reply: '**Uc ga** giup no lau va giau protein.',
+        },
+      },
+    })
+
+    render(<AiChatWidget context={{ mode: 'FOODS' }} />)
+
+    await user.click(screen.getByRole('button', { name: 'Open AI chat' }))
+    expect(screen.getByText(/Hello\. I can help with workouts/i)).toBeInTheDocument()
+    expect(screen.getByText(/Xin chào\. Tôi có thể hỗ trợ/i)).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox'), 'giam can')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith('/v1/ai/chat', expect.objectContaining({
+        context: expect.objectContaining({
+          preferredLanguage: 'vi',
+        }),
+      }))
+    })
+
+    expect(await screen.findByText('Uc ga giup no lau va giau protein.')).toBeInTheDocument()
+    expect(screen.queryByText(/\*\*Uc ga\*\*/)).not.toBeInTheDocument()
+
+    if (originalLanguage == null) {
+      window.localStorage.removeItem('gymcore.ai.language')
+    } else {
+      window.localStorage.setItem('gymcore.ai.language', originalLanguage)
+    }
   })
 })

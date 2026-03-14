@@ -5,7 +5,6 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { foodApi } from '../../features/content/api/foodApi'
 import { workoutApi } from '../../features/content/api/workoutApi'
-import AiChatWidget from '../../components/common/AiChatWidget'
 import { aiApi } from '../../features/content/api/aiApi'
 import { coachApi } from '../../features/coach/api/coachApi'
 
@@ -107,15 +106,6 @@ function renderContextSource(contextMeta = {}) {
     return `Fallback: ${fallbackSignals.join(' • ')}`
   }
   return 'Catalog context'
-}
-
-function normalizeActionList(...groups) {
-  const deduped = new Map()
-  groups.flat().forEach((action) => {
-    if (!action?.route || !action?.label) return
-    deduped.set(action.id || action.route, action)
-  })
-  return Array.from(deduped.values())
 }
 
 function CustomerKnowledgePage() {
@@ -280,44 +270,6 @@ function CustomerKnowledgePage() {
     () => personalizedFoodMutation.data?.foods ?? [],
     [personalizedFoodMutation.data],
   )
-  const widgetQuickActions = useMemo(
-    () =>
-      normalizeActionList(
-        weeklyPlan.nextActions,
-        savedRecommendations.nextActions,
-        workoutAssistantMutation.data?.workouts?.map((workout) => workout?.action),
-        selectedWorkoutId
-          ? [
-              {
-                id: 'knowledge-selected-workout',
-                label: 'Open workout detail',
-                route: '/customer/knowledge',
-                type: 'open_workout_detail',
-                workoutId: selectedWorkoutId,
-              },
-            ]
-          : [],
-        selectedFoodId
-          ? [
-              {
-                id: 'knowledge-selected-food',
-                label: 'Open food detail',
-                route: '/customer/knowledge',
-                type: 'open_food_detail',
-                foodId: selectedFoodId,
-              },
-            ]
-          : [],
-      ),
-    [
-      weeklyPlan.nextActions,
-      savedRecommendations.nextActions,
-      workoutAssistantMutation.data?.workouts,
-      selectedWorkoutId,
-      selectedFoodId,
-    ],
-  )
-
   const toggleFoodTag = (tagId) => {
     setSelectedFoodTags((prev) =>
       prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId],
@@ -1404,35 +1356,6 @@ function CustomerKnowledgePage() {
           </div>
         ) : null}
       </section>
-
-      <AiChatWidget
-        context={{
-          mode: activeTab,
-          selectedWorkout: workoutDetailQuery.data
-            ? {
-                workoutId: workoutDetailQuery.data.workoutId,
-                name: workoutDetailQuery.data.name,
-                description: workoutDetailQuery.data.description,
-                instructions: workoutDetailQuery.data.instructions,
-                videoUrl: workoutDetailQuery.data.videoUrl,
-              }
-            : null,
-          selectedFood: foodDetailQuery.data
-            ? {
-                foodId: foodDetailQuery.data.foodId,
-                name: foodDetailQuery.data.name,
-                description: foodDetailQuery.data.description,
-                recipe: foodDetailQuery.data.recipe,
-                calories: foodDetailQuery.data.calories,
-                protein: foodDetailQuery.data.protein,
-                carbs: foodDetailQuery.data.carbs,
-                fat: foodDetailQuery.data.fat,
-              }
-            : null,
-        }}
-        quickActions={widgetQuickActions}
-        onAction={handleAiAction}
-      />
     </WorkspaceScaffold>
   )
 }

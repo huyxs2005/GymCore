@@ -18,6 +18,15 @@ vi.mock('../common/AuthHeaderActions', () => ({
   default: () => <div data-testid="auth-actions" />,
 }))
 
+vi.mock('../common/AiChatWidget', () => ({
+  default: ({ context, quickActions = [] }) => (
+    <div data-testid="ai-chat-widget">
+      <span data-testid="ai-chat-mode">{context?.mode || 'UNKNOWN'}</span>
+      <span data-testid="ai-chat-actions">{quickActions.length}</span>
+    </div>
+  ),
+}))
+
 vi.mock('../common/NotificationDropdown', () => ({
   default: () => <div data-testid="notif" />,
 }))
@@ -99,6 +108,21 @@ describe('AppShell cart button', () => {
     expect(screen.queryByRole('button', { name: /open cart/i })).not.toBeInTheDocument()
   })
 
+  it('shows the AI widget across authenticated pages with route-aware context', () => {
+    renderShell('/customer/membership')
+    expect(screen.getByTestId('ai-chat-widget')).toBeInTheDocument()
+    expect(screen.getByTestId('ai-chat-mode')).toHaveTextContent('MEMBERSHIP')
+    expect(Number(screen.getByTestId('ai-chat-actions').textContent)).toBeGreaterThan(0)
+  })
+
+  it('does not show the AI widget when the session is not authenticated', () => {
+    mockSessionState.isAuthenticated = false
+    mockSessionState.user = null
+
+    renderShell('/auth/login')
+    expect(screen.queryByTestId('ai-chat-widget')).not.toBeInTheDocument()
+  })
+
   it('jumps to top immediately when footer quick link is clicked', async () => {
     const user = userEvent.setup()
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -138,6 +162,19 @@ describe('AppShell cart button', () => {
     renderShell('/')
 
     const headerNav = screen.getAllByRole('navigation')[0]
+    const labels = within(headerNav)
+      .getAllByRole('link')
+      .map((link) => link.textContent?.trim())
+      .filter(Boolean)
+    expect(labels).toEqual([
+      'Check-in & Health',
+      'Progress Hub',
+      'Coach Booking',
+      'Promotions',
+      'Membership',
+      'Product Shop',
+      'Workout/Food/AI',
+    ])
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Progress Hub$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Check-in & Health$/i })).toBeInTheDocument()

@@ -139,6 +139,7 @@ public class ContentController {
         @SuppressWarnings("unchecked")
         Map<String, Object> aiContextEnvelope = (Map<String, Object>) contentService.execute("resolve-ai-context", request);
         context = new java.util.LinkedHashMap<>(context);
+        context.put("conversationMessages", messages);
         context.put("aiContext", aiContextEnvelope.getOrDefault("aiContext", Map.of()));
         Map<String, Object> responseContextMeta = new java.util.LinkedHashMap<>(
                 (Map<String, Object>) aiContextEnvelope.getOrDefault("contextMeta", Map.of()));

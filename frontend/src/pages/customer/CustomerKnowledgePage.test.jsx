@@ -19,18 +19,6 @@ vi.mock('../../components/frame/WorkspaceScaffold', () => ({
   default: ({ children }) => <div>{children}</div>,
 }))
 
-vi.mock('../../components/common/AiChatWidget', () => ({
-  default: ({ quickActions = [], onAction }) => (
-    <div data-testid="ai-chat-widget">
-      {quickActions.map((action) => (
-        <button key={action.id || action.route} type="button" onClick={() => onAction?.(action)}>
-          Widget: {action.label}
-        </button>
-      ))}
-    </div>
-  ),
-}))
-
 vi.mock('../../features/content/api/workoutApi', () => ({
   workoutApi: {
     getWorkouts: vi.fn(),
@@ -372,7 +360,7 @@ describe('CustomerKnowledgePage', () => {
     expect(navigateMock).toHaveBeenCalledWith('/customer/coach-booking')
   })
 
-  it('surfaces AI action bridges inside the assistant and widget affordances', async () => {
+  it('surfaces AI action bridges inside the assistant panels', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -384,11 +372,7 @@ describe('CustomerKnowledgePage', () => {
     expect(await screen.findByText('Brace, squat, and drive through the floor.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Recommend from saved goals' }))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Widget: Review latest progress signals' })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Widget: Review latest progress signals' }))
+    await user.click(await screen.findByRole('button', { name: 'Review latest progress signals' }))
     expect(navigateMock).toHaveBeenCalledWith('/customer/progress-hub')
   })
 

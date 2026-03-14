@@ -1,5 +1,8 @@
 package com.gymcore.backend.modules.content.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -48,6 +51,14 @@ public class GeminiChatService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    @PostConstruct
+    void initializeConfig() {
+        apiKey = resolveConfigValue(apiKey, "APP_AI_GEMINI_API_KEY", null);
+        model = resolveConfigValue(model, "APP_AI_GEMINI_MODEL", "gemini-2.5-flash");
+        log.info("Gemini config initialized: apiKeyPresent={}, model='{}'",
+                StringUtils.hasText(apiKey), model);
+    }
+
     public String chat(List<Map<String, Object>> messages, Map<String, Object> context) {
         if (!StringUtils.hasText(apiKey)) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
@@ -92,6 +103,64 @@ public class GeminiChatService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "AI provider request failed.");
         }
+    }
+
+    private String resolveConfigValue(String propertyValue, String envKey, String fallback) {
+        if (StringUtils.hasText(propertyValue)) {
+            return propertyValue.trim();
+        }
+        String envValue = System.getenv(envKey);
+        if (StringUtils.hasText(envValue)) {
+            return envValue.trim();
+        }
+        String dotEnvValue = loadFromDotEnv(envKey);
+        if (StringUtils.hasText(dotEnvValue)) {
+            return dotEnvValue.trim();
+        }
+        return fallback;
+    }
+
+    private String loadFromDotEnv(String key) {
+        for (Path candidate : getDotEnvCandidates()) {
+            if (!Files.isRegularFile(candidate)) {
+                continue;
+            }
+            try {
+                for (String rawLine : Files.readAllLines(candidate)) {
+                    String line = rawLine == null ? "" : rawLine.trim();
+                    if (line.isEmpty() || line.startsWith("#")) {
+                        continue;
+                    }
+                    String prefix = key + "=";
+                    if (!line.startsWith(prefix)) {
+                        continue;
+                    }
+                    return stripOptionalQuotes(line.substring(prefix.length()).trim());
+                }
+            } catch (IOException exception) {
+                log.debug("Skipping unreadable env file '{}': {}", candidate, exception.getMessage());
+            }
+        }
+        return null;
+    }
+
+    private List<Path> getDotEnvCandidates() {
+        Path cwd = Path.of("").toAbsolutePath().normalize();
+        return List.of(
+                cwd.resolve(".env"),
+                cwd.resolve(".env.local"),
+                cwd.resolve("backend").resolve(".env"),
+                cwd.resolve("backend").resolve(".env.local"));
+    }
+
+    private String stripOptionalQuotes(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     private int parseRetryAfterSeconds(String body) {
@@ -244,10 +313,14 @@ public class GeminiChatService {
         String consultativeContext = buildConsultativeContext(context);
         String allowedActions = buildAllowedActionContext(context);
         String selectedContext = buildSelectedItemContext(context);
+        String responseLanguage = determineResponseLanguage(context);
         return """
                 You are GymCore AI assistant.
 
-                Respond in Vietnamese. Be concise, practical, and consultative.
+                Reply in %s.
+                Match the user's language consistently from the start. If the latest user message is Vietnamese, stay in Vietnamese. If it is English, stay in English.
+                Use plain text only. Do not use Markdown formatting, bold markers, heading markers, or code fences.
+                Be concise, practical, and consultative.
                 Scope: workouts, foods, weekly guidance, and routing users into real GymCore flows.
                 Never claim an action was completed inside chat. You can only explain or route the user to supported GymCore screens.
                 If user asks for medical advice, respond with general guidance and advise consulting a professional.
@@ -272,7 +345,61 @@ public class GeminiChatService {
 
                 Allowed food catalog from database:
                 %s
-                """.formatted(mode, consultativeContext, selectedContext, allowedActions, foodCatalog);
+                """.formatted(responseLanguage, mode, consultativeContext, selectedContext, allowedActions, foodCatalog);
+    }
+
+    private String determineResponseLanguage(Map<String, Object> context) {
+        String latestMessageLanguage = detectLatestUserMessageLanguage(context);
+        if (StringUtils.hasText(latestMessageLanguage)) {
+            return latestMessageLanguage;
+        }
+        String preferredLanguage = normalizeText(context == null ? null : context.get("preferredLanguage"));
+        if ("vi".equalsIgnoreCase(preferredLanguage) || "vietnamese".equalsIgnoreCase(preferredLanguage)) {
+            return "Vietnamese";
+        }
+        return "English";
+    }
+
+    private String detectLatestUserMessageLanguage(Map<String, Object> context) {
+        Object rawMessages = context == null ? null : context.get("conversationMessages");
+        if (!(rawMessages instanceof Collection<?> collection)) {
+            return null;
+        }
+        List<?> items = new ArrayList<>(collection);
+        for (int index = items.size() - 1; index >= 0; index--) {
+            Map<String, Object> message = asMap(items.get(index));
+            String role = normalizeText(message.get("role"));
+            if (!"user".equalsIgnoreCase(role)) {
+                continue;
+            }
+            String content = normalizeText(message.get("content"));
+            if (!StringUtils.hasText(content)) {
+                continue;
+            }
+            return inferLanguageFromText(content);
+        }
+        return null;
+    }
+
+    private String inferLanguageFromText(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        String sample = text.trim().toLowerCase();
+        if (sample.matches(".*[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ].*")) {
+            return "Vietnamese";
+        }
+        List<String> vietnameseKeywords = List.of(
+                "toi", "ban", "giam can", "tang can", "bua an", "tap", "bai tap", "huan luyen", "dinh duong", "thuc don");
+        for (String keyword : vietnameseKeywords) {
+            if (sample.contains(keyword)) {
+                return "Vietnamese";
+            }
+        }
+        if (sample.matches(".*[a-z].*")) {
+            return "English";
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

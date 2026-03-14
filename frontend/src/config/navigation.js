@@ -1,10 +1,10 @@
 export const customerNav = [
-  { to: '/customer/membership', label: 'Membership' },
-  { to: '/customer/progress-hub', label: 'Progress Hub' },
   { to: '/customer/checkin-health', label: 'Check-in & Health' },
+  { to: '/customer/progress-hub', label: 'Progress Hub' },
   { to: '/customer/coach-booking', label: 'Coach Booking' },
-  { to: '/customer/shop', label: 'Product Shop' },
   { to: '/customer/promotions', label: 'Promotions' },
+  { to: '/customer/membership', label: 'Membership' },
+  { to: '/customer/shop', label: 'Product Shop' },
   { to: '/customer/knowledge', label: 'Workout/Food/AI' },
 ]
 

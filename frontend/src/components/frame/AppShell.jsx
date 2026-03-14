@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, ChevronLeft, ChevronRight, Clock3, Dumbbell, MapPin, Phone, ShoppingCart } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import AuthHeaderActions from '../common/AuthHeaderActions'
+import AiChatWidget from '../common/AiChatWidget'
 import NotificationDropdown from '../common/NotificationDropdown'
 import { useSession } from '../../features/auth/useSession'
 import { adminNav, coachNav, customerNav, receptionNav } from '../../config/navigation'
@@ -70,6 +71,52 @@ function getQuickLinks(pathname, role) {
   }
 
   return [{ to: '/', label: 'Home' }]
+}
+
+function getAiMode(pathname, role) {
+  if (pathname.startsWith('/customer/knowledge')) return 'WORKOUTS'
+  if (pathname.startsWith('/customer/shop') || pathname.startsWith('/customer/cart') || pathname.startsWith('/customer/orders')) return 'PRODUCTS'
+  if (pathname.startsWith('/customer/membership')) return 'MEMBERSHIP'
+  if (pathname.startsWith('/customer/coach-booking')) return 'COACH_BOOKING'
+  if (pathname.startsWith('/customer/progress-hub')) return 'PROGRESS_HUB'
+  if (pathname.startsWith('/admin/')) return 'ADMIN'
+  if (pathname.startsWith('/coach/')) return 'COACH'
+  if (pathname.startsWith('/reception/')) return 'RECEPTION'
+  return role === 'CUSTOMER' ? 'WORKOUTS' : 'GENERAL'
+}
+
+function getAiQuickActions(pathname, role) {
+  const customerActions = [
+    { id: 'ai-membership', label: 'Open membership', route: '/customer/membership', type: 'route' },
+    { id: 'ai-progress-hub', label: 'Open progress hub', route: '/customer/progress-hub', type: 'route' },
+    { id: 'ai-coach-booking', label: 'Open coach booking', route: '/customer/coach-booking', type: 'route' },
+    { id: 'ai-product-shop', label: 'Open product shop', route: '/customer/shop', type: 'route' },
+    { id: 'ai-knowledge', label: 'Open workout/food AI', route: '/customer/knowledge', type: 'route' },
+  ]
+
+  const coachActions = [
+    { id: 'ai-coach-schedule', label: 'Open schedule', route: '/coach/schedule', type: 'route' },
+    { id: 'ai-coach-requests', label: 'Open booking requests', route: '/coach/booking-requests', type: 'route' },
+    { id: 'ai-coach-customers', label: 'Open customers', route: '/coach/customers', type: 'route' },
+  ]
+
+  const receptionActions = [
+    { id: 'ai-reception-checkin', label: 'Open check-in', route: '/reception/checkin', type: 'route' },
+    { id: 'ai-reception-pickup', label: 'Open pickup desk', route: '/reception/pickup', type: 'route' },
+    { id: 'ai-reception-invoices', label: 'Open invoices', route: '/reception/invoices', type: 'route' },
+  ]
+
+  const adminActions = [
+    { id: 'ai-admin-dashboard', label: 'Open dashboard', route: '/admin/dashboard', type: 'route' },
+    { id: 'ai-admin-support', label: 'Open support console', route: '/admin/support', type: 'route' },
+    { id: 'ai-admin-reports', label: 'Open reports', route: '/admin/reports', type: 'route' },
+  ]
+
+  if (pathname.startsWith('/admin/')) return adminActions
+  if (pathname.startsWith('/coach/')) return coachActions
+  if (pathname.startsWith('/reception/')) return receptionActions
+  if (pathname.startsWith('/customer/') || role === 'CUSTOMER') return customerActions
+  return []
 }
 
 function getOverflowState(element) {
@@ -151,6 +198,8 @@ function AppShell({ children }) {
   const [desktopOverflow, setDesktopOverflow] = useState({ left: false, right: false })
   const [mobileOverflow, setMobileOverflow] = useState({ left: false, right: false })
   const quickLinks = getQuickLinks(pathname, userRole)
+  const aiQuickActions = getAiQuickActions(pathname, userRole)
+  const showAiChatWidget = isAuthenticated
 
   function jumpToTop() {
     window.scrollTo(0, 0)
@@ -258,7 +307,7 @@ function AppShell({ children }) {
   return (
     <div className="flex min-h-screen flex-col bg-transparent text-slate-50">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[rgba(10,10,15,0.82)] backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-4 px-4 py-3 sm:px-6">
           <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-3 text-slate-50">
             <span className="rounded-xl bg-gym-500 p-2 text-slate-950 shadow-glow">
               <Dumbbell size={16} />
@@ -269,45 +318,48 @@ function AppShell({ children }) {
             </span>
           </Link>
 
-          <div className="flex items-center gap-3">
-            {showWorkspaceNav && (
-              <div className="relative hidden sm:block">
-                {desktopOverflow.left ? (
-                  <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start pl-1 text-slate-500" style={{ background: 'linear-gradient(90deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
-                    <ChevronLeft size={16} />
-                  </div>
-                ) : null}
-                {desktopOverflow.right ? (
-                  <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end pr-1 text-slate-500" style={{ background: 'linear-gradient(270deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
-                    <ChevronRight size={16} />
-                  </div>
-                ) : null}
-                <nav
-                  ref={desktopNavRef}
-                  className="gc-scrollbar-hidden hidden max-w-[74vw] select-none items-center gap-2 overflow-x-auto rounded-full border border-white/10 bg-white/5 px-4 py-1.5 shadow-ambient-sm backdrop-blur-xl whitespace-nowrap text-xs font-medium sm:flex sm:flex-nowrap sm:text-sm"
-                  onMouseDown={onDesktopMouseDown}
-                  onMouseUp={onDesktopMouseUp}
-                  onMouseLeave={onDesktopMouseLeave}
-                  onMouseMove={onDesktopMouseMove}
-                  aria-label="Workspace navigation"
-                >
-                  {headerLinks.map((link) => (
-                    <NavLink
-                      key={link.to}
-                      to={link.to}
-                      onClick={() => handleRouteClick(link.to)}
-                      className={({ isActive }) =>
-                        isActive
-                          ? 'rounded-full bg-gym-500 px-3 py-2 text-sm font-semibold text-slate-950 shadow-glow'
-                          : 'rounded-full px-3 py-2 text-sm text-slate-400 transition hover:bg-white/8 hover:text-slate-50'
-                      }
-                    >
-                      {link.label}
-                    </NavLink>
-                  ))}
-                </nav>
-              </div>
-            )}
+          {showWorkspaceNav ? (
+            <div className="relative hidden min-w-0 flex-1 sm:block">
+              {desktopOverflow.left ? (
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start pl-1 text-slate-500" style={{ background: 'linear-gradient(90deg, rgba(10,10,15,0.96) 0%, rgba(10,10,15,0.76) 60%, rgba(10,10,15,0) 100%)' }}>
+                  <ChevronLeft size={16} />
+                </div>
+              ) : null}
+              {desktopOverflow.right ? (
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end pr-1 text-slate-500" style={{ background: 'linear-gradient(270deg, rgba(10,10,15,0.96) 0%, rgba(10,10,15,0.76) 60%, rgba(10,10,15,0) 100%)' }}>
+                  <ChevronRight size={16} />
+                </div>
+              ) : null}
+              <nav
+                ref={desktopNavRef}
+                className="gc-scrollbar-hidden flex min-w-0 select-none items-center gap-1 overflow-x-auto px-2 whitespace-nowrap text-xs font-medium sm:text-sm"
+                onMouseDown={onDesktopMouseDown}
+                onMouseUp={onDesktopMouseUp}
+                onMouseLeave={onDesktopMouseLeave}
+                onMouseMove={onDesktopMouseMove}
+                aria-label="Workspace navigation"
+              >
+                {headerLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => handleRouteClick(link.to)}
+                    className={({ isActive }) =>
+                      isActive
+                        ? 'rounded-full px-3 py-2 text-sm font-semibold text-gym-500'
+                        : 'rounded-full px-3 py-2 text-sm text-slate-400 transition hover:text-slate-50'
+                    }
+                  >
+                    {link.label}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+          ) : (
+            <div className="hidden flex-1 sm:block" />
+          )}
+
+          <div className="ml-auto flex shrink-0 items-center gap-3">
             {isAuthenticated && <NotificationDropdown />}
             <CustomerShopCartButton
               visible={showShopCartButton}
@@ -321,7 +373,7 @@ function AppShell({ children }) {
           </div>
         </div>
         {showWorkspaceNav && (
-          <div className="mx-auto max-w-7xl px-4 pb-3 sm:hidden sm:px-6">
+          <div className="mx-auto w-full max-w-[1600px] px-4 pb-3 sm:hidden sm:px-6">
             <div className="relative">
               {mobileOverflow.left ? (
                 <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-8 items-center justify-start pl-1 text-slate-500" style={{ background: 'linear-gradient(90deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
@@ -335,7 +387,7 @@ function AppShell({ children }) {
               ) : null}
               <nav
                 ref={mobileNavRef}
-                className="gc-scrollbar-hidden flex select-none flex-nowrap gap-2 overflow-x-auto rounded-full border border-white/10 bg-white/5 px-3 py-1.5 shadow-ambient-sm backdrop-blur-xl whitespace-nowrap text-xs font-medium"
+                className="gc-scrollbar-hidden flex select-none flex-nowrap gap-2 overflow-x-auto px-1 whitespace-nowrap text-xs font-medium"
                 onMouseDown={onMobileMouseDown}
                 onMouseUp={onMobileMouseUp}
                 onMouseLeave={onMobileMouseLeave}
@@ -347,12 +399,12 @@ function AppShell({ children }) {
                     key={link.to}
                     to={link.to}
                     onClick={() => handleRouteClick(link.to)}
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'rounded-full bg-gym-500 px-3 py-2 text-slate-950 shadow-glow'
-                        : 'rounded-full px-3 py-2 text-slate-400 transition hover:bg-white/8 hover:text-slate-50'
-                    }
-                  >
+                  className={({ isActive }) =>
+                    isActive
+                        ? 'rounded-full px-3 py-2 text-gym-500'
+                        : 'rounded-full px-3 py-2 text-slate-400 transition hover:text-slate-50'
+                  }
+                >
                     {link.label}
                   </NavLink>
                 ))}
@@ -363,6 +415,23 @@ function AppShell({ children }) {
       </header>
 
       <main className="flex-1">{children}</main>
+
+      {showAiChatWidget ? (
+        <AiChatWidget
+          context={{ mode: getAiMode(pathname, userRole) }}
+          quickActions={aiQuickActions}
+          onAction={(action) => {
+            const route = String(action?.route || '').trim()
+            if (!route) return
+            if (pathname === route) {
+              smoothScrollToTop()
+              return
+            }
+            jumpToTop()
+            navigate(route)
+          }}
+        />
+      ) : null}
 
       <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.45),rgba(10,10,15,0.92))] px-4 pb-6 pt-10 sm:px-6">
         <div className="mx-auto max-w-7xl">
