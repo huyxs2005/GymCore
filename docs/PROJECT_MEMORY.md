@@ -660,3 +660,44 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 - Contact strip under hero:
   - opening hours / hotline / address remain
   - old boxed card treatment was removed in favor of a flatter row
+
+## 34) Public homepage polish pass (Mar 15, 2026)
+- Public landing page was further refined into a more customer-facing marketing homepage.
+- Hero:
+  - local looping video remains the hero background
+  - no hero CTA in the hero itself
+  - support row remains `Train / Recover / Belong`
+- Contact strip below hero:
+  - hotline text is now plain text, not a clickable phone link
+  - address is directly clickable to Google Maps
+  - address text uses proper Vietnamese spelling:
+    - `Khu đô thị FPT City, Ngũ Hành Sơn, Đà Nẵng 550000`
+  - homepage address hover now uses an explicit green hover color instead of the amber `gym-*` token
+- Header/footer hover behavior:
+  - header nav hover now uses explicit green, not the amber `gym-*` token
+  - footer clickable links also use the same hover treatment
+  - note: `frontend/src/index.css` overrides `text-gym-*` toward amber, so true green hover states must use explicit emerald overrides
+- `Why GymCore` section:
+  - copy was rewritten for customers instead of internal/admin wording
+  - right-side placeholders were replaced with real local images
+  - collage layout now uses:
+    - gym room
+    - QR check-in
+    - coach discussion
+- `Membership` section:
+  - merged old member-journey content into the membership area
+  - comparison now shows what each membership includes/excludes with green checks and red X marks
+  - one shared `Buy now` button sits under the left membership pricing block
+  - `Gym + Coach membership required for PT booking` is plain yellow text, not a chip/card
+- `Supplement Products` section:
+  - placeholder was replaced with the local `creatin.jpg` asset
+  - section includes one shared `Buy now` button plus plain yellow `Pickup at gym only` text
+- FAQ:
+  - old `Before You Visit` rows were replaced with a customer-facing FAQ accordion
+  - no item is open by default
+- Image styling decisions for the public landing page:
+  - landing-page images now use sharp rectangular corners
+  - `creatin.jpg` is no longer forced into a cropped/letterboxed box
+  - membership consultation and product images now use the same subtle hover treatment as the other landing images
+- CSS cleanup preference:
+  - repeated landing/homepage styles should gradually move from large JSX class strings into shared classes in `frontend/src/index.css`

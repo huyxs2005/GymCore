@@ -90,6 +90,9 @@
     - muted looped playback
     - background-style usage in the public landing hero
     - readability preserved by blur + dark overlay
+- [ ] Continue homepage CSS cleanup by moving repeated landing-page utility strings into shared classes in `frontend/src/index.css`.
+  - Current preference:
+    - when the same long class pattern appears repeatedly in `LandingPage.jsx`, promote it into a reusable CSS/component class instead of expanding JSX noise further
 
 ## Selective Merge Plan: `origin/feature/coupon` -> `beta-test-0.2`
 - [x] Keep `beta-test-0.2` as source of truth during merge.
