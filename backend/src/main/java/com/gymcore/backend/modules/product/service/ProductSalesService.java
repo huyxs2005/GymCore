@@ -22,6 +22,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -69,6 +70,7 @@ public class ProductSalesService {
             case "customer-delete-cart-item" -> customerDeleteCartItem(authorizationHeader, safePayload);
             case "customer-checkout" -> customerCheckout(authorizationHeader, safePayload);
             case "customer-confirm-payment-return" -> customerConfirmPaymentReturn(authorizationHeader, safePayload);
+            case "payment-webhook" -> handlePaymentWebhook(safePayload);
             case "customer-get-my-orders" -> customerGetMyOrders(authorizationHeader);
             case "admin-get-products" -> adminGetProducts(authorizationHeader);
             case "admin-create-product" -> adminCreateProduct(authorizationHeader, safePayload);
@@ -81,6 +83,9 @@ public class ProductSalesService {
                     authorizationHeader,
                     requirePositiveInt(safePayload.get("invoiceId"), "Invoice ID is required."));
             case "admin-confirm-invoice-pickup" -> orderInvoiceService.adminConfirmInvoicePickup(
+                    authorizationHeader,
+                    requirePositiveInt(safePayload.get("invoiceId"), "Invoice ID is required."));
+            case "admin-resend-invoice-email" -> orderInvoiceService.adminResendInvoiceEmail(
                     authorizationHeader,
                     requirePositiveInt(safePayload.get("invoiceId"), "Invoice ID is required."));
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -194,9 +199,9 @@ public class ProductSalesService {
         int rating = requireRating(body.get("rating"));
         String comment = requireReviewComment(body.get("comment"));
 
-        if (!customerHasPaidOrderForProduct(user.userId(), productId)) {
+        if (!customerHasPickedUpProduct(user.userId(), productId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Review blocked: customer must have a PAID order for this product.");
+                    "Review blocked: customer must have picked up this product before reviewing.");
         }
 
         try {
@@ -210,7 +215,7 @@ public class ProductSalesService {
                     : exception.getMessage();
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     message != null && message.contains("Review blocked")
-                            ? "Review blocked: customer must have a PAID order for this product."
+                            ? "Review blocked: customer must have picked up this product before reviewing."
                             : "Unable to create review. You may have already reviewed this product.");
         }
 
@@ -225,9 +230,9 @@ public class ProductSalesService {
         int rating = requireRating(body.get("rating"));
         String comment = requireReviewComment(body.get("comment"));
 
-        if (!customerHasPaidOrderForProduct(user.userId(), productId)) {
+        if (!customerHasPickedUpProduct(user.userId(), productId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Review blocked: customer must have a PAID order for this product.");
+                    "Review blocked: customer must have picked up this product before reviewing.");
         }
 
         int updated = jdbcTemplate.update("""
@@ -585,6 +590,76 @@ public class ProductSalesService {
         response.put("handled", true);
         response.put("paymentId", paymentId);
         response.put("status", "SUCCESS");
+        response.putAll(orderInvoiceService.handleSuccessfulProductPayment(paymentId));
+        return response;
+    }
+
+    private Map<String, Object> handlePaymentWebhook(Map<String, Object> payload) {
+        Object headersRaw = payload.get("headers");
+        if (!(headersRaw instanceof HttpHeaders headers)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Webhook headers are required.");
+        }
+
+        Map<String, Object> body = castToMap(payload.get("body"));
+        Map<String, Object> data = castToMap(body.get("data"));
+        payOsService.verifyWebhookSignature(headers, body);
+
+        Object paymentIdRaw = firstNonNull(
+                body.get("paymentId"),
+                body.get("orderCode"),
+                data.get("paymentId"),
+                data.get("orderCode"),
+                body.get("paymentLinkId"),
+                body.get("id"),
+                data.get("paymentLinkId"),
+                data.get("id"));
+        String status = upperText(firstNonNull(
+                body.get("status"),
+                body.get("payosStatus"),
+                data.get("status"),
+                data.get("payosStatus")));
+
+        if (!isSuccessReturnStatus(status, upperText(body.get("code")), upperText(body.get("cancel")), body.get("success"))) {
+            return Map.of("handled", false, "reason", "Ignored non-success payment status: " + status);
+        }
+
+        Map<String, Object> paymentLookupPayload = new LinkedHashMap<>();
+        paymentLookupPayload.put("paymentId", paymentIdRaw);
+        paymentLookupPayload.put("orderCode", paymentIdRaw);
+        paymentLookupPayload.put("paymentLinkId",
+                firstNonNull(body.get("paymentLinkId"), body.get("id"), data.get("paymentLinkId"), data.get("id")));
+        Integer paymentId = resolvePaymentIdFromReturnPayload(paymentLookupPayload);
+        if (paymentId == null || paymentId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to resolve payment ID from PayOS webhook.");
+        }
+
+        Integer orderCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.Payments
+                WHERE PaymentID = ?
+                  AND OrderID IS NOT NULL
+                """, Integer.class, paymentId);
+        if (orderCount == null || orderCount == 0) {
+            return Map.of("handled", false, "reason", "Ignored non-product payment.");
+        }
+
+        try {
+            jdbcTemplate.update("""
+                    UPDATE dbo.Payments
+                    SET PayOS_Status = ?
+                    WHERE PaymentID = ? AND Status = 'PENDING'
+                    """, normalizedSuccessStatus(status), paymentId);
+            jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
+            notifyOrderPaymentSuccess(paymentId);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to confirm payment from webhook.", exception);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("handled", true);
+        response.put("paymentId", paymentId);
+        response.put("status", normalizedSuccessStatus(status));
         response.putAll(orderInvoiceService.handleSuccessfulProductPayment(paymentId));
         return response;
     }
@@ -1166,21 +1241,23 @@ public class ProductSalesService {
         }
     }
 
-    private boolean customerHasPaidOrderForProduct(int customerId, int productId) {
+    private boolean customerHasPickedUpProduct(int customerId, int productId) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1)
                 FROM dbo.Orders o
                 JOIN dbo.OrderItems oi ON oi.OrderID = o.OrderID
+                JOIN dbo.OrderInvoices i ON i.OrderID = o.OrderID
                 WHERE o.CustomerID = ?
                   AND oi.ProductID = ?
                   AND o.Status = 'PAID'
+                  AND i.PickedUpAt IS NOT NULL
                 """, Integer.class, customerId, productId);
         return count != null && count > 0;
     }
 
     private Map<String, Object> loadCustomerReviewContext(int customerId, int productId) {
         Map<String, Object> context = new LinkedHashMap<>();
-        context.put("canReview", customerHasPaidOrderForProduct(customerId, productId));
+        context.put("canReview", customerHasPickedUpProduct(customerId, productId));
 
         List<Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT TOP (1) ProductReviewID, Rating, Comment, ReviewDate
@@ -1236,6 +1313,19 @@ public class ProductSalesService {
             }
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castToMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private String normalizedSuccessStatus(String status) {
+        String normalized = upperText(status);
+        return normalized.isBlank() ? "SUCCESS" : normalized;
     }
 
     private boolean isSuccessReturnStatus(String status, String code, String cancel, Object successRaw) {

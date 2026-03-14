@@ -54,6 +54,73 @@ class PromotionControllerTest {
     }
 
     @Test
+    void createPost_shouldPassImportantFlagToService() {
+        Map<String, Object> payload = Map.of(
+                "title", "Important launch",
+                "content", "Broadcast this campaign",
+                "bannerUrl", "/banner.png",
+                "promotionId", 3,
+                "startAt", "2026-03-01",
+                "endAt", "2026-03-31",
+                "isActive", 1,
+                "isImportant", 1);
+        when(promotionService.execute("admin-create-promotion-post", "Bearer admin", payload))
+                .thenReturn(Map.of("success", true));
+
+        ApiResponse<Map<String, Object>> response = controller.createPost("Bearer admin", payload);
+
+        assertEquals("Promotion post created", response.message());
+        assertEquals(Boolean.TRUE, response.data().get("success"));
+        verify(promotionService).execute("admin-create-promotion-post", "Bearer admin", payload);
+    }
+
+    @Test
+    void updatePost_shouldPassImportantFlagToService() {
+        Map<String, Object> payload = Map.of(
+                "title", "Quiet follow-up",
+                "content", "Page only",
+                "bannerUrl", "/banner.png",
+                "promotionId", 4,
+                "startAt", "2026-03-01",
+                "endAt", "2026-03-31",
+                "isActive", 1,
+                "isImportant", 0);
+        when(promotionService.execute(
+                "admin-update-promotion-post",
+                "Bearer admin",
+                Map.of("postId", 42, "body", payload)))
+                .thenReturn(Map.of("success", true));
+
+        ApiResponse<Map<String, Object>> response = controller.updatePost("Bearer admin", 42, payload);
+
+        assertEquals("Promotion post updated", response.message());
+        assertEquals(Boolean.TRUE, response.data().get("success"));
+        verify(promotionService).execute(
+                "admin-update-promotion-post",
+                "Bearer admin",
+                Map.of("postId", 42, "body", payload));
+    }
+
+    @Test
+    void getNotifications_shouldDelegateReminderViewAndUnreadFilter() {
+        when(promotionService.execute(
+                "customer-get-notifications",
+                "Bearer customer",
+                Map.of("unreadOnly", true, "view", "actionable")))
+                .thenReturn(Map.of("notifications", java.util.List.of(), "unreadCount", 0));
+
+        ApiResponse<Map<String, Object>> response =
+                controller.getNotifications("Bearer customer", true, "actionable");
+
+        assertEquals("Notifications retrieved", response.message());
+        assertEquals(0, response.data().get("unreadCount"));
+        verify(promotionService).execute(
+                "customer-get-notifications",
+                "Bearer customer",
+                Map.of("unreadOnly", true, "view", "actionable"));
+    }
+
+    @Test
     void handleResponseStatusException_shouldReturnApiErrorBody() {
         ResponseStatusException exception = new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promotion banner file is required.");
 

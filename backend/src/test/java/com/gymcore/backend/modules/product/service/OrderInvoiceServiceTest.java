@@ -312,6 +312,65 @@ class OrderInvoiceServiceTest {
     }
 
     @Test
+    void adminResendInvoiceEmail_shouldRetryWhenEmailFailed() throws Exception {
+        when(jdbcTemplate.queryForObject(
+                contains("FROM INFORMATION_SCHEMA.TABLES"),
+                eq(Integer.class),
+                eq("OrderInvoices")))
+                .thenReturn(1);
+        when(jdbcTemplate.query(
+                contains("FROM dbo.OrderInvoices"),
+                any(RowMapper.class),
+                eq(22)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    Map<String, Object> invoiceRow = new LinkedHashMap<>();
+                    invoiceRow.put("InvoiceID", 22);
+                    invoiceRow.put("InvoiceCode", "INV-202603071000-901");
+                    invoiceRow.put("OrderID", 18);
+                    invoiceRow.put("PaymentID", 901);
+                    invoiceRow.put("RecipientEmail", "customer@gymcore.local");
+                    invoiceRow.put("RecipientName", "Customer Minh");
+                    invoiceRow.put("ShippingPhone", "0900000004");
+                    invoiceRow.put("ShippingAddress", "123 Gym Street");
+                    invoiceRow.put("PaymentMethod", "PAYOS");
+                    invoiceRow.put("Subtotal", new BigDecimal("4000"));
+                    invoiceRow.put("DiscountAmount", new BigDecimal("400"));
+                    invoiceRow.put("TotalAmount", new BigDecimal("3600"));
+                    invoiceRow.put("PaidAt", Timestamp.from(Instant.parse("2026-03-07T10:00:00Z")));
+                    invoiceRow.put("EmailSentAt", null);
+                    invoiceRow.put("EmailSendError", "SMTP down");
+                    return List.of(mapper.mapRow(resultSet(invoiceRow), 0));
+                });
+        when(jdbcTemplate.query(
+                contains("FROM dbo.OrderItems"),
+                any(RowMapper.class),
+                eq(18)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "ProductName", "Whey Protein",
+                            "Quantity", 1,
+                            "UnitPrice", new BigDecimal("2000"),
+                            "LineTotal", new BigDecimal("2000"))), 0));
+                });
+        mockInvoiceSchema(true, true, true);
+
+        Map<String, Object> response = orderInvoiceService.adminResendInvoiceEmail("Bearer staff", 22);
+
+        assertEquals(22, ((Map<?, ?>) response.get("invoice")).get("invoiceId"));
+        verify(currentUserService, org.mockito.Mockito.times(2)).requireAdminOrReceptionist("Bearer staff");
+        verify(orderInvoiceMailService).sendProductInvoice(any(InvoiceMailModel.class));
+        verify(jdbcTemplate).update(
+                contains("UPDATE dbo.OrderInvoices"),
+                any(Timestamp.class),
+                eq(null),
+                eq(22));
+    }
+
+    @Test
     void adminGetInvoiceDetail_shouldThrowNotFoundWhenInvoiceMissing() {
         mockInvoiceSchema(true, true, true);
         when(jdbcTemplate.query(

@@ -27,6 +27,7 @@ class UnsupportedActionDispatchTest {
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final UserNotificationService notificationService = mock(UserNotificationService.class);
+    private final CoachBookingService delegatedCoachBookingService = mock(CoachBookingService.class);
 
     @Test
     void userManagementService_shouldRejectUnsupportedAction() {
@@ -42,7 +43,8 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void checkinHealthService_shouldRejectUnsupportedAction() {
-        CheckinHealthService service = new CheckinHealthService(jdbcTemplate, authService);
+        CheckinHealthService service =
+                new CheckinHealthService(jdbcTemplate, authService, delegatedCoachBookingService);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));
@@ -53,7 +55,7 @@ class UnsupportedActionDispatchTest {
 
     @Test
     void contentService_shouldRejectUnsupportedAction() {
-        ContentService service = new ContentService();
+        ContentService service = new ContentService(jdbcTemplate, currentUserService, delegatedCoachBookingService);
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.execute("unknown-action", Map.of()));

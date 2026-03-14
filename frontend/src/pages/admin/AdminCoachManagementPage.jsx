@@ -233,6 +233,30 @@ function AdminCoachManagementPage() {
   return (
     <WorkspaceScaffold title="Coach Management" subtitle="Filter coach performance, inspect coach rosters, and update profile information with explicit validation." links={adminNav}>
       <div className="space-y-6">
+      <section className="overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.16),_transparent_30%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.92))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Coach operations</p>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">Keep coach quality, load, and profile data aligned</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                Review the full coach directory, surface who needs attention, then drill into performance, students, and editable profile information from one workspace.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-3xl border border-white/70 bg-white/85 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Current focus</p>
+                <p className="mt-2 text-lg font-bold text-slate-900">{summary.needsAttention} coach(es) need attention</p>
+                <p className="mt-2 text-sm text-slate-600">This includes unrated coaches and coaches with no active students.</p>
+              </div>
+              <div className="rounded-3xl border border-white/70 bg-white/85 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Roster health</p>
+                <p className="mt-2 text-lg font-bold text-slate-900">{summary.activeStudents} active student relationships</p>
+                <p className="mt-2 text-sm text-slate-600">Use the filters below to isolate high-load, low-load, or high-rating coaches quickly.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {(error || message) ? (
           <div className={`flex items-center justify-between rounded-3xl border px-5 py-4 text-sm font-medium ${error ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
             <span>{error || message}</span>
@@ -308,7 +332,7 @@ function AdminCoachManagementPage() {
             </select>
           </div>
 
-          <div className="overflow-x-auto rounded-3xl border border-slate-100 bg-white">
+          <div className="overflow-x-auto rounded-[28px] border border-slate-100 bg-white shadow-sm">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                 <tr>
@@ -414,6 +438,10 @@ function AdminCoachManagementPage() {
 
             {activeDetailTab === 'profile' && draft ? (
               <form noValidate onSubmit={handleUpdateProfile} className="space-y-5">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Profile editor</p>
+                  <p className="mt-2 text-sm text-slate-600">Update the coach-facing profile information below. Validation is applied before the payload is sent to the backend.</p>
+                </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Full name</span>
@@ -541,11 +569,14 @@ function AdminCoachManagementPage() {
 
             {activeDetailTab === 'students' ? (
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <Users size={16} className="text-gym-600" />
                   Active student roster
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">Use this list to see who is actively assigned to the selected coach and how far each relationship has progressed.</p>
                 </div>
-                <div className="overflow-x-auto rounded-3xl border border-slate-100 bg-white">
+                <div className="overflow-x-auto rounded-[28px] border border-slate-100 bg-white shadow-sm">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                       <tr>

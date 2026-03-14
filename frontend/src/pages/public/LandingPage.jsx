@@ -119,7 +119,7 @@ function LandingPage() {
   return (
     <div className="bg-white text-slate-900">
       <section className="relative overflow-hidden bg-slate-900 px-4 py-20 text-white sm:px-6">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(14,167,115,0.35),transparent_40%),radial-gradient(circle_at_80%_0%,rgba(14,167,115,0.2),transparent_30%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(245,158,11,0.22),transparent_40%),radial-gradient(circle_at_80%_0%,rgba(245,158,11,0.14),transparent_30%)]" />
         <div className="relative mx-auto max-w-7xl">
           <p className="mb-3 text-sm uppercase tracking-[0.2em] text-gym-100">GymCore Platform</p>
           <h1 className="max-w-3xl text-4xl font-bold leading-tight sm:text-5xl">

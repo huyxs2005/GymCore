@@ -21,6 +21,8 @@ vi.mock('../../features/coach/api/coachBookingApi', () => ({
     getMySchedule: vi.fn(),
     cancelSession: vi.fn(),
     rescheduleSession: vi.fn(),
+    rescheduleSeries: vi.fn(),
+    respondToReplacementOffer: vi.fn(),
     submitFeedback: vi.fn(),
   },
 }))
@@ -94,9 +96,11 @@ describe('CustomerCoachBookingPage', () => {
       },
     })
     coachBookingApi.getMySchedule.mockResolvedValue({
-      data: { items: [], pendingRequests: [], deniedRequests: [] },
+      data: { items: [], pendingRequests: [], deniedRequests: [], activePhase: null, dashboard: {} },
     })
     coachBookingApi.createRequest.mockResolvedValue({ data: { ok: true } })
+    coachBookingApi.rescheduleSeries.mockResolvedValue({ data: { status: 'UPDATED', message: 'Recurring PT series updated successfully.' } })
+    coachBookingApi.respondToReplacementOffer.mockResolvedValue({ data: { status: 'ACCEPTED', message: 'Replacement coach accepted for this PT session.' } })
     membershipApi.getCurrentMembership.mockResolvedValue({
       data: {
         membership: {
@@ -201,7 +205,7 @@ describe('CustomerCoachBookingPage', () => {
 
     await user.click(sessionDay)
 
-    expect(await screen.findByText(/Coach Alex/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/Coach Alex/i)).length).toBeGreaterThan(0)
     expect(screen.getByText(/Dates with coaching sessions are marked with a green signal in the calendar/i)).toBeInTheDocument()
   })
 
@@ -301,19 +305,174 @@ describe('CustomerCoachBookingPage', () => {
     await user.click(await screen.findByRole('button', { name: /2026-03-16, 1 coaching slot/i }))
     await user.click(await screen.findByRole('button', { name: /^Reschedule$/i }))
 
-    expect(await screen.findByText(/Request a new date and time/i)).toBeInTheDocument()
-    expect(screen.getByText(/must approve the new session schedule/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Update this session now/i)).toBeInTheDocument()
+    expect(screen.getByText(/move the PT session immediately/i)).toBeInTheDocument()
 
     await user.type(screen.getByLabelText(/New date/i), '2026-03-18')
     await user.selectOptions(screen.getByLabelText(/New time slot/i), '2')
     await user.type(screen.getByLabelText(/Reason \(optional\)/i), 'Need a later slot')
-    await user.click(screen.getByRole('button', { name: /Send reschedule request/i }))
+    await user.click(screen.getByRole('button', { name: /Update session now/i }))
 
     await waitFor(() => {
       expect(coachBookingApi.rescheduleSession).toHaveBeenCalledWith(7, {
         sessionDate: '2026-03-18',
         timeSlotId: 2,
         reason: 'Need a later slot',
+      })
+    })
+  })
+
+  it('shows the PT dashboard, accepts replacement offers, and updates the active phase surface', async () => {
+    coachBookingApi.getMySchedule.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            ptSessionId: 301,
+            coachName: 'Coach Alex',
+            sessionDate: '2026-03-17',
+            dayOfWeek: 2,
+            timeSlotId: 1,
+            slotIndex: 1,
+            startTime: '07:00:00',
+            endTime: '08:30:00',
+            status: 'SCHEDULED',
+            replacementOffer: {
+              offerId: 91,
+              status: 'PENDING_CUSTOMER',
+              note: 'Medical leave this week.',
+              replacementCoachName: 'Coach Jamie',
+              originalCoachName: 'Coach Alex',
+            },
+          },
+        ],
+        pendingRequests: [],
+        deniedRequests: [],
+        activePhase: {
+          ptRequestId: 901,
+          coachId: 3,
+          coachName: 'Coach Alex',
+          startDate: '2026-03-17',
+          endDate: '2026-04-14',
+          bookingMode: 'INSTANT',
+          templateSlots: [
+            { dayOfWeek: 1, timeSlotId: 1 },
+            { dayOfWeek: 3, timeSlotId: 2 },
+          ],
+        },
+        dashboard: {
+          nextSession: {
+            ptSessionId: 301,
+            coachName: 'Coach Alex',
+            sessionDate: '2026-03-17',
+            timeSlotId: 1,
+            status: 'SCHEDULED',
+          },
+          weeklySchedule: [
+            {
+              ptSessionId: 301,
+              coachName: 'Coach Alex',
+              sessionDate: '2026-03-17',
+              dayOfWeek: 2,
+              timeSlotId: 1,
+              status: 'SCHEDULED',
+              replacementOffer: {
+                offerId: 91,
+                status: 'PENDING_CUSTOMER',
+                note: 'Medical leave this week.',
+                replacementCoachName: 'Coach Jamie',
+                originalCoachName: 'Coach Alex',
+              },
+            },
+          ],
+          latestNote: {
+            noteId: 88,
+            noteContent: 'Strong improvement in posture',
+            createdAt: '2026-03-15T02:00:00Z',
+          },
+          latestProgress: {
+            heightCm: 172.5,
+            weightKg: 70.2,
+            bmi: 23.6,
+            recordedAt: '2026-03-15T02:00:00Z',
+          },
+          completedSessions: 2,
+          remainingSessions: 4,
+        },
+      },
+    })
+    coachBookingApi.getMySchedule.mockResolvedValue({
+      data: { items: [], pendingRequests: [], deniedRequests: [], activePhase: null, dashboard: {} },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText(/PT Dashboard/i)).toBeInTheDocument()
+    expect(screen.getByText(/Active PT phase/i)).toBeInTheDocument()
+    expect(screen.getByText(/Replacement coach offer/i)).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: /Accept replacement/i })[0])
+
+    await waitFor(() => {
+      expect(coachBookingApi.respondToReplacementOffer).toHaveBeenCalledWith(301, { decision: 'ACCEPT' })
+    })
+  })
+
+  it('opens the recurring plan modal and submits a future series change', async () => {
+    coachBookingApi.getMySchedule.mockResolvedValue({
+      data: {
+        items: [],
+        pendingRequests: [],
+        deniedRequests: [],
+        activePhase: {
+          ptRequestId: 901,
+          coachId: 3,
+          coachName: 'Coach Alex',
+          startDate: '2026-03-17',
+          endDate: '2026-04-14',
+          bookingMode: 'INSTANT',
+          templateSlots: [
+            { dayOfWeek: 1, timeSlotId: 1 },
+            { dayOfWeek: 3, timeSlotId: 2 },
+          ],
+        },
+        dashboard: {
+          nextSession: {
+            ptSessionId: 301,
+            coachName: 'Coach Alex',
+            sessionDate: '2026-03-24',
+            timeSlotId: 1,
+            status: 'SCHEDULED',
+          },
+          weeklySchedule: [],
+          latestNote: {},
+          latestProgress: {},
+          completedSessions: 2,
+          remainingSessions: 4,
+        },
+      },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Change recurring plan/i }))
+    expect(await screen.findByRole('heading', { name: /Change recurring plan/i })).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(/Apply new template from/i))
+    await user.type(screen.getByLabelText(/Apply new template from/i), '2026-03-24')
+    await user.click(screen.getByRole('button', { name: /Tuesday/i }))
+    await user.click(screen.getByRole('button', { name: /Slot 2/i }))
+    await user.click(screen.getByRole('button', { name: /Save future series/i }))
+
+    await waitFor(() => {
+      expect(coachBookingApi.rescheduleSeries).toHaveBeenCalledWith({
+        cutoverDate: '2026-03-24',
+        slots: [
+          { dayOfWeek: 1, timeSlotId: 1 },
+          { dayOfWeek: 2, timeSlotId: 2 },
+          { dayOfWeek: 3, timeSlotId: 2 },
+        ],
       })
     })
   })
@@ -372,7 +531,7 @@ describe('CustomerCoachBookingPage', () => {
     await user.click(screen.getByRole('button', { name: /Open Schedule Planner/i }))
 
     expect(await screen.findByText(/Coach booking is locked for your current membership/i)).toBeInTheDocument()
-    expect(screen.getByText(/Upgrade to a Gym \+ Coach plan to continue/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Upgrade to a Gym \+ Coach plan to continue/i).length).toBeGreaterThan(0)
   })
 
   it('blocks the planner when a PT request is already pending approval', async () => {
@@ -403,7 +562,7 @@ describe('CustomerCoachBookingPage', () => {
     await user.click(screen.getByRole('button', { name: /Open My PT Schedule/i }))
 
     expect(await screen.findByText(/Pending Requests/i)).toBeInTheDocument()
-    expect(screen.getByText(/Coach Alex/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Coach Alex/i).length).toBeGreaterThan(0)
   })
 
   it('blocks match preview when the customer already has an active PT schedule', async () => {
@@ -436,7 +595,7 @@ describe('CustomerCoachBookingPage', () => {
 
     expect(await screen.findByText(/You already have a PT booking in progress/i)).toBeInTheDocument()
     expect(screen.getByText(/active PT schedule/i)).toBeInTheDocument()
-    expect(screen.getByText(/Next session: 2099-03-16/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Next session: 2099-03-16/i).length).toBeGreaterThan(0)
     expect(coachBookingApi.matchCoaches).not.toHaveBeenCalled()
   })
 

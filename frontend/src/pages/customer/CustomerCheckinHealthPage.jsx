@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { CheckCircle2, History, Activity, UserCog, ClipboardList, Plus, Scale, Ruler } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
@@ -241,13 +242,92 @@ function CustomerCheckinHealthPage() {
 
   return (
     <WorkspaceScaffold
-      title="Check-in and Health Tracking"
-      subtitle="Manage your check-ins and track your health progress in one place."
+      title="Check-in & Health Log"
+      subtitle="Use this page for check-in QR, manual body metrics, and raw history. Progress Hub remains the main overview for follow-up."
       links={customerNav}
     >
+      <section className="mb-6 overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.1),_transparent_30%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.94)_45%,_rgba(24,26,38,0.94))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+        <div className="grid gap-5 lg:grid-cols-[1.6fr,1fr]">
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Action and logging workspace</p>
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-slate-900">Capture check-ins and body metrics without losing sight of the bigger progress story.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                This page is built for actions you perform yourself: showing your QR, entering new measurements, and reviewing raw attendance and metric history.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                Manual metric entry
+              </span>
+              <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+                QR check-in ready
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">
+                Raw history access
+              </span>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current BMI</p>
+              <p className="mt-2 text-lg font-black text-slate-900">{currentBmi == null ? '--' : currentBmi.toFixed(1)}</p>
+            </div>
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current category</p>
+              <p className={`mt-2 text-lg font-black ${bmiLevel.textClass}`}>{currentBmi == null ? 'Awaiting metrics' : bmiLevel.label}</p>
+            </div>
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Check-in records</p>
+              <p className="mt-2 text-lg font-black text-slate-900">{checkinHistory.length}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mb-6 flex flex-col gap-3 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,1),rgba(240,249,255,1))] p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Progress-first destination</p>
+          <h2 className="mt-2 text-xl font-black text-slate-900">Use Progress Hub for the full health and PT follow-up story.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            This page keeps your QR, check-in history, and manual metric entry available while the new hub becomes the main place to review progress.
+          </p>
+        </div>
+        <Link
+          to="/customer/progress-hub"
+          className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+        >
+          Open Progress Hub
+        </Link>
+      </div>
+
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Use this page for</p>
+          <p className="mt-3 text-lg font-black text-slate-900">Scan, record, verify</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Show your QR at arrival, add fresh body metrics, and inspect the raw records behind your follow-up view.
+          </p>
+        </article>
+        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Progress Hub is for</p>
+          <p className="mt-3 text-lg font-black text-slate-900">Overview and next actions</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Use the hub when you want the combined story: latest snapshot, PT context, coach notes, and follow-up focus.
+          </p>
+        </article>
+        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">PT dashboard is for</p>
+          <p className="mt-3 text-lg font-black text-slate-900">Booking and schedule changes</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            When you need coach matches, request status, or future PT sessions, switch to the dedicated PT workspace.
+          </p>
+        </article>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="lg:col-span-1">
-          <article className="gc-card flex flex-col items-center">
+          <article className="gc-card flex flex-col items-center bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="mb-4 flex items-center gap-2 self-start">
               <CheckCircle2 className="h-5 w-5 text-gym-600" />
               <h2 className="text-lg font-bold text-slate-800">Check-in QR Code</h2>
@@ -266,7 +346,7 @@ function CustomerCheckinHealthPage() {
             </p>
           </article>
 
-          <article className="gc-card mt-6">
+          <article className="gc-card mt-6 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="mb-4 flex items-center gap-2">
               <Activity className="h-5 w-5 text-gym-600" />
               <h2 className="text-lg font-bold text-slate-800">Current Metrics</h2>
@@ -474,7 +554,7 @@ function CustomerCheckinHealthPage() {
         </section>
 
         <section className="space-y-6 lg:col-span-2">
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="mb-4 flex items-center gap-2">
               <UserCog className="h-5 w-5 text-gym-600" />
               <h2 className="text-lg font-bold text-slate-800">Update Body Metrics</h2>
@@ -520,7 +600,7 @@ function CustomerCheckinHealthPage() {
             </form>
           </article>
 
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="mb-4 flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-gym-600" />
               <h2 className="text-lg font-bold text-slate-800">Coach Notes</h2>
@@ -546,7 +626,7 @@ function CustomerCheckinHealthPage() {
             </div>
           </article>
 
-          <article className="gc-card">
+          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
             <div className="mb-4 flex items-center gap-2">
               <History className="h-5 w-5 text-gym-600" />
               <h2 className="text-lg font-bold text-slate-800">Check-in History</h2>
@@ -586,7 +666,7 @@ function CustomerCheckinHealthPage() {
           </article>
 
           {healthHistory.length > 0 && (
-            <article className="gc-card">
+            <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
               <div className="mb-4 flex items-center gap-2">
                 <History className="h-5 w-5 text-gym-600" />
                 <h2 className="text-lg font-bold text-slate-800">Health History</h2>

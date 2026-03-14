@@ -1,44 +1,44 @@
 # GymCore TODO (Post feature/coupon merge)
 
 ## Main Branch Merge Prep: `origin/main` -> current local branch
-- [ ] Use the current local branch as source of truth for the next merge session.
+- [x] Use the current local branch as source of truth for the next merge session.
   - Current local baseline branch: `alpha-0.1`
   - Do not run a blind `git merge origin/main`.
   - Preferred method: selective/manual port by subsystem.
-- [ ] Keep Java on `25`.
+- [x] Keep Java on `25`.
   - Do not accept the `origin/main` downgrade back to Java `21`.
   - Preserve the local `backend/pom.xml` toolchain/runtime settings.
-- [ ] Keep the current local JDBC/runtime config for this machine.
+- [x] Keep the current local JDBC/runtime config for this machine.
   - Preserve local `backend/src/main/resources/application.properties` datasource values.
   - Do not replace local SQL Server credentials with `origin/main` credentials or env defaults.
   - Local machine remains:
     - SQL Server auth on this machine
     - database `GymCore`
     - current working local login/password/settings
-- [ ] Keep environment templates machine-neutral while preserving local runtime behavior.
-  - Merge `backend/.env.example` and `frontend/.env.example` as templates/documentation only.
+- [x] Keep environment templates machine-neutral while preserving local runtime behavior.
+  - Merge `backend/.env.example` and `frontend/.env.local.example` as templates/documentation only.
   - Do not commit real local secrets.
   - Keep Gemini placeholders available in backend env files:
     - `APP_AI_GEMINI_API_KEY=`
     - `APP_AI_GEMINI_MODEL=`
-- [ ] Merge DB changes from `origin/main` only into the 4 canonical SQL docs.
+- [x] Merge DB changes from `origin/main` only into the 4 canonical SQL docs.
   - Allowed targets only:
     - `docs/GymCore.txt`
     - `docs/alter.txt`
     - `docs/InsertValues.txt`
     - `docs/InsertTestingValues.txt`
   - Do not create extra SQL docs/files for the merge.
-- [ ] Treat current local DB docs as stronger than `origin/main` where `main` removes already-working behavior.
+- [x] Treat current local DB docs as stronger than `origin/main` where `main` removes already-working behavior.
   - Current local branch includes invoice pickup columns and related product/invoice flow support.
   - Current local branch keeps stricter membership/payment/reporting behavior that should not be downgraded.
-- [ ] Review `origin/main` only for additive value.
+- [x] Review `origin/main` only for additive value.
   - Import only missing features/fixes that do not break:
     - PayOS flow
     - admin dashboard/reports
     - invoice/pickup flow
     - membership queue/renew/upgrade behavior
     - current local test suite
-- [ ] Re-run the full regression gate after the merge.
+- [x] Re-run the full regression gate after the merge.
   - Backend:
     - `.\mvnw.cmd test`
   - Frontend:
@@ -50,6 +50,37 @@
     - `docs/alter.txt`
     - `docs/InsertValues.txt`
     - `docs/InsertTestingValues.txt`
+  - Completed Mar 14, 2026:
+    - backend tests passed
+    - frontend lint/tests/build passed
+    - canonical DB script order smoke-tested successfully on throwaway DB
+
+## Recommendations Backlog (Business-Rule Safe)
+- [x] Add backend coverage tooling (`JaCoCo`) to `backend/pom.xml`.
+  - Reason:
+    - backend test count is strong, but there is no built-in coverage percentage yet
+    - this improves confidence without changing any business rule
+- [x] Add a dedicated product-payment webhook regression test path.
+  - Reason:
+    - product receipt email and invoice creation depend on payment-confirmation callbacks working correctly
+    - membership webhook path already handles product payments too, but product-specific regression around webhook confirmation would reduce ambiguity
+- [x] Add invoice-email resend support for admin/reception.
+  - Reason:
+    - failed or pending receipt delivery can now be retried operationally without changing checkout or pickup rules
+- [ ] Add API-client coverage for low-level frontend wrappers.
+  - High-value current gaps:
+    - `frontend/src/api/client.js`
+    - `frontend/src/features/auth/api/authApi.js`
+    - `frontend/src/features/product/api/productApi.js`
+- [ ] Add one explicit end-to-end test scenario for the product order lifecycle.
+  - Suggested scope:
+    - add to cart
+    - apply valid order coupon
+    - checkout
+    - confirm payment return
+    - invoice email status visible in admin/reception flow
+    - pickup confirmation
+  - Keep this aligned with existing pickup-only product business rules.
 
 ## Selective Merge Plan: `origin/feature/coupon` -> `beta-test-0.2`
 - [x] Keep `beta-test-0.2` as source of truth during merge.

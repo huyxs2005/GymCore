@@ -3,34 +3,42 @@
 Purpose: quick context snapshot so future work can resume without re-discovering decisions.
 
 ## 0) Main merge baseline (Mar 14, 2026)
-- Current local baseline branch for future merge work: `alpha-0.1`.
-- Future merge target under review: `origin/main`.
-- Merge strategy is selective/manual, not raw branch merge.
-- Local branch remains source of truth for:
+- Current working baseline branch remains `alpha-0.1`.
+- The selective/manual merge from `origin/main` has now been completed.
+- Merge policy that was followed:
+  - selective/manual merge only, not raw branch merge
+  - keep current local branch as source of truth where `origin/main` would downgrade existing working behavior
+  - skip non-functional noise such as:
+    - Playwright/test-harness drift
+    - workflow/IDE noise
+    - real env/runtime drift
+    - unrelated root tooling drift
+- Local branch remained source of truth for:
   - Java 25 runtime
   - current working PayOS flow
-  - admin dashboard/reports overhaul
+  - admin dashboard/reports structure
   - invoice/pickup flow
   - current DB doc structure and run order
-- Runtime config rule for this machine:
+- Runtime config rule for this machine remains unchanged:
   - keep the current local datasource behavior in `backend/src/main/resources/application.properties`
   - do not replace local SQL Server values with `origin/main` values
-- DB merge rule:
-  - any SQL from `origin/main` must be folded only into:
+- DB merge rule that was applied:
+  - all SQL changes were folded only into:
     - `docs/GymCore.txt`
     - `docs/alter.txt`
     - `docs/InsertValues.txt`
     - `docs/InsertTestingValues.txt`
-  - do not create extra SQL docs/files
-- Current backend env placeholders now include Gemini keys:
-  - `APP_AI_GEMINI_API_KEY`
-  - `APP_AI_GEMINI_MODEL`
-- Current placeholder Gemini model choice stored locally:
-  - `gemini-3-flash-preview`
-- Important AI implementation note:
-  - `backend/src/main/java/com/gymcore/backend/modules/content/service/ContentService.java`
-    is still placeholder-only and currently throws `NOT_IMPLEMENTED`
-  - Gemini env values are not active until real backend AI integration is merged or implemented
+  - no extra SQL docs/files were introduced
+- Current local env capability snapshot:
+  - backend env supports Gemini, Google login, mail, and PayOS
+  - frontend env supports Google login and frontend API/base URL wiring
+  - current local Gemini model observed during review:
+    - `gemini-3-flash-preview`
+  - safer stable fallback recommendation for this codebase:
+    - `gemini-2.5-flash`
+- AI/content implementation note after merge:
+  - content/admin-goal/frontend AI-related functionality from `origin/main` is now present in the codebase
+  - Gemini chat integration is no longer just placeholder env-only setup
 
 ## 1) Tech stack and structure
 - Backend: Spring Boot REST API (no Thymeleaf server-rendered pages).
@@ -129,28 +137,57 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 ## 8) Env file convention for teammates
 - Real local env files are gitignored.
 - Templates committed:
-  - `backend/.env.example`  -> copy to `backend/.env`
-  - `frontend/.env.example` -> copy to `frontend/.env.local`
+  - `backend/.env.example`      -> copy to `backend/.env`
+  - `frontend/.env.local.example` -> copy to `frontend/.env.local`
 - Team members must fill their own local values (JWT secret, Google client IDs, mail creds, etc.).
 
-## 9) Content/AI API scaffolding
-- `ContentController` includes placeholder endpoints for:
+## 9) Content/AI implementation status
+- Content APIs are no longer just placeholder scaffolding.
+- The merged codebase now includes working admin/customer content surfaces for:
   - workouts/categories
   - foods/categories
   - goals
-  - AI recommendations
-- Current implementation is barebones placeholder responses; business logic still to implement.
+  - Gemini-backed assistant/chat wiring
+- Remaining caution:
+  - AI quality still depends on valid Gemini configuration and model compatibility
+  - preview Gemini models may fall back or behave less predictably than stable models
 
 ## 10) Test status pattern
 - Backend tests run with Maven wrapper.
 - Frontend tests run with Vitest (`npm run test:run`).
 - Recent state after major changes was green on both sides.
 
-## 10.1) Latest verified test run (Mar 8, 2026)
-- Backend: `.\mvnw.cmd test` -> passed (`245` tests).
-- Frontend: `npm run lint` -> passed.
-- Frontend: `npm run test:run -- --maxWorkers=1` -> passed (`43` files, `162` tests).
-- Frontend: `npm run build` -> passed.
+## 10.1) Latest verified validation snapshot (Mar 14, 2026)
+- Backend:
+  - `.\mvnw.cmd test` -> passed (`292` tests, `0` failures, `0` errors)
+- Frontend:
+  - `npm run lint` -> passed
+  - `npm run test:run -- --maxWorkers=1` -> passed (`48` files, `194` tests)
+  - `npm run build` -> passed
+- Frontend coverage:
+  - `npx vitest run --coverage --maxWorkers=1 --reporter=dot`
+  - summary:
+    - statements: `74.30%`
+    - branches: `64.30%`
+    - functions: `72.05%`
+    - lines: `76.78%`
+- Backend coverage:
+  - JaCoCo is now wired into `backend/pom.xml`
+  - `.\mvnw.cmd test` generates `backend/target/site/jacoco/index.html`
+  - summary:
+    - instructions: `54.36%`
+    - branches: `42.99%`
+    - methods: `58.90%`
+    - lines: `55.76%`
+- DB smoke verification:
+  - canonical run order succeeded on a temporary throwaway database:
+    1. `docs/GymCore.txt`
+    2. `docs/alter.txt`
+    3. `docs/InsertValues.txt`
+    4. `docs/InsertTestingValues.txt`
+  - temp smoke DB used:
+    - `GymCoreMergeSmoke_20260314`
+  - temp smoke DB was deleted after verification
 
 ## 11) Working principle reminders
 - Keep secrets out of git.
@@ -556,9 +593,14 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - create
   - update
   - delete
+- Review eligibility is now consistently pickup-based across backend flows.
+  - Customer must have a picked-up invoice item for the product before review create/update is allowed.
 - Review management is available from both:
   - product detail page
   - customer order history page
+- Invoice operations are now more support-friendly:
+  - admin/reception can resend product receipt emails from the invoice center
+  - product payments now have an explicit product-owned webhook endpoint in addition to the return flow
 - Admin product gallery entry no longer depends on raw image URLs in the UI.
   - Admin uploads image files and the backend stores them under `/uploads/products/...`.
 - Admin catalog now includes:

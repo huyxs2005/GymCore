@@ -22,6 +22,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
@@ -210,6 +211,39 @@ class ProductSalesServiceCheckoutTest {
         assertTrue(Boolean.TRUE.equals(response.get("handled")));
         assertEquals(555, response.get("paymentId"));
         assertEquals("INV-555", response.get("invoiceCode"));
+        verify(orderInvoiceService).handleSuccessfulProductPayment(555);
+    }
+
+    @Test
+    void paymentWebhook_shouldHandleSuccessfulProductPayment() {
+        HttpHeaders headers = new HttpHeaders();
+        Map<String, Object> body = Map.of(
+                "orderCode", "555123456",
+                "status", "SUCCESS",
+                "signature", "signed");
+
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq("555123456"))).thenReturn(555);
+        Mockito.doNothing().when(payOsService).verifyWebhookSignature(eq(headers), eq(body));
+        when(jdbcTemplate.queryForObject(
+                contains("FROM dbo.Payments"),
+                eq(Integer.class),
+                eq(555)))
+                .thenReturn(1);
+        when(jdbcTemplate.update(contains("SET PayOS_Status = ?"), eq("SUCCESS"), eq(555))).thenReturn(1);
+        when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(555))).thenReturn(1);
+        when(orderInvoiceService.handleSuccessfulProductPayment(555))
+                .thenReturn(Map.of("invoiceCreated", true, "invoiceEmailSent", true, "invoiceCode", "INV-555"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = service.execute(
+                "payment-webhook",
+                null,
+                Map.of("headers", headers, "body", body));
+
+        assertEquals(Boolean.TRUE, response.get("handled"));
+        assertEquals(555, response.get("paymentId"));
+        assertEquals("INV-555", response.get("invoiceCode"));
+        verify(payOsService).verifyWebhookSignature(headers, body);
         verify(orderInvoiceService).handleSuccessfulProductPayment(555);
     }
 

@@ -103,6 +103,106 @@ class PromotionServiceTest {
     }
 
     @Test
+    void adminCreatePost_shouldBroadcastOnlyImportantActivePosts() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+        when(jdbcTemplate.queryForObject(
+                eq("SELECT TOP (1) PromotionPostID FROM dbo.PromotionPosts ORDER BY PromotionPostID DESC"),
+                eq(Integer.class)))
+                .thenReturn(77);
+
+        service.execute("admin-create-promotion-post", "Bearer admin", Map.of(
+                "title", "Standard promo",
+                "content", "Low-noise update",
+                "bannerUrl", "/promo.png",
+                "promotionId", 12,
+                "startAt", "2026-03-01",
+                "endAt", "2026-03-10",
+                "isActive", 1,
+                "isImportant", 0));
+
+        verify(notificationService, never()).notifyAllCustomers(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminCreatePost_shouldBroadcastImportantActivePosts() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+        when(jdbcTemplate.queryForObject(
+                eq("SELECT TOP (1) PromotionPostID FROM dbo.PromotionPosts ORDER BY PromotionPostID DESC"),
+                eq(Integer.class)))
+                .thenReturn(78);
+
+        service.execute("admin-create-promotion-post", "Bearer admin", Map.of(
+                "title", "Important promo",
+                "content", "Broadcast-worthy update",
+                "bannerUrl", "/important.png",
+                "promotionId", 13,
+                "startAt", "2026-03-01",
+                "endAt", "2026-03-10",
+                "isActive", 1,
+                "isImportant", 1));
+
+        verify(notificationService).notifyAllCustomers(
+                eq("PROMOTION_POST_PUBLISHED"),
+                eq("New promotion available"),
+                contains("Important promo is now live."),
+                eq("/customer/promotions"),
+                eq(78),
+                eq("PROMOTION_POST_78"));
+    }
+
+    @Test
+    void adminUpdatePost_shouldBroadcastWhenPostBecomesImportantAndActive() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+        when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, IsImportant"), eq(55)))
+                .thenReturn(List.of(Map.of("IsActive", 1, "IsImportant", 0)));
+
+        service.execute("admin-update-promotion-post", "Bearer admin", Map.of(
+                "postId", 55,
+                "body", Map.of(
+                        "title", "Now important",
+                        "content", "Escalated campaign",
+                        "bannerUrl", "/important.png",
+                        "promotionId", 14,
+                        "startAt", "2026-03-01",
+                        "endAt", "2026-03-10",
+                        "isActive", 1,
+                        "isImportant", 1)));
+
+        verify(notificationService).notifyAllCustomers(
+                eq("PROMOTION_POST_PUBLISHED"),
+                eq("New promotion available"),
+                contains("Now important is now live."),
+                eq("/customer/promotions"),
+                eq(55),
+                eq("PROMOTION_POST_55"));
+    }
+
+    @Test
+    void adminUpdatePost_shouldNotBroadcastWhenPostWasAlreadyImportant() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+        when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, IsImportant"), eq(56)))
+                .thenReturn(List.of(Map.of("IsActive", 1, "IsImportant", 1)));
+
+        service.execute("admin-update-promotion-post", "Bearer admin", Map.of(
+                "postId", 56,
+                "body", Map.of(
+                        "title", "Still important",
+                        "content", "Already broadcast",
+                        "bannerUrl", "/important.png",
+                        "promotionId", 15,
+                        "startAt", "2026-03-01",
+                        "endAt", "2026-03-10",
+                        "isActive", 1,
+                        "isImportant", 1)));
+
+        verify(notificationService, never()).notifyAllCustomers(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void customerApplyCoupon_shouldReturnPreviewForProductCheckout() {
         when(currentUserService.requireCustomer("Bearer customer"))
                 .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));

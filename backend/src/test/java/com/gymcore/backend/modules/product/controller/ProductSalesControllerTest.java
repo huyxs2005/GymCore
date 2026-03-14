@@ -10,6 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
 
 class ProductSalesControllerTest {
@@ -110,6 +111,32 @@ class ProductSalesControllerTest {
         assertEquals("Pickup confirmed", response.message());
         assertEquals(22, ((Map<?, ?>) response.data().get("invoice")).get("invoiceId"));
         verify(productSalesService).execute("admin-confirm-invoice-pickup", "Bearer staff", Map.of("invoiceId", 22));
+    }
+
+    @Test
+    void resendInvoiceEmail_shouldDelegateToResendAction() {
+        when(productSalesService.execute("admin-resend-invoice-email", "Bearer staff", Map.of("invoiceId", 22)))
+                .thenReturn(Map.of("invoice", Map.of("invoiceId", 22)));
+
+        ApiResponse<Map<String, Object>> response = controller.resendInvoiceEmail("Bearer staff", 22);
+
+        assertEquals("Invoice email processed", response.message());
+        assertEquals(22, ((Map<?, ?>) response.data().get("invoice")).get("invoiceId"));
+        verify(productSalesService).execute("admin-resend-invoice-email", "Bearer staff", Map.of("invoiceId", 22));
+    }
+
+    @Test
+    void productPaymentWebhook_shouldDelegateToWebhookAction() {
+        HttpHeaders headers = new HttpHeaders();
+        Map<String, Object> payload = Map.of("status", "SUCCESS");
+        when(productSalesService.execute("payment-webhook", null, Map.of("headers", headers, "body", payload)))
+                .thenReturn(Map.of("handled", true));
+
+        ApiResponse<Map<String, Object>> response = controller.productPaymentWebhook(headers, payload);
+
+        assertEquals("Product payment webhook handled", response.message());
+        assertEquals(Boolean.TRUE, response.data().get("handled"));
+        verify(productSalesService).execute("payment-webhook", null, Map.of("headers", headers, "body", payload));
     }
 
     @Test

@@ -124,6 +124,17 @@ public class ProductSalesController {
                                 productSalesService.execute("customer-confirm-payment-return", authorization, payload));
         }
 
+        @PostMapping("/orders/payment-webhook")
+        public ApiResponse<Map<String, Object>> productPaymentWebhook(
+                        @RequestHeader HttpHeaders headers,
+                        @RequestBody(required = false) Map<String, Object> payload) {
+                Map<String, Object> wrapper = new java.util.LinkedHashMap<>();
+                wrapper.put("headers", headers);
+                wrapper.put("body", payload == null ? Map.of() : payload);
+                return ApiResponse.ok("Product payment webhook handled",
+                                productSalesService.execute("payment-webhook", null, wrapper));
+        }
+
         @GetMapping("/orders/my-orders")
         public ApiResponse<Map<String, Object>> getMyOrders(
                         @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
@@ -219,6 +230,15 @@ public class ProductSalesController {
                         @PathVariable Integer invoiceId) {
                 return ApiResponse.ok("Pickup confirmed",
                                 productSalesService.execute("admin-confirm-invoice-pickup", authorization,
+                                                Map.of("invoiceId", invoiceId)));
+        }
+
+        @PatchMapping("/admin/invoices/{invoiceId}/resend-email")
+        public ApiResponse<Map<String, Object>> resendInvoiceEmail(
+                        @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+                        @PathVariable Integer invoiceId) {
+                return ApiResponse.ok("Invoice email processed",
+                                productSalesService.execute("admin-resend-invoice-email", authorization,
                                                 Map.of("invoiceId", invoiceId)));
         }
 }

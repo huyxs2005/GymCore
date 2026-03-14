@@ -134,6 +134,26 @@ public class OrderInvoiceService {
         return adminGetInvoiceDetail(authorizationHeader, invoiceId);
     }
 
+    public Map<String, Object> adminResendInvoiceEmail(String authorizationHeader, int invoiceId) {
+        currentUserService.requireAdminOrReceptionist(authorizationHeader);
+        if (!tableExists("OrderInvoices")) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, INVOICE_SCHEMA_UNAVAILABLE_MESSAGE);
+        }
+
+        InvoiceEnvelope envelope = loadInvoiceEnvelope(invoiceId);
+        if (envelope == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found.");
+        }
+
+        boolean alreadySent = envelope.emailSentAt() != null
+                && (envelope.emailError() == null || envelope.emailError().isBlank());
+        if (!alreadySent) {
+            attemptInvoiceEmail(invoiceId, envelope.mailModel());
+        }
+
+        return adminGetInvoiceDetail(authorizationHeader, invoiceId);
+    }
+
     public Map<String, Object> handleSuccessfulProductPayment(int paymentId) {
         Integer invoiceId = findInvoiceIdByPaymentId(paymentId);
         if (invoiceId == null) {

@@ -2,6 +2,10 @@ node_modules/
 .env
 .env.*
 !.env.example
+!backend/.env.local.example
+!frontend/.env.local.example
 backend/uploads/
+backend/target/
+frontend/coverage/
 backend/hs_err_pid*.log
 backend/replay_pid*.log

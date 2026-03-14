@@ -57,6 +57,13 @@ public class CheckinHealthController {
                 checkinHealthService.execute("customer-get-coach-notes", withAuth(authorizationHeader, null)));
     }
 
+    @GetMapping("/health/progress-hub")
+    public ApiResponse<Map<String, Object>> getProgressHub(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Customer progress hub loaded successfully",
+                checkinHealthService.execute("customer-get-progress-hub", withAuth(authorizationHeader, null)));
+    }
+
     @PostMapping("/health/records")
     public ApiResponse<Map<String, Object>> createHealthRecord(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,

@@ -1,5 +1,6 @@
 export const customerNav = [
   { to: '/customer/membership', label: 'Membership' },
+  { to: '/customer/progress-hub', label: 'Progress Hub' },
   { to: '/customer/checkin-health', label: 'Check-in & Health' },
   { to: '/customer/coach-booking', label: 'Coach Booking' },
   { to: '/customer/shop', label: 'Product Shop' },
@@ -22,10 +23,15 @@ export const receptionNav = [
 
 export const adminNav = [
   { to: '/admin/dashboard', label: 'Dashboard' },
+  { to: '/admin/support', label: 'Support Console' },
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/memberships', label: 'Memberships' },
   { to: '/admin/coach-management', label: 'Coach Management' },
   { to: '/admin/products', label: 'Products' },
+  { to: '/admin/goals', label: 'Goals' },
+  { to: '/admin/workouts', label: 'Workouts' },
+  { to: '/admin/foods', label: 'Foods' },
+  { to: '/admin/coach-insights', label: 'Coach Insights' },
   { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/promotions', label: 'Promotions' },
   { to: '/admin/reports', label: 'Reports' },

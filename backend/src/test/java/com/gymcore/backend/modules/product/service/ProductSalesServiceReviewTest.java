@@ -74,7 +74,7 @@ class ProductSalesServiceReviewTest {
     }
 
     @Test
-    void customerUpdateReview_shouldRejectWhenCustomerHasNoPaidOrder() {
+    void customerUpdateReview_shouldRejectWhenCustomerHasNotPickedUpProduct() {
         when(currentUserService.requireCustomer("Bearer customer"))
                 .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
         when(jdbcTemplate.queryForObject(
@@ -90,7 +90,7 @@ class ProductSalesServiceReviewTest {
                         "body", Map.of("rating", 4, "comment", "No purchase."))));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        assertTrue(String.valueOf(exception.getReason()).contains("PAID order"));
+        assertTrue(String.valueOf(exception.getReason()).contains("picked up this product"));
     }
 
     @Test

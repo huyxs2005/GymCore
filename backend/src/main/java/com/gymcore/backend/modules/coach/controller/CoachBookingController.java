@@ -90,11 +90,36 @@ public class CoachBookingController {
                         withAuth(authorizationHeader, payload)));
     }
 
+    @PostMapping("/coach-booking/bookings")
+    public ApiResponse<Map<String, Object>> createInstantBooking(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("PT booking created successfully",
+                coachBookingService.execute("customer-create-instant-booking",
+                        withAuth(authorizationHeader, payload)));
+    }
+
     @GetMapping("/coach-booking/my-schedule")
     public ApiResponse<Map<String, Object>> getMySchedule(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
         return ApiResponse.ok("Customer PT schedule loaded successfully",
                 coachBookingService.execute("customer-get-my-schedule",
+                        withAuth(authorizationHeader, null)));
+    }
+
+    @GetMapping("/coach-booking/current-phase")
+    public ApiResponse<Map<String, Object>> getCurrentPhase(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Customer PT phase loaded successfully",
+                coachBookingService.execute("customer-get-current-phase",
+                        withAuth(authorizationHeader, null)));
+    }
+
+    @GetMapping("/coach-booking/progress-context")
+    public ApiResponse<Map<String, Object>> getProgressContext(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Customer PT progress context loaded successfully",
+                coachBookingService.execute("customer-get-progress-context",
                         withAuth(authorizationHeader, null)));
     }
 
@@ -123,9 +148,29 @@ public class CoachBookingController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
             @PathVariable Integer sessionId,
             @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok("PT reschedule request submitted successfully",
+        return ApiResponse.ok("PT session rescheduled successfully",
                 coachBookingService.execute("customer-reschedule-session", withAuth(authorizationHeader,
                         Map.of("sessionId", sessionId, "body", payload))));
+    }
+
+    @PatchMapping("/coach-booking/current-phase/reschedule-series")
+    public ApiResponse<Map<String, Object>> rescheduleSeries(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Recurring PT series updated successfully",
+                coachBookingService.execute("customer-reschedule-series",
+                        withAuth(authorizationHeader, Map.of("body", payload))));
+    }
+
+    @PostMapping("/coach-booking/sessions/{sessionId}/replacement-response")
+    public ApiResponse<Map<String, Object>> respondToReplacementOffer(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @PathVariable Integer sessionId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Replacement coach decision saved successfully",
+                coachBookingService.execute("customer-respond-replacement-offer",
+                        withAuth(authorizationHeader,
+                                Map.of("sessionId", sessionId, "body", payload != null ? payload : Map.of()))));
     }
 
     @PostMapping("/coach-booking/feedback")
@@ -185,6 +230,50 @@ public class CoachBookingController {
         return ApiResponse.ok("Coach PT sessions loaded successfully",
                 coachBookingService.execute("coach-get-pt-sessions",
                         withAuth(authorizationHeader, params)));
+    }
+
+    @GetMapping("/coach/unavailable-blocks")
+    public ApiResponse<Map<String, Object>> getUnavailableBlocks(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Coach unavailable blocks loaded successfully",
+                coachBookingService.execute("coach-get-unavailable-blocks",
+                        withAuth(authorizationHeader, Map.of())));
+    }
+
+    @PostMapping("/coach/unavailable-blocks")
+    public ApiResponse<Map<String, Object>> createUnavailableBlock(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Coach unavailable block created successfully",
+                coachBookingService.execute("coach-create-unavailable-block",
+                        withAuth(authorizationHeader, payload)));
+    }
+
+    @GetMapping("/coach/exceptions")
+    public ApiResponse<Map<String, Object>> getCoachExceptions(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Coach PT exceptions loaded successfully",
+                coachBookingService.execute("coach-get-exception-sessions",
+                        withAuth(authorizationHeader, Map.of())));
+    }
+
+    @GetMapping("/coach/replacement-coaches")
+    public ApiResponse<Map<String, Object>> getReplacementCoaches(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        return ApiResponse.ok("Replacement coach candidates loaded successfully",
+                coachBookingService.execute("coach-get-replacement-coaches",
+                        withAuth(authorizationHeader, Map.of())));
+    }
+
+    @PostMapping("/coach/pt-sessions/{sessionId}/replacement-offer")
+    public ApiResponse<Map<String, Object>> createReplacementOffer(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @PathVariable Integer sessionId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Replacement offer created successfully",
+                coachBookingService.execute("coach-create-replacement-offer",
+                        withAuth(authorizationHeader,
+                                Map.of("sessionId", sessionId, "body", payload != null ? payload : Map.of()))));
     }
 
     @PostMapping("/coach/pt-sessions/{sessionId}/notes")

@@ -1,9 +1,20 @@
 import { apiClient } from '../../../api/client'
 
+function buildNotificationsQuery(options = {}) {
+  const params = new URLSearchParams()
+  params.set('unreadOnly', options.unreadOnly ? 'true' : 'false')
+
+  const view = typeof options.view === 'string' ? options.view.trim().toLowerCase() : ''
+  if (view && view !== 'all') {
+    params.set('view', view)
+  }
+
+  return params.toString()
+}
+
 export const notificationApi = {
   getNotifications(options = {}) {
-    const unreadOnly = options.unreadOnly ? 'true' : 'false'
-    return apiClient.get(`/v1/notifications?unreadOnly=${unreadOnly}`).then((response) => response.data)
+    return apiClient.get(`/v1/notifications?${buildNotificationsQuery(options)}`).then((response) => response.data)
   },
   markAsRead(notificationId) {
     return apiClient.patch(`/v1/notifications/${notificationId}/read`).then((response) => response.data)

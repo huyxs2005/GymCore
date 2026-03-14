@@ -10,4 +10,7 @@ export const adminInvoiceApi = {
   confirmPickup(invoiceId) {
     return apiClient.patch(`/v1/admin/invoices/${invoiceId}/pickup`).then((response) => response.data?.data ?? response.data)
   },
+  resendEmail(invoiceId) {
+    return apiClient.patch(`/v1/admin/invoices/${invoiceId}/resend-email`).then((response) => response.data?.data ?? response.data)
+  },
 }

@@ -4,6 +4,8 @@ import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.AuthService;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class CoachBookingService {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
+    private static final int SELF_SERVICE_RESCHEDULE_CUTOFF_HOURS = 12;
     private static final String RESCHEDULE_REQUEST_PREFIX = "RESCHEDULE_REQUEST|";
     private static final String RESCHEDULE_DENIED_PREFIX = "RESCHEDULE_DENIED|";
 
@@ -49,18 +52,28 @@ public class CoachBookingService {
             case "customer-get-coach-schedule" -> customerGetCoachSchedule(request);
             case "customer-match-coaches" -> customerMatchCoaches(request);
             case "customer-create-booking-request" -> customerCreateBookingRequest(request);
+            case "customer-create-instant-booking" -> customerCreateInstantBooking(request);
             case "customer-get-my-schedule" -> customerGetMySchedule(request);
+            case "customer-get-current-phase" -> customerGetCurrentPhase(request);
+            case "customer-get-progress-context" -> customerGetProgressContext(request);
             case "customer-delete-session" -> customerDeleteSession(request);
             case "coach-get-pt-requests" -> coachGetPtRequests(request);
             case "coach-approve-pt-request" -> coachApprovePtRequest(request);
             case "coach-deny-pt-request" -> coachDenyPtRequest(request);
             case "customer-cancel-session" -> customerCancelSession(request);
             case "customer-reschedule-session" -> customerRescheduleSession(request);
+            case "customer-reschedule-series" -> customerRescheduleSeries(request);
+            case "customer-respond-replacement-offer" -> customerRespondReplacementOffer(request);
             case "customer-submit-feedback" -> customerSubmitFeedback(request);
             case "coach-update-availability" -> coachUpdateAvailability(request);
             case "coach-get-availability" -> coachGetMyAvailability(request);
             case "coach-get-schedule" -> coachGetSchedule(request);
             case "coach-get-pt-sessions" -> coachGetPtSessions(request);
+            case "coach-get-unavailable-blocks" -> coachGetUnavailableBlocks(request);
+            case "coach-create-unavailable-block" -> coachCreateUnavailableBlock(request);
+            case "coach-get-exception-sessions" -> coachGetExceptionSessions(request);
+            case "coach-create-replacement-offer" -> coachCreateReplacementOffer(request);
+            case "coach-get-replacement-coaches" -> coachGetReplacementCoaches(request);
             case "coach-create-session-notes" -> coachCreateSessionNotes(request);
             case "coach-update-session-note" -> coachUpdateSessionNote(request);
             case "coach-get-customers" -> coachGetCustomers(request);
@@ -82,6 +95,10 @@ public class CoachBookingService {
             case "admin-get-coach-students" -> adminGetCoachStudents(request);
             default -> throw unsupportedAction(action);
         };
+    }
+
+    public Map<String, Object> previewCustomerCoachMatches(Map<String, Object> payload) {
+        return customerMatchCoaches(payload);
     }
 
     // ---------- Common ----------
@@ -335,50 +352,9 @@ public class CoachBookingService {
         }
         requireCoachExists(coachId);
 
-        GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
-        try {
-            jdbcTemplate.update(con -> {
-                var ps = con.prepareStatement(
-                        """
-                                INSERT INTO dbo.PTRecurringRequests (CustomerID, CoachID, CustomerMembershipID, StartDate, EndDate, Status)
-                                VALUES (?, ?, ?, ?, ?, 'PENDING')
-                                """,
-                        java.sql.Statement.RETURN_GENERATED_KEYS);
-                ps.setInt(1, customer.userId());
-                ps.setInt(2, coachId);
-                ps.setInt(3, customerMembershipId);
-                ps.setObject(4, startDate);
-                ps.setObject(5, endDate);
-                return ps;
-            }, keyHolder);
-        } catch (DataAccessException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid membership or dates. Membership must be ACTIVE and allow coach booking.");
-        }
-        Number key = keyHolder.getKey();
-        int ptRequestId = (key != null) ? key.intValue() : 0;
-        if (ptRequestId == 0) {
-            List<Integer> ids = jdbcTemplate.query("SELECT CAST(SCOPE_IDENTITY() AS INT) AS id",
-                    (rs, i) -> rs.getObject("id") != null ? Integer.valueOf(rs.getInt("id")) : Integer.valueOf(0));
-            Integer first = ids.isEmpty() ? null : ids.get(0);
-            if (first != null && first.intValue() != 0)
-                ptRequestId = first.intValue();
-        }
-        if (ptRequestId == 0) {
-            List<Integer> ids = jdbcTemplate.query(
-                    "SELECT PTRequestID FROM dbo.PTRecurringRequests WHERE CustomerID = ? ORDER BY PTRequestID DESC",
-                    (rs, i) -> rs.getInt("PTRequestID"), customer.userId());
-            ptRequestId = ids.isEmpty() ? 0 : ids.get(0);
-        }
-
-        for (Map<String, Object> slot : slots) {
-            int dayOfWeek = requireInteger(slot, "dayOfWeek");
-            int timeSlotId = requireInteger(slot, "timeSlotId");
-            if (dayOfWeek < 1 || dayOfWeek > 7)
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "dayOfWeek must be 1-7.");
-            jdbcTemplate.update("INSERT INTO dbo.PTRequestSlots (PTRequestID, DayOfWeek, TimeSlotID) VALUES (?, ?, ?)",
-                    ptRequestId, dayOfWeek, timeSlotId);
-        }
+        int ptRequestId = insertPtRecurringRequest(customer.userId(), coachId, customerMembershipId, startDate, endDate,
+                "PENDING", "REQUEST");
+        insertPtRequestSlots(ptRequestId, slots);
 
         notifyPtRequestCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
 
@@ -389,6 +365,123 @@ public class CoachBookingService {
                 "endDate", dateToString(endDate),
                 "status", "PENDING",
                 "message", "Booking request sent successfully. Please wait for coach approval.");
+    }
+
+    @Transactional
+    private Map<String, Object> customerCreateInstantBooking(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        ensureNoBlockingPtRequest(customer.userId());
+        int coachId = requireInteger(payload, "coachId");
+        String endDateStr = requireText(payload, "endDate");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> slots = (List<Map<String, Object>>) payload.get("slots");
+        if (slots == null || slots.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "At least one slot (dayOfWeek, timeSlotId) is required.");
+        }
+
+        LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
+        LocalDate endDate = LocalDate.parse(endDateStr);
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after the earliest possible coaching start date.");
+        }
+
+        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate, endDate);
+        Integer customerMembershipId = membership.customerMembershipId();
+        if (customerMembershipId == null || !membership.allowsCoachBooking()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "You need an ACTIVE Gym + Coach membership covering the selected period.");
+        }
+        requireCoachExists(coachId);
+
+        List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
+        MatchSummary summary = evaluateCoachMatch(coachId, startDate, endDate, requestedSlots);
+        if (summary.matchedSlots() != requestedSlots.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Selected coach does not have all requested recurring slots available for instant booking.");
+        }
+
+        int ptRequestId = insertPtRecurringRequest(customer.userId(), coachId, customerMembershipId, startDate, endDate,
+                "APPROVED", "INSTANT");
+        insertPtRequestSlots(ptRequestId, slots);
+        int sessionsCreated = generatePTSessions(ptRequestId, customer.userId(), coachId, startDate, endDate, slots);
+
+        notifyInstantPtBookingCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("ptRequestId", ptRequestId);
+        response.put("status", "APPROVED");
+        response.put("bookingMode", "INSTANT");
+        response.put("startDate", dateToString(startDate));
+        response.put("endDate", dateToString(endDate));
+        response.put("sessionsCreated", sessionsCreated);
+        response.put("message", "PT booking confirmed successfully.");
+        return response;
+    }
+
+    private int insertPtRecurringRequest(
+            int customerId,
+            int coachId,
+            int customerMembershipId,
+            LocalDate startDate,
+            LocalDate endDate,
+            String status,
+            String bookingMode) {
+        GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
+        try {
+            jdbcTemplate.update(con -> {
+                var ps = con.prepareStatement(
+                        """
+                                INSERT INTO dbo.PTRecurringRequests (
+                                    CustomerID,
+                                    CoachID,
+                                    CustomerMembershipID,
+                                    StartDate,
+                                    EndDate,
+                                    Status,
+                                    BookingMode
+                                )
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """,
+                        java.sql.Statement.RETURN_GENERATED_KEYS);
+                ps.setInt(1, customerId);
+                ps.setInt(2, coachId);
+                ps.setInt(3, customerMembershipId);
+                ps.setObject(4, startDate);
+                ps.setObject(5, endDate);
+                ps.setString(6, status);
+                ps.setString(7, bookingMode);
+                return ps;
+            }, keyHolder);
+        } catch (DataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid membership or dates. Membership must be ACTIVE and allow coach booking.");
+        }
+        Number key = keyHolder.getKey();
+        int ptRequestId = key != null ? key.intValue() : 0;
+        if (ptRequestId == 0) {
+            List<Integer> ids = jdbcTemplate.query(
+                    "SELECT TOP (1) PTRequestID FROM dbo.PTRecurringRequests WHERE CustomerID = ? ORDER BY PTRequestID DESC",
+                    (rs, i) -> rs.getInt("PTRequestID"), customerId);
+            ptRequestId = ids.isEmpty() ? 0 : ids.getFirst();
+        }
+        if (ptRequestId == 0) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create PT phase.");
+        }
+        return ptRequestId;
+    }
+
+    private void insertPtRequestSlots(int ptRequestId, List<Map<String, Object>> slots) {
+        for (Map<String, Object> slot : slots) {
+            int dayOfWeek = requireInteger(slot, "dayOfWeek");
+            int timeSlotId = requireInteger(slot, "timeSlotId");
+            if (dayOfWeek < 1 || dayOfWeek > 7) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "dayOfWeek must be 1-7.");
+            }
+            jdbcTemplate.update("INSERT INTO dbo.PTRequestSlots (PTRequestID, DayOfWeek, TimeSlotID) VALUES (?, ?, ?)",
+                    ptRequestId, dayOfWeek, timeSlotId);
+        }
     }
 
     private void ensureNoBlockingPtRequest(int customerId) {
@@ -437,20 +530,373 @@ public class CoachBookingService {
             for (Map<String, Object> slot : slots) {
                 if (parseInteger(slot.get("dayOfWeek")) == dayOfWeek) {
                     int timeSlotId = parseInteger(slot.get("timeSlotId"));
-                    try {
-                        jdbcTemplate.update(
-                                """
-                                        INSERT INTO dbo.PTSessions (PTRequestID, CustomerID, CoachID, SessionDate, DayOfWeek, TimeSlotID, Status)
-                                        VALUES (?, ?, ?, ?, ?, ?, 'SCHEDULED')
-                                        """,
-                                ptRequestId, customerId, coachId, d, dayOfWeek, timeSlotId);
+                    if (createScheduledSessionIfMissing(ptRequestId, customerId, coachId, d, dayOfWeek, timeSlotId)) {
                         count++;
-                    } catch (DataAccessException ignored) {
                     }
                 }
             }
         }
         return count;
+    }
+
+    private Map<String, Object> customerGetCurrentPhase(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        return buildCurrentPhaseResponse(customer.userId());
+    }
+
+    private Map<String, Object> customerGetProgressContext(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        return buildCustomerProgressContext(customer.userId());
+    }
+
+    public Map<String, Object> getCustomerProgressContext(int customerId) {
+        return buildCustomerProgressContext(customerId);
+    }
+
+    private Map<String, Object> buildCurrentPhaseResponse(int customerId) {
+        Map<String, Object> activePhase = loadActivePtPhase(customerId);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("activePhase", activePhase);
+        response.put("dashboard", activePhase == null ? Map.of() : buildPtDashboard(activePhase));
+        return response;
+    }
+
+    private Map<String, Object> buildCustomerProgressContext(int customerId) {
+        Map<String, Object> activePhase = loadActivePtPhase(customerId);
+        if (activePhase == null) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("hasActivePt", false);
+            empty.put("status", "NO_ACTIVE_PHASE");
+            empty.put("currentPtStatus", "NONE");
+            empty.put("activePhase", Map.of());
+            empty.put("coach", Map.of());
+            empty.put("nextSession", Map.of());
+            empty.put("recentSessions", List.of());
+            empty.put("weeklySchedule", List.of());
+            empty.put("templateSlots", List.of());
+            empty.put("completedSessions", 0L);
+            empty.put("remainingSessions", 0L);
+            return empty;
+        }
+
+        Map<String, Object> dashboard = buildPtDashboard(activePhase);
+        int ptRequestId = (Integer) activePhase.get("ptRequestId");
+
+        Map<String, Object> coach = new LinkedHashMap<>();
+        coach.put("coachId", activePhase.get("coachId"));
+        coach.put("coachName", activePhase.get("coachName"));
+        coach.put("coachEmail", activePhase.get("coachEmail"));
+        coach.put("coachPhone", activePhase.get("coachPhone"));
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("hasActivePt", true);
+        context.put("status", "ACTIVE_PHASE");
+        context.put("currentPtStatus", activePhase.get("status"));
+        context.put("ptRequestId", activePhase.get("ptRequestId"));
+        context.put("bookingMode", activePhase.get("bookingMode"));
+        context.put("startDate", activePhase.get("startDate"));
+        context.put("endDate", activePhase.get("endDate"));
+        context.put("coach", coach);
+        context.put("activePhase", activePhase);
+        context.put("nextSession", dashboard.getOrDefault("nextSession", Map.of()));
+        context.put("recentSessions", loadRecentSessionContext(ptRequestId));
+        context.put("weeklySchedule", dashboard.getOrDefault("weeklySchedule", List.of()));
+        context.put("templateSlots", activePhase.getOrDefault("templateSlots", List.of()));
+        context.put("latestNoteSignal", dashboard.getOrDefault("latestNoteSignal", Map.of()));
+        context.put("latestProgressSignal", dashboard.getOrDefault("latestProgressSignal", Map.of()));
+        context.put("latestSignals", dashboard.getOrDefault("latestSignals", Map.of()));
+        context.put("completedSessions", dashboard.getOrDefault("completedSessions", 0L));
+        context.put("remainingSessions", dashboard.getOrDefault("remainingSessions", 0L));
+        return context;
+    }
+
+    private Map<String, Object> loadActivePtPhase(int customerId) {
+        List<Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    r.PTRequestID,
+                    r.CustomerID,
+                    r.CoachID,
+                    r.CustomerMembershipID,
+                    r.StartDate,
+                    r.EndDate,
+                    r.Status,
+                    COALESCE(r.BookingMode, 'REQUEST') AS BookingMode,
+                    coach.FullName AS CoachName,
+                    coach.Email AS CoachEmail,
+                    coach.Phone AS CoachPhone
+                FROM dbo.PTRecurringRequests r
+                JOIN dbo.Users coach ON coach.UserID = r.CoachID
+                WHERE r.CustomerID = ?
+                  AND r.Status = 'APPROVED'
+                  AND r.EndDate >= CAST(GETDATE() AS DATE)
+                ORDER BY r.EndDate DESC, r.PTRequestID DESC
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ptRequestId", rs.getInt("PTRequestID"));
+            item.put("customerId", rs.getInt("CustomerID"));
+            item.put("coachId", rs.getInt("CoachID"));
+            item.put("coachName", rs.getString("CoachName"));
+            item.put("coachEmail", rs.getString("CoachEmail"));
+            item.put("coachPhone", rs.getString("CoachPhone"));
+            item.put("customerMembershipId", rs.getInt("CustomerMembershipID"));
+            item.put("startDate", dateToString(rs.getDate("StartDate").toLocalDate()));
+            item.put("endDate", dateToString(rs.getDate("EndDate").toLocalDate()));
+            item.put("status", rs.getString("Status"));
+            item.put("bookingMode", rs.getString("BookingMode"));
+            return item;
+        }, customerId);
+        if (rows.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> activePhase = rows.getFirst();
+        int ptRequestId = (Integer) activePhase.get("ptRequestId");
+        activePhase.put("templateSlots", loadTemplateSlots(ptRequestId));
+        return activePhase;
+    }
+
+    private List<Map<String, Object>> loadTemplateSlots(int ptRequestId) {
+        return jdbcTemplate.query("""
+                SELECT prs.DayOfWeek, prs.TimeSlotID, ts.SlotIndex, ts.StartTime, ts.EndTime
+                FROM dbo.PTRequestSlots prs
+                JOIN dbo.TimeSlots ts ON ts.TimeSlotID = prs.TimeSlotID
+                WHERE prs.PTRequestID = ?
+                ORDER BY prs.DayOfWeek, ts.SlotIndex
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("dayOfWeek", rs.getInt("DayOfWeek"));
+            item.put("timeSlotId", rs.getInt("TimeSlotID"));
+            item.put("slotIndex", rs.getInt("SlotIndex"));
+            item.put("startTime", rs.getTime("StartTime") != null ? rs.getTime("StartTime").toString() : null);
+            item.put("endTime", rs.getTime("EndTime") != null ? rs.getTime("EndTime").toString() : null);
+            return item;
+        }, ptRequestId);
+    }
+
+    private Map<String, Object> buildPtDashboard(Map<String, Object> activePhase) {
+        int ptRequestId = (Integer) activePhase.get("ptRequestId");
+        int customerId = (Integer) activePhase.get("customerId");
+        LocalDate today = LocalDate.now();
+        LocalDate weekEnd = today.plusDays(6);
+
+        Map<String, Object> nextSession = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    s.PTSessionID,
+                    s.PTRequestID,
+                    s.CoachID,
+                    s.SessionDate,
+                    s.DayOfWeek,
+                    s.TimeSlotID,
+                    s.Status,
+                    s.CancelReason,
+                    ts.SlotIndex,
+                    ts.StartTime,
+                    ts.EndTime,
+                    coach.FullName AS CoachName,
+                    coach.Phone AS CoachPhone
+                FROM dbo.PTSessions s
+                JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
+                JOIN dbo.Users coach ON coach.UserID = s.CoachID
+                WHERE s.PTRequestID = ?
+                  AND s.Status = 'SCHEDULED'
+                  AND s.SessionDate >= CAST(GETDATE() AS DATE)
+                ORDER BY s.SessionDate, ts.SlotIndex
+                """, myScheduleRowMapper(), ptRequestId).stream().findFirst().orElse(null);
+
+        List<Map<String, Object>> weeklySchedule = jdbcTemplate.query("""
+                SELECT
+                    s.PTSessionID,
+                    s.PTRequestID,
+                    s.CoachID,
+                    s.SessionDate,
+                    s.DayOfWeek,
+                    s.TimeSlotID,
+                    s.Status,
+                    s.CancelReason,
+                    ts.SlotIndex,
+                    ts.StartTime,
+                    ts.EndTime,
+                    coach.FullName AS CoachName,
+                    coach.Phone AS CoachPhone
+                FROM dbo.PTSessions s
+                JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
+                JOIN dbo.Users coach ON coach.UserID = s.CoachID
+                WHERE s.PTRequestID = ?
+                  AND s.SessionDate >= ?
+                  AND s.SessionDate <= ?
+                ORDER BY s.SessionDate, ts.SlotIndex
+                """, myScheduleRowMapper(), ptRequestId, today, weekEnd);
+
+        Map<String, Object> latestNote = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    n.PTSessionNoteID,
+                    n.PTSessionID,
+                    n.NoteContent,
+                    n.CreatedAt,
+                    n.UpdatedAt,
+                    s.SessionDate
+                FROM dbo.PTSessionNotes n
+                JOIN dbo.PTSessions s ON s.PTSessionID = n.PTSessionID
+                WHERE s.PTRequestID = ?
+                ORDER BY COALESCE(n.UpdatedAt, n.CreatedAt) DESC, n.PTSessionNoteID DESC
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("noteId", rs.getInt("PTSessionNoteID"));
+            item.put("ptSessionId", rs.getInt("PTSessionID"));
+            item.put("noteContent", rs.getString("NoteContent"));
+            item.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
+            item.put("updatedAt", timestampToIso(rs.getTimestamp("UpdatedAt")));
+            item.put("sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()));
+            return item;
+        }, ptRequestId).stream().findFirst().orElse(null);
+
+        Map<String, Object> latestProgress = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    HeightCm,
+                    WeightKg,
+                    BMI,
+                    RecordedAt
+                FROM dbo.CustomerHealthHistory
+                WHERE CustomerID = ?
+                ORDER BY RecordedAt DESC
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("heightCm", rs.getBigDecimal("HeightCm"));
+            item.put("weightKg", rs.getBigDecimal("WeightKg"));
+            item.put("bmi", rs.getBigDecimal("BMI"));
+            item.put("recordedAt", timestampToIso(rs.getTimestamp("RecordedAt")));
+            return item;
+        }, customerId).stream().findFirst().orElse(null);
+
+        long completedSessions = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM dbo.PTSessions
+                WHERE PTRequestID = ? AND Status = 'COMPLETED'
+                """, Long.class, ptRequestId);
+
+        long remainingSessions = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM dbo.PTSessions
+                WHERE PTRequestID = ? AND Status = 'SCHEDULED'
+                """, Long.class, ptRequestId);
+
+        Map<String, Object> dashboard = new LinkedHashMap<>();
+        attachReplacementOffers(customerId, weeklySchedule);
+        if (nextSession != null) {
+            attachReplacementOffer(customerId, nextSession);
+        }
+        Map<String, Object> latestNoteSignal = buildLatestNoteSignal(latestNote, activePhase);
+        Map<String, Object> latestProgressSignal = buildLatestProgressSignal(latestProgress);
+        dashboard.put("nextSession", nextSession == null ? Map.of() : nextSession);
+        dashboard.put("weeklySchedule", weeklySchedule);
+        dashboard.put("latestNote", latestNote == null ? Map.of() : latestNote);
+        dashboard.put("latestProgress", latestProgress == null ? Map.of() : latestProgress);
+        dashboard.put("latestNoteSignal", latestNoteSignal);
+        dashboard.put("latestProgressSignal", latestProgressSignal);
+        dashboard.put("latestSignals", Map.of(
+                "latestNote", latestNoteSignal,
+                "latestProgress", latestProgressSignal,
+                "mostRecent", selectLatestSignal(latestNoteSignal, latestProgressSignal)));
+        dashboard.put("completedSessions", completedSessions);
+        dashboard.put("remainingSessions", remainingSessions);
+        return dashboard;
+    }
+
+    private List<Map<String, Object>> loadRecentSessionContext(int ptRequestId) {
+        return jdbcTemplate.query("""
+                SELECT TOP (3)
+                    s.PTSessionID,
+                    s.PTRequestID,
+                    s.CoachID,
+                    s.SessionDate,
+                    s.DayOfWeek,
+                    s.TimeSlotID,
+                    s.Status,
+                    s.CancelReason,
+                    ts.SlotIndex,
+                    ts.StartTime,
+                    ts.EndTime,
+                    coach.FullName AS CoachName,
+                    coach.Phone AS CoachPhone,
+                    (
+                        SELECT COUNT(*)
+                        FROM dbo.PTSessionNotes n
+                        WHERE n.PTSessionID = s.PTSessionID
+                    ) AS NoteCount
+                FROM dbo.PTSessions s
+                JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
+                JOIN dbo.Users coach ON coach.UserID = s.CoachID
+                WHERE s.PTRequestID = ?
+                ORDER BY s.SessionDate DESC, ts.SlotIndex DESC
+                """, (rs, i) -> {
+            Map<String, Object> session = myScheduleRowMapper().mapRow(rs, i);
+            Integer noteCount = parseInteger(rs.getObject("NoteCount"));
+            int resolvedNoteCount = noteCount == null ? 0 : noteCount;
+            session.put("noteCount", resolvedNoteCount);
+            session.put("hasCoachNote", resolvedNoteCount > 0);
+            return session;
+        }, ptRequestId);
+    }
+
+    private Map<String, Object> buildLatestNoteSignal(
+            Map<String, Object> latestNote,
+            Map<String, Object> activePhase) {
+        if (latestNote == null || latestNote.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("sourceType", "COACH_NOTE");
+            empty.put("recordedAt", null);
+            empty.put("summary", "No coaching note recorded yet.");
+            empty.put("coachName", activePhase.get("coachName"));
+            empty.put("sessionDate", null);
+            empty.put("noteId", null);
+            return empty;
+        }
+
+        Map<String, Object> signal = new LinkedHashMap<>();
+        signal.put("sourceType", "COACH_NOTE");
+        signal.put("recordedAt", firstNonBlank(
+                asText(latestNote.get("updatedAt")),
+                asText(latestNote.get("createdAt"))));
+        signal.put("summary", latestNote.get("noteContent"));
+        signal.put("coachName", activePhase.get("coachName"));
+        signal.put("sessionDate", latestNote.get("sessionDate"));
+        signal.put("noteId", latestNote.get("noteId"));
+        return signal;
+    }
+
+    private Map<String, Object> buildLatestProgressSignal(Map<String, Object> latestProgress) {
+        if (latestProgress == null || latestProgress.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("sourceType", "HEALTH_SNAPSHOT");
+            empty.put("recordedAt", null);
+            empty.put("summary", "No progress update recorded yet.");
+            empty.put("heightCm", null);
+            empty.put("weightKg", null);
+            empty.put("bmi", null);
+            return empty;
+        }
+
+        Map<String, Object> signal = new LinkedHashMap<>();
+        signal.put("sourceType", "HEALTH_SNAPSHOT");
+        signal.put("recordedAt", latestProgress.get("recordedAt"));
+        signal.put("summary", "Latest progress update recorded at " + latestProgress.get("recordedAt") + ".");
+        signal.put("heightCm", latestProgress.get("heightCm"));
+        signal.put("weightKg", latestProgress.get("weightKg"));
+        signal.put("bmi", latestProgress.get("bmi"));
+        return signal;
+    }
+
+    private Map<String, Object> selectLatestSignal(
+            Map<String, Object> latestNoteSignal,
+            Map<String, Object> latestProgressSignal) {
+        String latestNoteAt = asText(latestNoteSignal.get("recordedAt"));
+        String latestProgressAt = asText(latestProgressSignal.get("recordedAt"));
+        if (latestNoteAt == null && latestProgressAt == null) {
+            return new LinkedHashMap<>(latestProgressSignal);
+        }
+        if (latestNoteAt != null && (latestProgressAt == null || latestNoteAt.compareTo(latestProgressAt) >= 0)) {
+            return new LinkedHashMap<>(latestNoteSignal);
+        }
+        return new LinkedHashMap<>(latestProgressSignal);
     }
 
     private Map<String, Object> customerGetMySchedule(Map<String, Object> payload) {
@@ -504,6 +950,7 @@ public class CoachBookingService {
                 session.put("reschedule", reschedule);
             }
         }
+        attachReplacementOffers(customer.userId(), items);
 
         // Fetch pending requests separately
         List<Map<String, Object>> pendingRequests = jdbcTemplate.query("""
@@ -577,6 +1024,7 @@ public class CoachBookingService {
         result.put("items", items);
         result.put("pendingRequests", pendingRequests);
         result.put("deniedRequests", deniedRequests);
+        result.putAll(buildCurrentPhaseResponse(customer.userId()));
         return result;
     }
 
@@ -614,7 +1062,12 @@ public class CoachBookingService {
         LocalDate newDate = LocalDate.parse(newDateStr);
 
         Map<String, Object> session = jdbcTemplate.query(
-                "SELECT CoachID, SessionDate, TimeSlotID, Status, CancelReason FROM dbo.PTSessions WHERE PTSessionID = ? AND CustomerID = ?",
+                """
+                        SELECT s.CoachID, s.SessionDate, s.TimeSlotID, s.Status, s.CancelReason, s.PTRequestID, r.CoachID AS PrimaryCoachID, r.EndDate
+                        FROM dbo.PTSessions s
+                        JOIN dbo.PTRecurringRequests r ON r.PTRequestID = s.PTRequestID
+                        WHERE s.PTSessionID = ? AND s.CustomerID = ?
+                        """,
                 (rs, i) -> {
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("coachId", rs.getInt("CoachID"));
@@ -622,53 +1075,193 @@ public class CoachBookingService {
                     item.put("timeSlotId", rs.getInt("TimeSlotID"));
                     item.put("status", rs.getString("Status"));
                     item.put("cancelReason", rs.getString("CancelReason"));
+                    item.put("ptRequestId", rs.getInt("PTRequestID"));
+                    item.put("primaryCoachId", rs.getInt("PrimaryCoachID"));
+                    item.put("endDate", rs.getDate("EndDate").toLocalDate());
                     return item;
                 },
                 sessionId, customer.userId()).stream().findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found."));
 
         int coachId = (Integer) session.get("coachId");
+        int primaryCoachId = (Integer) session.get("primaryCoachId");
         String status = String.valueOf(session.get("status"));
         if (!"SCHEDULED".equalsIgnoreCase(status)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only SCHEDULED sessions can be rescheduled.");
         }
-
-        RescheduleMeta currentMeta = parseRescheduleMeta(asText(session.get("cancelReason")));
-        if (currentMeta != null && "PENDING".equals(currentMeta.state())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reschedule request is already pending.");
+        if (coachId != primaryCoachId) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This exception session is no longer under your primary coach. Please resolve it through the exception flow.");
         }
 
-        if (LocalDate.now().isAfter((LocalDate) session.get("sessionDate"))) {
+        LocalDate currentDate = (LocalDate) session.get("sessionDate");
+        if (LocalDate.now().isAfter(currentDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reschedule a past session.");
         }
         if (newDate.isBefore(LocalDate.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot request reschedule to a past date.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reschedule to a past date.");
         }
+        if (newDate.isAfter((LocalDate) session.get("endDate"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New slot must stay inside your current PT phase.");
+        }
+        enforceSessionCutoff(currentDate, (Integer) session.get("timeSlotId"));
+        enforceSessionCutoff(newDate, newTimeSlotId);
         if (!isCoachWeeklyAvailable(coachId, newDate.getDayOfWeek().getValue(), newTimeSlotId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coach is not available for requested slot.");
         }
-
-        List<Integer> conflicts = jdbcTemplate.query(
-                """
-                        SELECT PTSessionID FROM dbo.PTSessions
-                        WHERE CoachID = ? AND SessionDate = ? AND TimeSlotID = ? AND Status IN ('SCHEDULED','COMPLETED') AND PTSessionID <> ?
-                        """,
-                (rs, i) -> rs.getInt("PTSessionID"), coachId, newDate, newTimeSlotId, sessionId);
-        if (!conflicts.isEmpty()) {
+        if (hasCoachConflict(coachId, newDate, newTimeSlotId, sessionId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coach is not available at the chosen slot.");
+        }
+        if (hasPendingReplacementOffer(sessionId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Resolve the pending replacement offer before changing this PT session.");
         }
 
         jdbcTemplate.update("""
-                UPDATE dbo.PTSessions SET CancelReason = ?, UpdatedAt = SYSDATETIME()
+                UPDATE dbo.PTSessions
+                SET SessionDate = ?, TimeSlotID = ?, DayOfWeek = ?, CancelReason = NULL, UpdatedAt = SYSDATETIME()
                 WHERE PTSessionID = ? AND CustomerID = ?
-                """, encodeRescheduleRequest(newDate, newTimeSlotId, reason), sessionId, customer.userId());
-        notifyCoachAboutRescheduleRequest(sessionId, customer.userId(), coachId, requestedSlotSummary(newDate, newTimeSlotId));
+                """, newDate, newTimeSlotId, newDate.getDayOfWeek().getValue(), sessionId, customer.userId());
+        notifyDirectReschedule(sessionId, customer.userId(), coachId, requestedSlotSummary(currentDate,
+                (Integer) session.get("timeSlotId")), requestedSlotSummary(newDate, newTimeSlotId), reason);
         return Map.of(
                 "sessionId", sessionId,
-                "status", "PENDING_COACH_APPROVAL",
+                "status", "RESCHEDULED",
                 "requestedSessionDate", newDateStr,
                 "requestedTimeSlotId", newTimeSlotId,
-                "message", "Reschedule request sent to coach.");
+                "message", "Session moved successfully.");
+    }
+
+    @Transactional
+    private Map<String, Object> customerRescheduleSeries(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        Map<String, Object> body = asMap(payload.get("body"));
+        String cutoverDateText = requireText(body, "cutoverDate");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> slots = (List<Map<String, Object>>) body.get("slots");
+        if (slots == null || slots.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one recurring slot is required.");
+        }
+
+        Map<String, Object> activePhase = loadActivePtPhase(customer.userId());
+        if (activePhase == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No active PT phase was found.");
+        }
+
+        LocalDate cutoverDate = LocalDate.parse(cutoverDateText);
+        LocalDate today = LocalDate.now();
+        LocalDate phaseEndDate = LocalDate.parse(String.valueOf(activePhase.get("endDate")));
+        int ptRequestId = (Integer) activePhase.get("ptRequestId");
+        int coachId = (Integer) activePhase.get("coachId");
+        if (cutoverDate.isBefore(today.plusDays(1))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Series changes must start from a future date.");
+        }
+        if (cutoverDate.isAfter(phaseEndDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Series change start must remain inside the current PT phase.");
+        }
+
+        List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
+        for (RequestedSlot requestedSlot : requestedSlots) {
+            if (!isCoachWeeklyAvailable(coachId, requestedSlot.dayOfWeek(), requestedSlot.timeSlotId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Your primary coach is not available for every requested recurring slot.");
+            }
+        }
+
+        List<Map<String, Object>> preservedFutureSessions = jdbcTemplate.query("""
+                SELECT PTSessionID, SessionDate, TimeSlotID, Status
+                FROM dbo.PTSessions
+                WHERE PTRequestID = ?
+                  AND SessionDate >= ?
+                  AND Status <> 'SCHEDULED'
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ptSessionId", rs.getInt("PTSessionID"));
+            item.put("sessionDate", rs.getDate("SessionDate").toLocalDate());
+            item.put("timeSlotId", rs.getInt("TimeSlotID"));
+            item.put("status", rs.getString("Status"));
+            return item;
+        }, ptRequestId, cutoverDate);
+
+        jdbcTemplate.update("""
+                DELETE FROM dbo.PTSessions
+                WHERE PTRequestID = ?
+                  AND Status = 'SCHEDULED'
+                  AND SessionDate >= ?
+                """, ptRequestId, cutoverDate);
+
+        jdbcTemplate.update("DELETE FROM dbo.PTRequestSlots WHERE PTRequestID = ?", ptRequestId);
+        insertPtRequestSlots(ptRequestId, slots);
+
+        int created = regenerateFuturePtSessions(ptRequestId, customer.userId(), coachId, cutoverDate, phaseEndDate,
+                slots, preservedFutureSessions);
+
+        notificationService.notifyUser(
+                coachId,
+                "PT_SERIES_CHANGED",
+                "PT recurring schedule updated",
+                loadUserFullName(customer.userId()) + " changed the recurring PT template from "
+                        + dateToString(cutoverDate) + " onward.",
+                "/coach/booking-requests",
+                ptRequestId,
+                "PT_SERIES_CHANGED_" + ptRequestId + "_" + dateToString(cutoverDate));
+
+        return Map.of(
+                "ptRequestId", ptRequestId,
+                "status", "UPDATED",
+                "cutoverDate", dateToString(cutoverDate),
+                "sessionsCreated", created,
+                "message", "Recurring PT series updated successfully.");
+    }
+
+    @Transactional
+    private Map<String, Object> customerRespondReplacementOffer(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        int sessionId = requireInteger(payload, "sessionId");
+        Map<String, Object> body = asMap(payload.get("body"));
+        String decision = requireText(body, "decision").toUpperCase();
+        if (!"ACCEPT".equals(decision) && !"DECLINE".equals(decision)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "decision must be ACCEPT or DECLINE.");
+        }
+
+        Map<String, Object> offer = loadPendingReplacementOfferForCustomer(sessionId, customer.userId());
+        int offerId = (Integer) offer.get("offerId");
+        int replacementCoachId = (Integer) offer.get("replacementCoachId");
+        LocalDate sessionDate = (LocalDate) offer.get("sessionDate");
+        int timeSlotId = (Integer) offer.get("timeSlotId");
+
+        if ("ACCEPT".equals(decision)) {
+            if (!isCoachWeeklyAvailable(replacementCoachId, sessionDate.getDayOfWeek().getValue(), timeSlotId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Replacement coach is no longer available for this slot.");
+            }
+            if (hasCoachConflict(replacementCoachId, sessionDate, timeSlotId, sessionId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Replacement coach now has a conflict in this slot.");
+            }
+            jdbcTemplate.update("""
+                    UPDATE dbo.PTSessions
+                    SET CoachID = ?, UpdatedAt = SYSDATETIME()
+                    WHERE PTSessionID = ? AND CustomerID = ?
+                    """, replacementCoachId, sessionId, customer.userId());
+        }
+
+        jdbcTemplate.update("""
+                UPDATE dbo.PTSessionReplacementOffers
+                SET Status = ?, CustomerRespondedAt = SYSDATETIME(), UpdatedAt = SYSDATETIME()
+                WHERE OfferID = ?
+                """, "ACCEPT".equals(decision) ? "ACCEPTED" : "DECLINED", offerId);
+
+        notifyReplacementOfferDecision(sessionId, (Integer) offer.get("originalCoachId"), replacementCoachId, decision);
+
+        return Map.of(
+                "sessionId", sessionId,
+                "status", "ACCEPT".equals(decision) ? "ACCEPTED" : "DECLINED",
+                "message", "ACCEPT".equals(decision)
+                        ? "Replacement coach accepted for this PT session."
+                        : "Replacement coach declined for this PT session.");
     }
 
     private Map<String, Object> customerSubmitFeedback(Map<String, Object> payload) {
@@ -706,7 +1299,7 @@ public class CoachBookingService {
                        u.FullName AS CustomerName, u.Email AS CustomerEmail, u.Phone AS CustomerPhone
                 FROM dbo.PTRecurringRequests r
                 JOIN dbo.Users u ON u.UserID = r.CustomerID
-                WHERE r.CoachID = ? AND r.Status = 'PENDING'
+                WHERE r.CoachID = ? AND r.Status = 'PENDING' AND COALESCE(r.BookingMode, 'REQUEST') = 'REQUEST'
                 ORDER BY r.CreatedAt DESC
                 """, (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -1052,6 +1645,273 @@ public class CoachBookingService {
         return Map.of("items", items, "fromDate", dateToString(from), "toDate", dateToString(to));
     }
 
+    private Map<String, Object> coachGetUnavailableBlocks(Map<String, Object> payload) {
+        AuthService.AuthContext coach = requireCoach(payload);
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                SELECT b.UnavailableBlockID, b.StartDate, b.EndDate, b.TimeSlotID, b.Note, b.CreatedAt,
+                       ts.SlotIndex, ts.StartTime, ts.EndTime
+                FROM dbo.CoachUnavailableBlocks b
+                LEFT JOIN dbo.TimeSlots ts ON ts.TimeSlotID = b.TimeSlotID
+                WHERE b.CoachID = ? AND b.IsActive = 1
+                ORDER BY b.StartDate DESC, COALESCE(ts.SlotIndex, 0) DESC, b.UnavailableBlockID DESC
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("unavailableBlockId", rs.getInt("UnavailableBlockID"));
+            item.put("startDate", dateToString(rs.getDate("StartDate").toLocalDate()));
+            item.put("endDate", dateToString(rs.getDate("EndDate").toLocalDate()));
+            item.put("timeSlotId", parseInteger(rs.getObject("TimeSlotID")));
+            item.put("note", rs.getString("Note"));
+            item.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
+            if (rs.getObject("TimeSlotID") != null) {
+                Map<String, Object> slot = new LinkedHashMap<>();
+                slot.put("timeSlotId", rs.getInt("TimeSlotID"));
+                slot.put("slotIndex", rs.getInt("SlotIndex"));
+                slot.put("startTime", rs.getTime("StartTime") != null ? rs.getTime("StartTime").toString() : null);
+                slot.put("endTime", rs.getTime("EndTime") != null ? rs.getTime("EndTime").toString() : null);
+                item.put("slot", slot);
+            }
+            return item;
+        }, coach.userId());
+        return Map.of("items", items);
+    }
+
+    @Transactional
+    private Map<String, Object> coachCreateUnavailableBlock(Map<String, Object> payload) {
+        AuthService.AuthContext coach = requireCoach(payload);
+        String startDateText = requireText(payload, "startDate");
+        String endDateText = requireText(payload, "endDate");
+        Integer timeSlotId = parseInteger(payload.get("timeSlotId"));
+        String note = asText(payload.get("note"));
+        LocalDate startDate = LocalDate.parse(startDateText);
+        LocalDate endDate = LocalDate.parse(endDateText);
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be on or before endDate.");
+        }
+        if (endDate.isBefore(LocalDate.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unavailable block must affect today or future dates.");
+        }
+        if (timeSlotId != null) {
+            requireTimeSlotExists(timeSlotId);
+        }
+
+        GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            var statement = connection.prepareStatement("""
+                    INSERT INTO dbo.CoachUnavailableBlocks (CoachID, StartDate, EndDate, TimeSlotID, Note, IsActive)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                    """, new String[] { "UnavailableBlockID" });
+            statement.setInt(1, coach.userId());
+            statement.setObject(2, startDate);
+            statement.setObject(3, endDate);
+            if (timeSlotId == null) {
+                statement.setNull(4, java.sql.Types.INTEGER);
+            } else {
+                statement.setInt(4, timeSlotId);
+            }
+            statement.setString(5, note);
+            return statement;
+        }, keyHolder);
+        int unavailableBlockId = keyHolder.getKey() != null ? keyHolder.getKey().intValue() : 0;
+        int impactedCount = countImpactedSessionsForBlock(coach.userId(), startDate, endDate, timeSlotId);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("unavailableBlockId", unavailableBlockId);
+        response.put("startDate", dateToString(startDate));
+        response.put("endDate", dateToString(endDate));
+        response.put("timeSlotId", timeSlotId);
+        response.put("impactedSessions", impactedCount);
+        response.put("message", "Unavailable block saved successfully.");
+        return response;
+    }
+
+    private Map<String, Object> coachGetExceptionSessions(Map<String, Object> payload) {
+        AuthService.AuthContext coach = requireCoach(payload);
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                WITH LatestOffer AS (
+                    SELECT *,
+                           ROW_NUMBER() OVER (PARTITION BY PTSessionID ORDER BY CreatedAt DESC, OfferID DESC) AS rn
+                    FROM dbo.PTSessionReplacementOffers
+                    WHERE OriginalCoachID = ?
+                )
+                SELECT DISTINCT
+                    s.PTSessionID,
+                    s.PTRequestID,
+                    s.CustomerID,
+                    uCustomer.FullName AS CustomerName,
+                    uCustomer.Email AS CustomerEmail,
+                    uCustomer.Phone AS CustomerPhone,
+                    s.SessionDate,
+                    s.TimeSlotID,
+                    ts.SlotIndex,
+                    ts.StartTime,
+                    ts.EndTime,
+                    b.UnavailableBlockID,
+                    b.StartDate AS BlockStartDate,
+                    b.EndDate AS BlockEndDate,
+                    b.Note AS BlockNote,
+                    lo.OfferID,
+                    lo.ReplacementCoachID,
+                    lo.Status AS OfferStatus,
+                    lo.Note AS OfferNote,
+                    replacementCoach.FullName AS ReplacementCoachName
+                FROM dbo.PTSessions s
+                JOIN dbo.Users uCustomer ON uCustomer.UserID = s.CustomerID
+                JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
+                LEFT JOIN dbo.CoachUnavailableBlocks b
+                  ON b.CoachID = ?
+                 AND b.IsActive = 1
+                 AND s.SessionDate BETWEEN b.StartDate AND b.EndDate
+                 AND (b.TimeSlotID IS NULL OR b.TimeSlotID = s.TimeSlotID)
+                LEFT JOIN LatestOffer lo
+                  ON lo.PTSessionID = s.PTSessionID
+                 AND lo.rn = 1
+                LEFT JOIN dbo.Users replacementCoach
+                  ON replacementCoach.UserID = lo.ReplacementCoachID
+                WHERE s.Status = 'SCHEDULED'
+                  AND s.SessionDate >= CAST(GETDATE() AS DATE)
+                  AND (
+                      b.UnavailableBlockID IS NOT NULL
+                      OR lo.OfferID IS NOT NULL
+                  )
+                ORDER BY s.SessionDate, ts.SlotIndex, s.PTSessionID
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ptSessionId", rs.getInt("PTSessionID"));
+            item.put("ptRequestId", rs.getInt("PTRequestID"));
+            item.put("customerId", rs.getInt("CustomerID"));
+            item.put("customerName", rs.getString("CustomerName"));
+            item.put("customerEmail", rs.getString("CustomerEmail"));
+            item.put("customerPhone", rs.getString("CustomerPhone"));
+            item.put("sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()));
+            item.put("timeSlotId", rs.getInt("TimeSlotID"));
+            item.put("slotIndex", rs.getInt("SlotIndex"));
+            item.put("startTime", rs.getTime("StartTime") != null ? rs.getTime("StartTime").toString() : null);
+            item.put("endTime", rs.getTime("EndTime") != null ? rs.getTime("EndTime").toString() : null);
+            item.put("unavailableBlockId", parseInteger(rs.getObject("UnavailableBlockID")));
+            item.put("blockStartDate", rs.getDate("BlockStartDate") != null
+                    ? dateToString(rs.getDate("BlockStartDate").toLocalDate())
+                    : null);
+            item.put("blockEndDate", rs.getDate("BlockEndDate") != null
+                    ? dateToString(rs.getDate("BlockEndDate").toLocalDate())
+                    : null);
+            item.put("blockNote", rs.getString("BlockNote"));
+            item.put("offerId", parseInteger(rs.getObject("OfferID")));
+            item.put("offerStatus", rs.getString("OfferStatus"));
+            item.put("offerNote", rs.getString("OfferNote"));
+            item.put("replacementCoachId", parseInteger(rs.getObject("ReplacementCoachID")));
+            item.put("replacementCoachName", rs.getString("ReplacementCoachName"));
+            item.put("resolutionState", deriveExceptionResolutionState(
+                    parseInteger(rs.getObject("OfferID")),
+                    rs.getString("OfferStatus")));
+            return item;
+        }, coach.userId(), coach.userId());
+        return Map.of("items", items);
+    }
+
+    private Map<String, Object> coachGetReplacementCoaches(Map<String, Object> payload) {
+        AuthService.AuthContext coach = requireCoach(payload);
+        List<Map<String, Object>> items = jdbcTemplate.query("""
+                SELECT c.CoachID, u.FullName, u.Email, u.Phone
+                FROM dbo.Coaches c
+                JOIN dbo.Users u ON u.UserID = c.CoachID
+                WHERE u.IsActive = 1
+                  AND c.CoachID <> ?
+                ORDER BY u.FullName
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("coachId", rs.getInt("CoachID"));
+            item.put("fullName", rs.getString("FullName"));
+            item.put("email", rs.getString("Email"));
+            item.put("phone", rs.getString("Phone"));
+            return item;
+        }, coach.userId());
+        return Map.of("items", items);
+    }
+
+    @Transactional
+    private Map<String, Object> coachCreateReplacementOffer(Map<String, Object> payload) {
+        AuthService.AuthContext coach = requireCoach(payload);
+        int sessionId = requireInteger(payload, "sessionId");
+        Map<String, Object> body = asMap(payload.get("body"));
+        int replacementCoachId = requireInteger(body, "replacementCoachId");
+        String note = asText(body.get("note"));
+        if (replacementCoachId == coach.userId()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Replacement coach must be different from the primary coach.");
+        }
+
+        Map<String, Object> session = jdbcTemplate.query("""
+                SELECT s.PTSessionID, s.CustomerID, s.SessionDate, s.TimeSlotID, s.Status, s.CoachID
+                FROM dbo.PTSessions s
+                WHERE s.PTSessionID = ?
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ptSessionId", rs.getInt("PTSessionID"));
+            item.put("customerId", rs.getInt("CustomerID"));
+            item.put("sessionDate", rs.getDate("SessionDate").toLocalDate());
+            item.put("timeSlotId", rs.getInt("TimeSlotID"));
+            item.put("status", rs.getString("Status"));
+            item.put("coachId", rs.getInt("CoachID"));
+            return item;
+        }, sessionId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found."));
+
+        if (!"SCHEDULED".equalsIgnoreCase(String.valueOf(session.get("status")))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only scheduled PT sessions can receive a replacement offer.");
+        }
+        if ((Integer) session.get("coachId") != coach.userId()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only the primary coach currently assigned to this session can issue a replacement offer.");
+        }
+        ensureSessionImpactedByActiveBlock(sessionId, coach.userId(), (LocalDate) session.get("sessionDate"),
+                (Integer) session.get("timeSlotId"));
+        requireCoachExists(replacementCoachId);
+        if (!isCoachWeeklyAvailable(replacementCoachId, ((LocalDate) session.get("sessionDate")).getDayOfWeek().getValue(),
+                (Integer) session.get("timeSlotId"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Replacement coach is not available for this slot.");
+        }
+        if (hasCoachConflict(replacementCoachId, (LocalDate) session.get("sessionDate"), (Integer) session.get("timeSlotId"),
+                sessionId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Replacement coach already has another PT session in this slot.");
+        }
+
+        jdbcTemplate.update("""
+                UPDATE dbo.PTSessionReplacementOffers
+                SET Status = 'CANCELLED', UpdatedAt = SYSDATETIME()
+                WHERE PTSessionID = ?
+                  AND Status = 'PENDING_CUSTOMER'
+                """, sessionId);
+
+        GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            var statement = connection.prepareStatement("""
+                    INSERT INTO dbo.PTSessionReplacementOffers
+                        (PTSessionID, OriginalCoachID, ReplacementCoachID, Status, Note)
+                    VALUES (?, ?, ?, 'PENDING_CUSTOMER', ?)
+                    """, new String[] { "OfferID" });
+            statement.setInt(1, sessionId);
+            statement.setInt(2, coach.userId());
+            statement.setInt(3, replacementCoachId);
+            statement.setString(4, note);
+            return statement;
+        }, keyHolder);
+        int offerId = keyHolder.getKey() != null ? keyHolder.getKey().intValue() : 0;
+
+        notificationService.notifyUser(
+                (Integer) session.get("customerId"),
+                "PT_REPLACEMENT_OFFER",
+                "Replacement coach offered",
+                loadUserFullName(coach.userId()) + " offered a replacement coach for your PT session on "
+                        + dateToString((LocalDate) session.get("sessionDate")) + ".",
+                "/customer/coach-booking",
+                sessionId,
+                "PT_REPLACEMENT_OFFER_" + offerId);
+
+        return Map.of(
+                "offerId", offerId,
+                "sessionId", sessionId,
+                "status", "PENDING_CUSTOMER",
+                "message", "Replacement coach offer sent to the customer.");
+    }
+
     private Map<String, Object> coachCreateSessionNotes(Map<String, Object> payload) {
         AuthService.AuthContext coach = requireCoach(payload);
         int sessionId = requireInteger(payload, "sessionId");
@@ -1259,21 +2119,18 @@ public class CoachBookingService {
                     "heightCm and weightKg are required and must be positive.");
         }
         jdbcTemplate.update(
-                "INSERT INTO dbo.CustomerHealthHistory (CustomerID, HeightCm, WeightKg, BMI) VALUES (?, ?, ?, ?)",
-                customerId, heightCm, weightKg,
-                heightCm.doubleValue() > 0 ? weightKg.doubleValue() / Math.pow(heightCm.doubleValue() / 100, 2) : 0);
+                "INSERT INTO dbo.CustomerHealthHistory (CustomerID, HeightCm, WeightKg) VALUES (?, ?, ?)",
+                customerId, heightCm, weightKg);
 
         jdbcTemplate.update(
                 """
                         IF EXISTS (SELECT 1 FROM dbo.CustomerHealthCurrent WHERE CustomerID = ?)
-                            UPDATE dbo.CustomerHealthCurrent SET HeightCm = ?, WeightKg = ?, BMI = ?, UpdatedAt = SYSDATETIME() WHERE CustomerID = ?
+                            UPDATE dbo.CustomerHealthCurrent SET HeightCm = ?, WeightKg = ?, UpdatedAt = SYSDATETIME() WHERE CustomerID = ?
                         ELSE
-                            INSERT INTO dbo.CustomerHealthCurrent (CustomerID, HeightCm, WeightKg, BMI) VALUES (?, ?, ?, ?)
+                            INSERT INTO dbo.CustomerHealthCurrent (CustomerID, HeightCm, WeightKg) VALUES (?, ?, ?)
                         """,
                 customerId, heightCm, weightKg,
-                heightCm.doubleValue() > 0 ? weightKg.doubleValue() / Math.pow(heightCm.doubleValue() / 100, 2) : 0,
-                customerId, customerId, heightCm, weightKg,
-                heightCm.doubleValue() > 0 ? weightKg.doubleValue() / Math.pow(heightCm.doubleValue() / 100, 2) : 0);
+                customerId, customerId, heightCm, weightKg);
 
         return Map.of("customerId", customerId, "message", "Progress recorded and current status updated.");
     }
@@ -1696,6 +2553,15 @@ public class CoachBookingService {
         return s.isEmpty() ? null : s;
     }
 
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private Integer parseInteger(Object value) {
         if (value == null)
             return null;
@@ -1756,6 +2622,213 @@ public class CoachBookingService {
                         """,
                 Integer.class, coachId, date, timeSlotId, excludedSessionId);
         return count != null && count > 0;
+    }
+
+    private boolean createScheduledSessionIfMissing(int ptRequestId, int customerId, int coachId, LocalDate date,
+            int dayOfWeek, int timeSlotId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM dbo.PTSessions
+                WHERE PTRequestID = ? AND SessionDate = ? AND TimeSlotID = ?
+                """, Integer.class, ptRequestId, date, timeSlotId);
+        if (count != null && count > 0) {
+            return false;
+        }
+        try {
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO dbo.PTSessions (PTRequestID, CustomerID, CoachID, SessionDate, DayOfWeek, TimeSlotID, Status)
+                            VALUES (?, ?, ?, ?, ?, ?, 'SCHEDULED')
+                            """,
+                    ptRequestId, customerId, coachId, date, dayOfWeek, timeSlotId);
+            return true;
+        } catch (DataAccessException ignored) {
+            return false;
+        }
+    }
+
+    private int regenerateFuturePtSessions(int ptRequestId, int customerId, int coachId, LocalDate startDate,
+            LocalDate endDate, List<Map<String, Object>> slots, List<Map<String, Object>> preservedFutureSessions) {
+        Set<String> blockedKeys = new HashSet<>();
+        for (Map<String, Object> preserved : preservedFutureSessions) {
+            LocalDate sessionDate = (LocalDate) preserved.get("sessionDate");
+            Integer timeSlotId = parseInteger(preserved.get("timeSlotId"));
+            if (sessionDate != null && timeSlotId != null) {
+                blockedKeys.add(sessionDate + "|" + timeSlotId);
+            }
+        }
+        int created = 0;
+        for (LocalDate current = startDate; !current.isAfter(endDate); current = current.plusDays(1)) {
+            int dayOfWeek = current.getDayOfWeek().getValue();
+            for (Map<String, Object> slot : slots) {
+                Integer slotDay = parseInteger(slot.get("dayOfWeek"));
+                Integer timeSlotId = parseInteger(slot.get("timeSlotId"));
+                if (slotDay == null || timeSlotId == null || slotDay != dayOfWeek) {
+                    continue;
+                }
+                if (blockedKeys.contains(current + "|" + timeSlotId)) {
+                    continue;
+                }
+                if (createScheduledSessionIfMissing(ptRequestId, customerId, coachId, current, dayOfWeek, timeSlotId)) {
+                    created++;
+                }
+            }
+        }
+        return created;
+    }
+
+    private void enforceSessionCutoff(LocalDate sessionDate, int timeSlotId) {
+        LocalTime startTime = loadTimeSlotStartTime(timeSlotId);
+        LocalDateTime sessionStart = LocalDateTime.of(sessionDate, startTime);
+        if (LocalDateTime.now().plusHours(SELF_SERVICE_RESCHEDULE_CUTOFF_HOURS).isAfter(sessionStart)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "PT sessions can only be changed more than 12 hours before the session starts.");
+        }
+    }
+
+    private LocalTime loadTimeSlotStartTime(int timeSlotId) {
+        java.sql.Time startTime = jdbcTemplate.queryForObject("""
+                SELECT TOP (1) StartTime
+                FROM dbo.TimeSlots
+                WHERE TimeSlotID = ?
+                """, java.sql.Time.class, timeSlotId);
+        if (startTime == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Time slot was not found.");
+        }
+        return startTime.toLocalTime();
+    }
+
+    private void requireTimeSlotExists(int timeSlotId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dbo.TimeSlots WHERE TimeSlotID = ?",
+                Integer.class, timeSlotId);
+        if (count == null || count == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Time slot was not found.");
+        }
+    }
+
+    private boolean hasPendingReplacementOffer(int sessionId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM dbo.PTSessionReplacementOffers
+                WHERE PTSessionID = ? AND Status = 'PENDING_CUSTOMER'
+                """, Integer.class, sessionId);
+        return count != null && count > 0;
+    }
+
+    private void attachReplacementOffers(int customerId, List<Map<String, Object>> sessions) {
+        for (Map<String, Object> session : sessions) {
+            attachReplacementOffer(customerId, session);
+        }
+    }
+
+    private void attachReplacementOffer(int customerId, Map<String, Object> session) {
+        Integer sessionId = parseInteger(session.get("ptSessionId"));
+        if (sessionId == null) {
+            return;
+        }
+        Map<String, Object> offer = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    o.OfferID,
+                    o.Status,
+                    o.Note,
+                    o.ReplacementCoachID,
+                    replacementCoach.FullName AS ReplacementCoachName,
+                    o.OriginalCoachID,
+                    originalCoach.FullName AS OriginalCoachName,
+                    o.CreatedAt,
+                    s.SessionDate,
+                    s.TimeSlotID
+                FROM dbo.PTSessionReplacementOffers o
+                JOIN dbo.PTSessions s ON s.PTSessionID = o.PTSessionID
+                JOIN dbo.Users replacementCoach ON replacementCoach.UserID = o.ReplacementCoachID
+                JOIN dbo.Users originalCoach ON originalCoach.UserID = o.OriginalCoachID
+                WHERE o.PTSessionID = ?
+                  AND s.CustomerID = ?
+                ORDER BY o.CreatedAt DESC, o.OfferID DESC
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("offerId", rs.getInt("OfferID"));
+            item.put("status", rs.getString("Status"));
+            item.put("note", rs.getString("Note"));
+            item.put("replacementCoachId", rs.getInt("ReplacementCoachID"));
+            item.put("replacementCoachName", rs.getString("ReplacementCoachName"));
+            item.put("originalCoachId", rs.getInt("OriginalCoachID"));
+            item.put("originalCoachName", rs.getString("OriginalCoachName"));
+            item.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
+            item.put("sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()));
+            item.put("timeSlotId", rs.getInt("TimeSlotID"));
+            return item;
+        }, sessionId, customerId).stream().findFirst().orElse(null);
+        if (offer != null) {
+            session.put("replacementOffer", offer);
+        }
+    }
+
+    private Map<String, Object> loadPendingReplacementOfferForCustomer(int sessionId, int customerId) {
+        return jdbcTemplate.query("""
+                SELECT TOP (1)
+                    o.OfferID,
+                    o.OriginalCoachID,
+                    o.ReplacementCoachID,
+                    s.SessionDate,
+                    s.TimeSlotID
+                FROM dbo.PTSessionReplacementOffers o
+                JOIN dbo.PTSessions s ON s.PTSessionID = o.PTSessionID
+                WHERE o.PTSessionID = ?
+                  AND s.CustomerID = ?
+                  AND o.Status = 'PENDING_CUSTOMER'
+                ORDER BY o.CreatedAt DESC, o.OfferID DESC
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("offerId", rs.getInt("OfferID"));
+            item.put("originalCoachId", rs.getInt("OriginalCoachID"));
+            item.put("replacementCoachId", rs.getInt("ReplacementCoachID"));
+            item.put("sessionDate", rs.getDate("SessionDate").toLocalDate());
+            item.put("timeSlotId", rs.getInt("TimeSlotID"));
+            return item;
+        }, sessionId, customerId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No pending replacement offer was found for this PT session."));
+    }
+
+    private void ensureSessionImpactedByActiveBlock(int sessionId, int coachId, LocalDate sessionDate, int timeSlotId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM dbo.CoachUnavailableBlocks
+                WHERE CoachID = ?
+                  AND IsActive = 1
+                  AND ? BETWEEN StartDate AND EndDate
+                  AND (TimeSlotID IS NULL OR TimeSlotID = ?)
+                """, Integer.class, coachId, sessionDate, timeSlotId);
+        if (count == null || count == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Create an unavailable block before issuing a replacement offer for this PT session.");
+        }
+    }
+
+    private int countImpactedSessionsForBlock(int coachId, LocalDate startDate, LocalDate endDate, Integer timeSlotId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM dbo.PTSessions
+                WHERE CoachID = ?
+                  AND Status = 'SCHEDULED'
+                  AND SessionDate BETWEEN ? AND ?
+                  AND (? IS NULL OR TimeSlotID = ?)
+                """, Integer.class, coachId, startDate, endDate, timeSlotId, timeSlotId);
+        return count == null ? 0 : count;
+    }
+
+    private String deriveExceptionResolutionState(Integer offerId, String offerStatus) {
+        if (offerId == null) {
+            return "NEEDS_ACTION";
+        }
+        String normalized = offerStatus == null ? "" : offerStatus.toUpperCase();
+        return switch (normalized) {
+            case "PENDING_CUSTOMER" -> "OFFER_PENDING";
+            case "ACCEPTED" -> "OFFER_ACCEPTED";
+            case "DECLINED" -> "OFFER_DECLINED";
+            default -> "NEEDS_ACTION";
+        };
     }
 
     private Map<Integer, Map<String, Object>> loadTimeSlotMap() {
@@ -2025,6 +3098,28 @@ public class CoachBookingService {
                 "PT_REQUEST_SUBMITTED_" + requestId);
     }
 
+    private void notifyInstantPtBookingCreated(int requestId, int customerId, int coachId, LocalDate startDate,
+            LocalDate endDate) {
+        String customerName = loadUserFullName(customerId);
+        notificationService.notifyUser(
+                coachId,
+                "PT_BOOKING_CONFIRMED",
+                "New PT phase booked",
+                customerName + " booked a recurring PT phase from " + dateToString(startDate) + " to "
+                        + dateToString(endDate) + ".",
+                "/coach/schedule?tab=schedule",
+                requestId,
+                "PT_BOOKING_CONFIRMED_" + requestId);
+        notificationService.notifyUser(
+                customerId,
+                "PT_BOOKING_CONFIRMED",
+                "PT booking confirmed",
+                "Your recurring PT booking is confirmed and your schedule is ready.",
+                "/customer/coach-booking",
+                requestId,
+                "PT_BOOKING_CONFIRMED_CUSTOMER_" + requestId);
+    }
+
     private void notifyPtRequestDecision(int requestId, int customerId, String decision, String message) {
         notificationService.notifyUser(
                 customerId,
@@ -2088,6 +3183,27 @@ public class CoachBookingService {
                 "PT_RESCHEDULE_REQUESTED_" + sessionId);
     }
 
+    private void notifyDirectReschedule(int sessionId, int customerId, int coachId, String oldSlot, String newSlot,
+            String reason) {
+        String suffix = reason == null || reason.isBlank() ? "" : " Reason: " + reason;
+        notificationService.notifyUser(
+                coachId,
+                "PT_SESSION_RESCHEDULED_BY_CUSTOMER",
+                "PT session moved",
+                loadUserFullName(customerId) + " moved a PT session from " + oldSlot + " to " + newSlot + "." + suffix,
+                "/coach/schedule?tab=schedule",
+                sessionId,
+                "PT_SESSION_RESCHEDULED_BY_CUSTOMER_" + sessionId);
+        notificationService.notifyUser(
+                customerId,
+                "PT_SESSION_RESCHEDULE_CONFIRMED",
+                "PT session updated",
+                "Your PT session moved from " + oldSlot + " to " + newSlot + ".",
+                "/customer/coach-booking",
+                sessionId,
+                "PT_SESSION_RESCHEDULE_CONFIRMED_" + sessionId);
+    }
+
     private void notifyCustomerAboutRescheduleDecision(int sessionId, String decision, String message) {
         Integer customerId = jdbcTemplate.queryForObject(
                 "SELECT CustomerID FROM dbo.PTSessions WHERE PTSessionID = ?",
@@ -2103,6 +3219,27 @@ public class CoachBookingService {
                 "/customer/coach-booking",
                 sessionId,
                 "PT_RESCHEDULE_" + decision + "_" + sessionId);
+    }
+
+    private void notifyReplacementOfferDecision(int sessionId, int originalCoachId, int replacementCoachId,
+            String decision) {
+        String status = "ACCEPT".equals(decision) ? "accepted" : "declined";
+        notificationService.notifyUser(
+                originalCoachId,
+                "PT_REPLACEMENT_" + decision,
+                "Replacement coach " + status,
+                "The customer " + status + " your replacement-coach offer for PT session #" + sessionId + ".",
+                "/coach/booking-requests",
+                sessionId,
+                "PT_REPLACEMENT_" + decision + "_ORIGINAL_" + sessionId);
+        notificationService.notifyUser(
+                replacementCoachId,
+                "PT_REPLACEMENT_" + decision,
+                "Replacement coach " + status,
+                "Your replacement-coach offer for PT session #" + sessionId + " was " + status + ".",
+                "/coach/schedule?tab=schedule",
+                sessionId,
+                "PT_REPLACEMENT_" + decision + "_REPLACEMENT_" + sessionId);
     }
 
     private SessionNotificationContext loadSessionNotificationContext(int sessionId) {

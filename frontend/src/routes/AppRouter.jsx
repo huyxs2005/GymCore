@@ -12,6 +12,7 @@ const ProfilePage = lazy(() => import('../pages/common/ProfilePage'))
 const NotificationsPage = lazy(() => import('../pages/common/NotificationsPage'))
 const CustomerMembershipPage = lazy(() => import('../pages/customer/CustomerMembershipPage'))
 const CustomerCurrentMembershipPage = lazy(() => import('../pages/customer/CustomerCurrentMembershipPage'))
+const CustomerProgressHubPage = lazy(() => import('../pages/customer/CustomerProgressHubPage'))
 const CustomerCheckinHealthPage = lazy(() => import('../pages/customer/CustomerCheckinHealthPage'))
 const CustomerCoachBookingPage = lazy(() => import('../pages/customer/CustomerCoachBookingPage'))
 const CustomerShopPage = lazy(() => import('../pages/customer/CustomerShopPage'))
@@ -26,11 +27,16 @@ const ReceptionCheckinPage = lazy(() => import('../pages/reception/ReceptionChec
 const ReceptionCustomersPage = lazy(() => import('../pages/reception/ReceptionCustomersPage'))
 const ReceptionPickupPage = lazy(() => import('../pages/reception/ReceptionPickupPage'))
 const AdminDashboardPage = lazy(() => import('../pages/admin/AdminDashboardPage'))
+const AdminSupportConsolePage = lazy(() => import('../pages/admin/AdminSupportConsolePage'))
 const AdminUsersPage = lazy(() => import('../pages/admin/AdminUsersPage'))
 const AdminMembershipsPage = lazy(() => import('../pages/admin/AdminMembershipsPage'))
 const AdminCoachManagementPage = lazy(() => import('../pages/admin/AdminCoachManagementPage'))
 const CoachBookingManagementPage = lazy(() => import('../pages/coach/CoachBookingManagementPage'))
 const AdminProductsPage = lazy(() => import('../pages/admin/AdminProductsPage'))
+const AdminGoalsPage = lazy(() => import('../pages/admin/AdminGoalsPage'))
+const AdminWorkoutsPage = lazy(() => import('../pages/admin/AdminWorkoutsPage'))
+const AdminFoodsPage = lazy(() => import('../pages/admin/AdminFoodsPage'))
+const AdminCoachInsightsPage = lazy(() => import('../pages/admin/AdminCoachInsightsPage'))
 const AdminInvoicesPage = lazy(() => import('../pages/admin/AdminInvoicesPage'))
 const AdminPromotionsPage = lazy(() => import('../pages/admin/AdminPromotionsPage'))
 const AdminReportsPage = lazy(() => import('../pages/admin/AdminReportsPage'))
@@ -86,6 +92,7 @@ function AppRouter() {
 
         <Route path="/customer/membership" element={withRole(['CUSTOMER'], <CustomerMembershipPage />)} />
         <Route path="/customer/current-membership" element={withRole(['CUSTOMER'], <CustomerCurrentMembershipPage />)} />
+        <Route path="/customer/progress-hub" element={withRole(['CUSTOMER'], <CustomerProgressHubPage />)} />
         <Route path="/customer/checkin-health" element={withRole(['CUSTOMER'], <CustomerCheckinHealthPage />)} />
         <Route path="/customer/coach-booking" element={withRole(['CUSTOMER'], <CustomerCoachBookingPage />)} />
         <Route path="/customer/shop" element={withRole(['CUSTOMER'], <CustomerShopPage />)} />
@@ -105,15 +112,21 @@ function AppRouter() {
         <Route path="/reception/invoices" element={withRole(['RECEPTIONIST'], <AdminInvoicesPage />)} />
 
         <Route path="/admin/dashboard" element={withRole(['ADMIN'], <AdminDashboardPage />)} />
+        <Route path="/admin/support" element={withRole(['ADMIN'], <AdminSupportConsolePage />)} />
         <Route path="/admin/users" element={withRole(['ADMIN'], <AdminUsersPage />)} />
         <Route path="/admin/memberships" element={withRole(['ADMIN'], <AdminMembershipsPage />)} />
         <Route path="/admin/coach-management" element={withRole(['ADMIN'], <AdminCoachManagementPage />)} />
         <Route path="/admin/products" element={withRole(['ADMIN'], <AdminProductsPage />)} />
+        <Route path="/admin/goals" element={withRole(['ADMIN'], <AdminGoalsPage />)} />
+        <Route path="/admin/workouts" element={withRole(['ADMIN'], <AdminWorkoutsPage />)} />
+        <Route path="/admin/foods" element={withRole(['ADMIN'], <AdminFoodsPage />)} />
+        <Route path="/admin/coach-insights" element={withRole(['ADMIN'], <AdminCoachInsightsPage />)} />
         <Route path="/admin/invoices" element={withRole(['ADMIN'], <AdminInvoicesPage />)} />
         <Route path="/admin/promotions" element={withRole(['ADMIN'], <AdminPromotionsPage />)} />
         <Route path="/admin/reports" element={withRole(['ADMIN'], <AdminReportsPage />)} />
 
         <Route path="/workspace/customer/membership" element={<Navigate to="/customer/membership" replace />} />
+        <Route path="/workspace/customer/progress-hub" element={<Navigate to="/customer/progress-hub" replace />} />
         <Route path="/workspace/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

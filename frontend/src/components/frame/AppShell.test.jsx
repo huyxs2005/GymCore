@@ -139,6 +139,7 @@ describe('AppShell cart button', () => {
 
     const headerNav = screen.getAllByRole('navigation')[0]
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Progress Hub$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Check-in & Health$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Coach Booking$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()

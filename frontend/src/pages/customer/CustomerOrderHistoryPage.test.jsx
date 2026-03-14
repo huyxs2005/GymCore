@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -82,6 +82,30 @@ describe('CustomerOrderHistoryPage', () => {
               thumbnailUrl: 'https://cdn.example/whey.jpg',
               hasReview: false,
             },
+          ],
+        },
+        {
+          orderId: 18,
+          orderDate: '2026-03-08T10:00:00',
+          paidAt: '2026-03-08T10:05:00',
+          invoiceCode: 'INV-202603080101-901',
+          paymentId: 901,
+          paymentMethod: 'PAYOS',
+          totalAmount: 2200,
+          currency: 'VND',
+          status: 'PAID',
+          pickedUpAt: '2026-03-08T11:00:00',
+          emailSentAt: '2026-03-08T10:06:00',
+          emailSendError: null,
+          items: [
+            {
+              productId: 3,
+              name: 'BCAA',
+              quantity: 1,
+              unitPrice: 2200,
+              thumbnailUrl: 'https://cdn.example/bcaa.jpg',
+              hasReview: false,
+            },
             {
               productId: 2,
               name: 'Creatine',
@@ -107,23 +131,32 @@ describe('CustomerOrderHistoryPage', () => {
 
     expect((await screen.findAllByText(/#17/i)).length).toBeGreaterThan(0)
     expect(screen.getByText('Bring the order ID to the front desk for pickup until the order is marked as collected.')).toBeInTheDocument()
-    expect(screen.getByText(/Show order ID/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Show order ID/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/Email issues/i)).toBeInTheDocument()
     expect(screen.getByText(/INV-202603070101-900/i)).toBeInTheDocument()
     expect(screen.getByText(/SMTP down/i)).toBeInTheDocument()
   })
 
-  it('lets the customer leave a review from order history', async () => {
+  it('gates reviews until pickup is confirmed', async () => {
+    renderPage()
+
+    expect((await screen.findAllByText(/Review unlocks after pickup is confirmed./i)).length).toBeGreaterThan(0)
+    const awaitingOrder = screen.getByText(/INV-202603070101-900/i).closest('article')
+    expect(awaitingOrder).not.toBeNull()
+    expect(within(awaitingOrder).queryByRole('button', { name: /Leave review/i })).not.toBeInTheDocument()
+  })
+
+  it('lets the customer leave a review from a picked-up order history item', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole('button', { name: /Leave review/i }))
+    await user.click((await screen.findAllByRole('button', { name: /Leave review/i }))[0])
     await user.selectOptions(screen.getByLabelText(/Rating/i), '4')
     await user.type(screen.getByLabelText(/Comment/i), 'Mixes well and feels clean.')
     await user.click(screen.getByRole('button', { name: /Submit review/i }))
 
     await waitFor(() => {
-      expect(productApi.createReview).toHaveBeenCalledWith(1, {
+      expect(productApi.createReview).toHaveBeenCalledWith(3, {
         rating: 4,
         comment: 'Mixes well and feels clean.',
       })

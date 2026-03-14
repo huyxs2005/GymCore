@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import CustomerCheckinHealthPage from './CustomerCheckinHealthPage'
 
 vi.mock('../../components/frame/WorkspaceScaffold', () => ({
@@ -64,14 +65,23 @@ describe('CustomerCheckinHealthPage', () => {
     })
   })
 
+  function renderPage() {
+    return render(
+      <MemoryRouter>
+        <CustomerCheckinHealthPage />
+      </MemoryRouter>,
+    )
+  }
+
   it('renders the BMI gauge summary and healthy interpretation in English', async () => {
-    render(<CustomerCheckinHealthPage />)
+    renderPage()
 
     expect(await screen.findByText('Healthy')).toBeInTheDocument()
     expect(screen.getByText('Within target')).toBeInTheDocument()
     expect(screen.getByText(/Your BMI is inside the normal range/i)).toBeInTheDocument()
     expect(screen.getByText(/Healthy Weight/i)).toBeInTheDocument()
     expect(screen.getByText('50.4 - 67.8 kg')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Open Progress Hub/i })).toHaveAttribute('href', '/customer/progress-hub')
   })
 
   it('renders a neutral empty state when no current health record exists', async () => {
@@ -79,7 +89,7 @@ describe('CustomerCheckinHealthPage', () => {
       data: {},
     })
 
-    render(<CustomerCheckinHealthPage />)
+    renderPage()
 
     expect(await screen.findByText('No data')).toBeInTheDocument()
     expect(screen.getByText('Add your latest body metrics')).toBeInTheDocument()

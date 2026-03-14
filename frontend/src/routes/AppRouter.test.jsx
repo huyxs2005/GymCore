@@ -21,6 +21,22 @@ vi.mock('../pages/reception/ReceptionCustomersPage', () => ({
   default: () => <div>Reception Customer Lookup</div>,
 }))
 
+vi.mock('../pages/admin/AdminSupportConsolePage', () => ({
+  default: () => <div>Admin Support Console</div>,
+}))
+
+vi.mock('../pages/admin/AdminGoalsPage', () => ({
+  default: () => <div>Admin Goals</div>,
+}))
+
+vi.mock('../pages/admin/AdminInvoicesPage', () => ({
+  default: () => {
+    const rawUser = globalThis.localStorage?.getItem('gymcore_auth_user')
+    const user = rawUser ? JSON.parse(rawUser) : null
+    return <div>{user?.role === 'ADMIN' ? 'Admin Invoice Center' : 'Reception Invoice Center'}</div>
+  },
+}))
+
 vi.mock('../pages/customer/CustomerProductDetailPage', () => ({
   default: () => <div>Customer Product Detail</div>,
 }))
@@ -31,6 +47,10 @@ vi.mock('../pages/customer/CustomerCartPage', () => ({
 
 vi.mock('../pages/customer/CustomerKnowledgePage', () => ({
   default: () => <div>Customer Knowledge Hub</div>,
+}))
+
+vi.mock('../pages/customer/CustomerProgressHubPage', () => ({
+  default: () => <div>Customer Progress Hub</div>,
 }))
 
 vi.mock('../features/checkin/api/receptionCheckinApi', () => {
@@ -85,8 +105,31 @@ function renderAt(path) {
   )
 }
 
+function installLocalStorageMock() {
+  const store = new Map()
+  const mock = {
+    getItem: vi.fn((key) => (store.has(key) ? store.get(key) : null)),
+    setItem: vi.fn((key, value) => {
+      store.set(String(key), String(value))
+    }),
+    removeItem: vi.fn((key) => {
+      store.delete(String(key))
+    }),
+    clear: vi.fn(() => {
+      store.clear()
+    }),
+  }
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mock,
+    configurable: true,
+    writable: true,
+  })
+}
+
 describe('AppRouter role guards', () => {
   beforeEach(() => {
+    installLocalStorageMock()
     act(() => clearSession())
   })
 
@@ -179,6 +222,48 @@ describe('AppRouter role guards', () => {
     expect((await screen.findAllByText(/Admin Invoice Center/i)).length).toBeGreaterThan(0)
   })
 
+  it('allows admin to open the support console route', async () => {
+    act(() => {
+      setAccessToken('token')
+      setAuthUser({
+        userId: 1,
+        fullName: 'Admin GymCore',
+        email: 'admin@gymcore.local',
+        role: 'ADMIN',
+      })
+    })
+    renderAt('/admin/support')
+    expect(await screen.findByText(/Admin Support Console/i)).toBeInTheDocument()
+  })
+
+  it('redirects receptionist away from the admin support route', async () => {
+    act(() => {
+      setAccessToken('token')
+      setAuthUser({
+        userId: 2,
+        fullName: 'Receptionist GymCore',
+        email: 'reception@gymcore.local',
+        role: 'RECEPTIONIST',
+      })
+    })
+    renderAt('/admin/support')
+    expect(await screen.findByText(/GymCore Platform/i)).toBeInTheDocument()
+  })
+
+  it('allows admin to open the admin goals route', async () => {
+    act(() => {
+      setAccessToken('token')
+      setAuthUser({
+        userId: 1,
+        fullName: 'Admin GymCore',
+        email: 'admin@gymcore.local',
+        role: 'ADMIN',
+      })
+    })
+    renderAt('/admin/goals')
+    expect(await screen.findByText(/Admin Goals/i)).toBeInTheDocument()
+  })
+
   it('allows customer to open order history route', async () => {
     act(() => {
       setAccessToken('token')
@@ -233,5 +318,19 @@ describe('AppRouter role guards', () => {
     })
     renderAt('/customer/knowledge')
     expect(await screen.findByText(/Customer Knowledge Hub/i)).toBeInTheDocument()
+  })
+
+  it('allows customer to open the progress hub route', async () => {
+    act(() => {
+      setAccessToken('token')
+      setAuthUser({
+        userId: 5,
+        fullName: 'Customer Minh',
+        email: 'customer@gymcore.local',
+        role: 'CUSTOMER',
+      })
+    })
+    renderAt('/customer/progress-hub')
+    expect(await screen.findByText(/Customer Progress Hub/i)).toBeInTheDocument()
   })
 })

@@ -23,6 +23,7 @@ vi.mock('../../features/product/api/adminInvoiceApi', () => ({
     getInvoices: vi.fn(),
     getInvoiceDetail: vi.fn(),
     confirmPickup: vi.fn(),
+    resendEmail: vi.fn(),
   },
 }))
 
@@ -118,6 +119,7 @@ describe('AdminInvoicesPage', () => {
       ],
     }))
     adminInvoiceApi.confirmPickup.mockResolvedValue({ invoice: { invoiceId: 10 } })
+    adminInvoiceApi.resendEmail.mockResolvedValue({ invoice: { invoiceId: 11 } })
   })
 
   it('renders invoices and invoice detail', async () => {
@@ -138,6 +140,18 @@ describe('AdminInvoicesPage', () => {
 
     await waitFor(() => {
       expect(adminInvoiceApi.confirmPickup.mock.calls[0][0]).toBe(10)
+    })
+  })
+
+  it('retries invoice email from the detail panel when delivery failed', async () => {
+    const user = userEvent.setup()
+    renderWithQuery(<AdminInvoicesPage />)
+
+    await user.click(await screen.findByText('INV-PICKED'))
+    await user.click(await screen.findByRole('button', { name: /Retry email/i }))
+
+    await waitFor(() => {
+      expect(adminInvoiceApi.resendEmail).toHaveBeenCalledWith(11, expect.anything())
     })
   })
 

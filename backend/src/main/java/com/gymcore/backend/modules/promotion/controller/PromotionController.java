@@ -66,10 +66,11 @@ public class PromotionController {
         @GetMapping("/notifications")
         public ApiResponse<Map<String, Object>> getNotifications(
                         @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
-                        @RequestParam(required = false, defaultValue = "false") boolean unreadOnly) {
+                        @RequestParam(required = false, defaultValue = "false") boolean unreadOnly,
+                        @RequestParam(required = false, defaultValue = "all") String view) {
                 return ApiResponse.ok("Notifications retrieved",
                                 promotionService.execute("customer-get-notifications", authorization,
-                                                Map.of("unreadOnly", unreadOnly)));
+                                                Map.of("unreadOnly", unreadOnly, "view", view)));
         }
 
         @PatchMapping("/notifications/{notificationId}/read")

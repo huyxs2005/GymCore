@@ -258,7 +258,9 @@ function CustomerOrderHistoryPage() {
               </div>
 
               <div className="mt-4 space-y-3">
-                {(order.items || []).map((item) => (
+                {(order.items || []).map((item) => {
+                  const reviewUnlocked = Boolean(order.pickedUpAt)
+                  return (
                   <div key={`${order.orderId}-${item.productId}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
                     <div className="flex items-center gap-3">
                       <div className="h-14 w-14 overflow-hidden rounded-2xl bg-slate-200">
@@ -290,7 +292,11 @@ function CustomerOrderHistoryPage() {
                       ) : (
                         <div className="text-xs text-slate-500">No review yet.</div>
                       )}
-                      {!item.hasReview ? (
+                      {!reviewUnlocked ? (
+                        <div className="text-xs font-medium text-amber-700">
+                          Review unlocks after pickup is confirmed.
+                        </div>
+                      ) : !item.hasReview ? (
                         <button
                           type="button"
                           onClick={() =>
@@ -347,7 +353,8 @@ function CustomerOrderHistoryPage() {
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </article>
           ))}

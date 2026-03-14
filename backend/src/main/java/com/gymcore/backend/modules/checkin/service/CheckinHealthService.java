@@ -1,6 +1,7 @@
 package com.gymcore.backend.modules.checkin.service;
 
 import com.gymcore.backend.modules.auth.service.AuthService;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -25,10 +26,15 @@ public class CheckinHealthService {
 
     private final JdbcTemplate jdbcTemplate;
     private final AuthService authService;
+    private final CoachBookingService coachBookingService;
 
-    public CheckinHealthService(JdbcTemplate jdbcTemplate, AuthService authService) {
+    public CheckinHealthService(
+            JdbcTemplate jdbcTemplate,
+            AuthService authService,
+            CoachBookingService coachBookingService) {
         this.jdbcTemplate = jdbcTemplate;
         this.authService = authService;
+        this.coachBookingService = coachBookingService;
     }
 
     public Map<String, Object> execute(String action, Object payload) {
@@ -38,6 +44,7 @@ public class CheckinHealthService {
             case "customer-get-health-current" -> customerGetHealthCurrent(asMap(payload));
             case "customer-get-health-history" -> customerGetHealthHistory(asMap(payload));
             case "customer-get-coach-notes" -> customerGetCoachNotes(asMap(payload));
+            case "customer-get-progress-hub" -> customerGetProgressHub(asMap(payload));
             case "customer-create-health-record" -> customerCreateHealthRecord(asMap(payload));
             case "reception-scan-checkin" -> receptionScanCheckin(asMap(payload));
             case "reception-validate-membership" -> receptionValidateMembership(asMap(payload));
@@ -143,6 +150,65 @@ public class CheckinHealthService {
                 "sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()),
                 "coachName", rs.getString("CoachName")), customer.userId());
         return Map.of("items", items);
+    }
+
+    private Map<String, Object> customerGetProgressHub(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        Map<String, Object> currentHealth = customerGetHealthCurrent(payload);
+        Map<String, Object> healthHistory = customerGetHealthHistory(payload);
+        Map<String, Object> coachNotes = customerGetCoachNotes(payload);
+        Map<String, Object> ptContext = coachBookingService.getCustomerProgressContext(customer.userId());
+
+        List<Map<String, Object>> historyItems = listOfMaps(healthHistory.get("items"));
+        List<Map<String, Object>> noteItems = listOfMaps(coachNotes.get("items"));
+        Map<String, Object> latestCoachNote = noteItems.isEmpty() ? Map.of() : new LinkedHashMap<>(noteItems.get(0));
+        Map<String, Object> latestProgressSignal = buildLatestProgressSignal(currentHealth, historyItems);
+        Map<String, Object> latestNoteSignal = buildLatestNoteSignal(latestCoachNote);
+
+        Map<String, Object> historySummary = new LinkedHashMap<>();
+        historySummary.put("totalRecords", historyItems.size());
+        historySummary.put("latestRecordedAt", asText(firstItemValue(historyItems, "recordedAt")));
+        historySummary.put("latestBmi", firstItemValue(historyItems, "bmi"));
+        historySummary.put("latestWeightKg", firstItemValue(historyItems, "weightKg"));
+
+        Map<String, Object> followUp = new LinkedHashMap<>();
+        followUp.put("historyCount", historyItems.size());
+        followUp.put("recentCoachNoteCount", noteItems.size());
+        followUp.put("hasCurrentHealth", !currentHealth.isEmpty());
+        followUp.put("hasHealthHistory", !historyItems.isEmpty());
+        followUp.put("hasCoachNotes", !noteItems.isEmpty());
+        followUp.put("hasActivePt", Boolean.TRUE.equals(ptContext.get("hasActivePt")));
+        followUp.put("currentPtStatus", ptContext.getOrDefault("currentPtStatus", "NONE"));
+        followUp.put("nextSessionDate", firstNonBlank(asText(mapValue(ptContext, "nextSession", "sessionDate"))));
+        followUp.put("readOnly", true);
+        followUp.put("customerCanWriteProgress", false);
+        followUp.put("customerCanWriteCoachNotes", false);
+        followUp.put("lastProgressSignalAt", latestTimestamp(
+                asText(latestProgressSignal.get("recordedAt")),
+                asText(latestNoteSignal.get("recordedAt"))));
+        followUp.put("recommendedFocus", recommendedFocus(currentHealth, historyItems, noteItems, ptContext));
+
+        Map<String, Object> latestCoachingSignal = new LinkedHashMap<>();
+        latestCoachingSignal.putAll(selectLatestSignal(latestNoteSignal, latestProgressSignal));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("contractVersion", "progress-hub.v1");
+        data.put("currentSnapshot", currentHealth);
+        data.put("currentHealth", currentHealth);
+        data.put("historySummary", historySummary);
+        data.put("healthHistory", healthHistory);
+        data.put("recentCoachNotes", coachNotes);
+        data.put("coachNotes", coachNotes);
+        data.put("ptContext", ptContext);
+        data.put("latestNoteSignal", latestNoteSignal);
+        data.put("latestProgressSignal", latestProgressSignal);
+        data.put("latestSignals", Map.of(
+                "latestNote", latestNoteSignal,
+                "latestProgress", latestProgressSignal,
+                "mostRecent", latestCoachingSignal));
+        data.put("latestCoachingSignal", latestCoachingSignal);
+        data.put("followUp", followUp);
+        return data;
     }
 
     private Map<String, Object> customerCreateHealthRecord(Map<String, Object> payload) {
@@ -564,6 +630,138 @@ public class CheckinHealthService {
         } catch (NumberFormatException exception) {
             return null;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> listOfMaps(Object value) {
+        if (value instanceof List<?> list) {
+            return (List<Map<String, Object>>) list;
+        }
+        return List.of();
+    }
+
+    private Object firstItemValue(List<Map<String, Object>> items, String key) {
+        if (items.isEmpty()) {
+            return null;
+        }
+        return items.get(0).get(key);
+    }
+
+    private String latestTimestamp(String... values) {
+        String latest = null;
+        for (String value : values) {
+            if (value == null) {
+                continue;
+            }
+            if (latest == null || value.compareTo(latest) > 0) {
+                latest = value;
+            }
+        }
+        return latest;
+    }
+
+    private String recommendedFocus(
+            Map<String, Object> currentHealth,
+            List<Map<String, Object>> historyItems,
+            List<Map<String, Object>> noteItems,
+            Map<String, Object> ptContext) {
+        if (Boolean.TRUE.equals(ptContext.get("hasActivePt"))) {
+            Object nextSessionDate = mapValue(ptContext, "nextSession", "sessionDate");
+            if (nextSessionDate != null) {
+                return "PREPARE_FOR_NEXT_PT_SESSION";
+            }
+        }
+        if (!noteItems.isEmpty()) {
+            return "REVIEW_LATEST_COACH_NOTE";
+        }
+        if (!currentHealth.isEmpty() || !historyItems.isEmpty()) {
+            return "TRACK_HEALTH_TREND";
+        }
+        return "COMPLETE_BASELINE_CHECK_IN";
+    }
+
+    private String buildHealthSummary(Map<String, Object> currentHealth) {
+        if (currentHealth.isEmpty()) {
+            return "No coaching signal recorded yet.";
+        }
+        return "Latest health snapshot recorded with BMI "
+                + currentHealth.get("bmi")
+                + " and weight "
+                + currentHealth.get("weightKg")
+                + "kg.";
+    }
+
+    private Map<String, Object> buildLatestProgressSignal(
+            Map<String, Object> currentHealth,
+            List<Map<String, Object>> historyItems) {
+        Map<String, Object> source = currentHealth.isEmpty()
+                ? (historyItems.isEmpty() ? Map.of() : historyItems.get(0))
+                : currentHealth;
+
+        Map<String, Object> signal = new LinkedHashMap<>();
+        signal.put("sourceType", "HEALTH_SNAPSHOT");
+        signal.put("recordedAt", firstNonBlank(
+                asText(source.get("updatedAt")),
+                asText(source.get("recordedAt"))));
+        signal.put("summary", buildHealthSummary(currentHealth.isEmpty() ? source : currentHealth));
+        signal.put("heightCm", source.get("heightCm"));
+        signal.put("weightKg", source.get("weightKg"));
+        signal.put("bmi", source.get("bmi"));
+        return signal;
+    }
+
+    private Map<String, Object> buildLatestNoteSignal(Map<String, Object> latestCoachNote) {
+        if (latestCoachNote.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("sourceType", "COACH_NOTE");
+            empty.put("recordedAt", null);
+            empty.put("summary", "No coaching signal recorded yet.");
+            empty.put("coachName", null);
+            empty.put("sessionDate", null);
+            empty.put("noteId", null);
+            return empty;
+        }
+
+        Map<String, Object> signal = new LinkedHashMap<>();
+        signal.put("sourceType", "COACH_NOTE");
+        signal.put("recordedAt", latestCoachNote.get("createdAt"));
+        signal.put("summary", latestCoachNote.get("noteContent"));
+        signal.put("coachName", latestCoachNote.get("coachName"));
+        signal.put("sessionDate", latestCoachNote.get("sessionDate"));
+        signal.put("noteId", latestCoachNote.get("noteId"));
+        return signal;
+    }
+
+    private Map<String, Object> selectLatestSignal(
+            Map<String, Object> latestNoteSignal,
+            Map<String, Object> latestProgressSignal) {
+        String latestNoteAt = asText(latestNoteSignal.get("recordedAt"));
+        String latestProgressAt = asText(latestProgressSignal.get("recordedAt"));
+        if (latestNoteAt == null && latestProgressAt == null) {
+            return new LinkedHashMap<>(latestProgressSignal);
+        }
+        if (latestNoteAt != null && (latestProgressAt == null || latestNoteAt.compareTo(latestProgressAt) >= 0)) {
+            return new LinkedHashMap<>(latestNoteSignal);
+        }
+        return new LinkedHashMap<>(latestProgressSignal);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object mapValue(Map<String, Object> parent, String key, String nestedKey) {
+        Object nested = parent.get(key);
+        if (nested instanceof Map<?, ?> map) {
+            return ((Map<String, Object>) map).get(nestedKey);
+        }
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private record CustomerLookup(int customerId, String fullName, String email, String phone) {

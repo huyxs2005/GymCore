@@ -88,20 +88,20 @@ function AccountMenu({ className = '' }) {
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50"
+        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1.5 text-sm font-medium text-slate-100 shadow-ambient-sm backdrop-blur-md transition hover:border-white/15 hover:bg-white/10"
       >
         {avatarUrl ? (
           <img
             src={avatarUrl}
             alt="Avatar"
-            className="h-8 w-8 rounded-full border border-slate-200 object-cover"
+            className="h-8 w-8 rounded-full border border-white/10 object-cover"
             referrerPolicy="no-referrer"
             onError={(event) => {
               event.currentTarget.src = ''
             }}
           />
         ) : (
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-gym-500 text-xs font-bold text-slate-950 shadow-glow">
             {initials}
           </span>
         )}
@@ -111,17 +111,17 @@ function AccountMenu({ className = '' }) {
       {open ? (
         <div
           ref={menuRef}
-          className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+          className="absolute right-0 mt-2 w-56 overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] shadow-[0_24px_60px_rgba(0,0,0,0.38)] backdrop-blur-xl"
         >
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="truncate text-sm font-semibold text-slate-900">{user?.fullName || 'Account'}</p>
-            <p className="truncate text-xs text-slate-600">{user?.email}</p>
+          <div className="border-b border-white/10 px-4 py-3">
+            <p className="truncate text-sm font-semibold text-slate-50">{user?.fullName || 'Account'}</p>
+            <p className="truncate text-xs text-slate-500">{user?.email}</p>
           </div>
           <div className="p-2">
             <button
               type="button"
               onClick={() => handleMenuNavigation('/profile')}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+              className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
             >
               <User size={16} />
               View profile
@@ -129,7 +129,7 @@ function AccountMenu({ className = '' }) {
             <button
               type="button"
               onClick={() => handleMenuNavigation('/notifications')}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+              className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
             >
               <Bell size={16} />
               Notifications
@@ -139,7 +139,7 @@ function AccountMenu({ className = '' }) {
                 <button
                   type="button"
                   onClick={() => handleMenuNavigation('/customer/current-membership')}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
                 >
                   <CreditCard size={16} />
                   Current membership
@@ -147,7 +147,7 @@ function AccountMenu({ className = '' }) {
                 <button
                   type="button"
                   onClick={() => handleMenuNavigation('/customer/orders')}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
                 >
                   <Package size={16} />
                   Order history
@@ -158,7 +158,7 @@ function AccountMenu({ className = '' }) {
                     setOpen(false)
                     setQrOpen(true)
                   }}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
                 >
                   <QrCode size={16} />
                   QR code
@@ -168,7 +168,7 @@ function AccountMenu({ className = '' }) {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-700 transition hover:bg-rose-50"
+              className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-rose-300 transition hover:bg-white/5"
             >
               <LogOut size={16} />
               Logout

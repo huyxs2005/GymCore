@@ -17,6 +17,7 @@ import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.AuthService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.checkin.service.CheckinHealthService;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import com.gymcore.backend.modules.product.service.OrderInvoiceService;
 import com.gymcore.backend.modules.product.service.PayOsService;
 import java.math.BigDecimal;
@@ -49,6 +50,7 @@ class MembershipServiceCustomerFlowTest {
     private AuthService authService;
     private UserNotificationService notificationService;
     private OrderInvoiceService orderInvoiceService;
+    private CoachBookingService coachBookingService;
     private MembershipService membershipService;
     private CheckinHealthService checkinHealthService;
 
@@ -60,13 +62,14 @@ class MembershipServiceCustomerFlowTest {
         authService = Mockito.mock(AuthService.class);
         notificationService = Mockito.mock(UserNotificationService.class);
         orderInvoiceService = Mockito.mock(OrderInvoiceService.class);
+        coachBookingService = Mockito.mock(CoachBookingService.class);
         membershipService = new MembershipService(
                 jdbcTemplate,
                 currentUserService,
                 payOsService,
                 notificationService,
                 orderInvoiceService);
-        checkinHealthService = new CheckinHealthService(jdbcTemplate, authService);
+        checkinHealthService = new CheckinHealthService(jdbcTemplate, authService, coachBookingService);
     }
 
     @Test

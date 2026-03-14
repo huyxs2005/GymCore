@@ -49,6 +49,14 @@ function AdminInvoicesPage() {
     },
   })
 
+  const resendEmailMutation = useMutation({
+    mutationFn: adminInvoiceApi.resendEmail,
+    onSuccess: async (_, invoiceId) => {
+      await queryClient.invalidateQueries({ queryKey: [queryPrefix] })
+      await queryClient.invalidateQueries({ queryKey: [queryPrefix, 'detail', invoiceId] })
+    },
+  })
+
   const invoices = useMemo(() => invoicesQuery.data?.invoices ?? [], [invoicesQuery.data])
   const pickupTrackingAvailableFromList = invoicesQuery.data?.pickupTrackingAvailable
   const activeInvoiceId = useMemo(() => {
@@ -331,6 +339,17 @@ function AdminInvoicesPage() {
                       <p className="text-[11px] text-slate-500">
                         Sent at: {selectedInvoice.emailSentAt ? formatDateTime(selectedInvoice.emailSentAt) : 'Not sent yet'}
                       </p>
+                      {!selectedInvoice.emailSentAt && (
+                        <button
+                          type="button"
+                          onClick={() => resendEmailMutation.mutate(selectedInvoice.invoiceId)}
+                          disabled={resendEmailMutation.isPending}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        >
+                          <Mail size={12} />
+                          {resendEmailMutation.isPending ? 'Sending...' : selectedInvoice.emailSendError ? 'Retry email' : 'Send email'}
+                        </button>
+                      )}
                       {selectedInvoice.emailSendError && (
                         <p className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] text-rose-700 ring-1 ring-rose-100">
                           {selectedInvoice.emailSendError}

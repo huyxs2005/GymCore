@@ -122,6 +122,7 @@ function createEmptyPostForm() {
     startAt: '',
     endAt: '',
     isActive: true,
+    isImportant: false,
   }
 }
 
@@ -134,6 +135,7 @@ function mapPostToForm(post) {
     startAt: formatDateInput(post?.StartAt),
     endAt: formatDateInput(post?.EndAt),
     isActive: post ? (post.IsActive === 1 || post.IsActive === true) : true,
+    isImportant: post ? (post.IsImportant === 1 || post.IsImportant === true) : false,
   }
 }
 
@@ -625,6 +627,7 @@ const AdminPromotionsPage = () => {
       startAt: postForm.startAt,
       endAt: postForm.endAt,
       isActive: postForm.isActive ? 1 : 0,
+      isImportant: postForm.isImportant ? 1 : 0,
     }
 
     const validationError = validatePostPayload(payload)
@@ -967,15 +970,26 @@ const AdminPromotionsPage = () => {
                         {new Date(post.StartAt).toLocaleDateString()} - {new Date(post.EndAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4">
-                        {post.IsActive ? (
-                          <span className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2 py-0.5 rounded-full w-fit">
-                            <CheckCircle size={12} /> Active
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-slate-400 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-full w-fit">
-                            <XCircle size={12} /> Inactive
-                          </span>
-                        )}
+                        <div className="space-y-2">
+                          {post.IsActive ? (
+                            <span className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2 py-0.5 rounded-full w-fit">
+                              <CheckCircle size={12} /> Active
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-slate-400 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                              <XCircle size={12} /> Inactive
+                            </span>
+                          )}
+                          {post.IsImportant ? (
+                            <span className="flex items-center gap-1 text-amber-700 text-xs font-bold bg-amber-50 px-2 py-0.5 rounded-full w-fit">
+                              <ShieldCheck size={12} /> Broadcasts to all customers
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-slate-500 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                              <Layout size={12} /> Promotions page only
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right flex justify-end gap-2">
                         <button
@@ -1423,6 +1437,35 @@ const AdminPromotionsPage = () => {
                           {postForm.isActive ? 'Active' : 'Draft'}
                         </span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => updatePostForm('isImportant', !postForm.isImportant)}
+                        aria-pressed={postForm.isImportant}
+                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-all ${postForm.isImportant ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${postForm.isImportant ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                            <ShieldCheck size={18} />
+                          </span>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">Mark as important broadcast</p>
+                            <p className="text-xs text-slate-500">
+                              {postForm.isImportant
+                                ? 'This post will notify every active customer when it is published while still appearing on the Promotions page.'
+                                : 'Leave this off for normal marketing posts that should stay visible only on the Promotions page.'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${postForm.isImportant ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          {postForm.isImportant ? 'Broadcast all customers' : 'Page only'}
+                        </span>
+                      </button>
+                      <div className="rounded-[1.4rem] border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
+                        <p className="font-bold">Notification discipline</p>
+                        <p className="mt-1 text-xs text-amber-800">
+                          Important posts should be reserved for urgent or high-value campaigns. Standard posts stay in the Promotions page without sending a notification blast.
+                        </p>
+                      </div>
                     </section>
                   </aside>
                 </div>
