@@ -2,6 +2,36 @@
 
 Purpose: quick context snapshot so future work can resume without re-discovering decisions.
 
+## 0) Main merge baseline (Mar 14, 2026)
+- Current local baseline branch for future merge work: `alpha-0.1`.
+- Future merge target under review: `origin/main`.
+- Merge strategy is selective/manual, not raw branch merge.
+- Local branch remains source of truth for:
+  - Java 25 runtime
+  - current working PayOS flow
+  - admin dashboard/reports overhaul
+  - invoice/pickup flow
+  - current DB doc structure and run order
+- Runtime config rule for this machine:
+  - keep the current local datasource behavior in `backend/src/main/resources/application.properties`
+  - do not replace local SQL Server values with `origin/main` values
+- DB merge rule:
+  - any SQL from `origin/main` must be folded only into:
+    - `docs/GymCore.txt`
+    - `docs/alter.txt`
+    - `docs/InsertValues.txt`
+    - `docs/InsertTestingValues.txt`
+  - do not create extra SQL docs/files
+- Current backend env placeholders now include Gemini keys:
+  - `APP_AI_GEMINI_API_KEY`
+  - `APP_AI_GEMINI_MODEL`
+- Current placeholder Gemini model choice stored locally:
+  - `gemini-3-flash-preview`
+- Important AI implementation note:
+  - `backend/src/main/java/com/gymcore/backend/modules/content/service/ContentService.java`
+    is still placeholder-only and currently throws `NOT_IMPLEMENTED`
+  - Gemini env values are not active until real backend AI integration is merged or implemented
+
 ## 1) Tech stack and structure
 - Backend: Spring Boot REST API (no Thymeleaf server-rendered pages).
 - Frontend: React + Vite.

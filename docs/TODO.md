@@ -1,5 +1,56 @@
 # GymCore TODO (Post feature/coupon merge)
 
+## Main Branch Merge Prep: `origin/main` -> current local branch
+- [ ] Use the current local branch as source of truth for the next merge session.
+  - Current local baseline branch: `alpha-0.1`
+  - Do not run a blind `git merge origin/main`.
+  - Preferred method: selective/manual port by subsystem.
+- [ ] Keep Java on `25`.
+  - Do not accept the `origin/main` downgrade back to Java `21`.
+  - Preserve the local `backend/pom.xml` toolchain/runtime settings.
+- [ ] Keep the current local JDBC/runtime config for this machine.
+  - Preserve local `backend/src/main/resources/application.properties` datasource values.
+  - Do not replace local SQL Server credentials with `origin/main` credentials or env defaults.
+  - Local machine remains:
+    - SQL Server auth on this machine
+    - database `GymCore`
+    - current working local login/password/settings
+- [ ] Keep environment templates machine-neutral while preserving local runtime behavior.
+  - Merge `backend/.env.example` and `frontend/.env.example` as templates/documentation only.
+  - Do not commit real local secrets.
+  - Keep Gemini placeholders available in backend env files:
+    - `APP_AI_GEMINI_API_KEY=`
+    - `APP_AI_GEMINI_MODEL=`
+- [ ] Merge DB changes from `origin/main` only into the 4 canonical SQL docs.
+  - Allowed targets only:
+    - `docs/GymCore.txt`
+    - `docs/alter.txt`
+    - `docs/InsertValues.txt`
+    - `docs/InsertTestingValues.txt`
+  - Do not create extra SQL docs/files for the merge.
+- [ ] Treat current local DB docs as stronger than `origin/main` where `main` removes already-working behavior.
+  - Current local branch includes invoice pickup columns and related product/invoice flow support.
+  - Current local branch keeps stricter membership/payment/reporting behavior that should not be downgraded.
+- [ ] Review `origin/main` only for additive value.
+  - Import only missing features/fixes that do not break:
+    - PayOS flow
+    - admin dashboard/reports
+    - invoice/pickup flow
+    - membership queue/renew/upgrade behavior
+    - current local test suite
+- [ ] Re-run the full regression gate after the merge.
+  - Backend:
+    - `.\mvnw.cmd test`
+  - Frontend:
+    - `npm run lint`
+    - `npm run test:run -- --maxWorkers=1`
+    - `npm run build`
+  - DB smoke:
+    - `docs/GymCore.txt`
+    - `docs/alter.txt`
+    - `docs/InsertValues.txt`
+    - `docs/InsertTestingValues.txt`
+
 ## Selective Merge Plan: `origin/feature/coupon` -> `beta-test-0.2`
 - [x] Keep `beta-test-0.2` as source of truth during merge.
   - Do not overwrite newer membership, PT, notification, auth, or coupon-target logic that already exists on this branch.
