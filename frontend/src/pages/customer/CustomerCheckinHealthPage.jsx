@@ -249,77 +249,77 @@ function CustomerCheckinHealthPage() {
       <section className="mb-6 overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.1),_transparent_30%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.94)_45%,_rgba(24,26,38,0.94))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
         <div className="grid gap-5 lg:grid-cols-[1.6fr,1fr]">
           <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Action and logging workspace</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400/80">Action and logging workspace</p>
             <div>
-              <h2 className="text-3xl font-black tracking-tight text-slate-900">Capture check-ins and body metrics without losing sight of the bigger progress story.</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              <h2 className="text-3xl font-black tracking-tight text-white leading-tight">Capture check-ins and body metrics without losing sight of the bigger progress story.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
                 This page is built for actions you perform yourself: showing your QR, entering new measurements, and reviewing raw attendance and metric history.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400">
                 Manual metric entry
               </span>
-              <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">
                 QR check-in ready
               </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">
+              <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
                 Raw history access
               </span>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-ambient-sm backdrop-blur-md">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current BMI</p>
-              <p className="mt-2 text-lg font-black text-slate-900">{currentBmi == null ? '--' : currentBmi.toFixed(1)}</p>
+              <p className="mt-2 text-2xl font-black text-white">{currentBmi == null ? '--' : currentBmi.toFixed(1)}</p>
             </div>
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-ambient-sm backdrop-blur-md">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current category</p>
-              <p className={`mt-2 text-lg font-black ${bmiLevel.textClass}`}>{currentBmi == null ? 'Awaiting metrics' : bmiLevel.label}</p>
+              <p className={`mt-2 text-xl font-black ${bmiLevel.textClass.replace('text-emerald-600', 'text-emerald-400').replace('text-sky-600', 'text-sky-400').replace('text-rose-500', 'text-rose-400')}`}>{currentBmi == null ? 'Awaiting metrics' : bmiLevel.label}</p>
             </div>
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-ambient-sm backdrop-blur-md">
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-ambient-sm backdrop-blur-md">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Check-in records</p>
-              <p className="mt-2 text-lg font-black text-slate-900">{checkinHistory.length}</p>
+              <p className="mt-2 text-2xl font-black text-white">{checkinHistory.length}</p>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="mb-6 flex flex-col gap-3 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,1),rgba(240,249,255,1))] p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+      <div className="mb-6 flex flex-col gap-3 rounded-[2rem] border border-white/10 bg-gradient-to-r from-emerald-900/20 to-sky-900/10 p-5 shadow-ambient-sm backdrop-blur-md lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Progress-first destination</p>
-          <h2 className="mt-2 text-xl font-black text-slate-900">Use Progress Hub for the full health and PT follow-up story.</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">Progress-first destination</p>
+          <h2 className="mt-2 text-xl font-black text-white">Use Progress Hub for the full health and PT follow-up story.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
             This page keeps your QR, check-in history, and manual metric entry available while the new hub becomes the main place to review progress.
           </p>
         </div>
         <Link
           to="/customer/progress-hub"
-          className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+          className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]"
         >
           Open Progress Hub
         </Link>
       </div>
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Use this page for</p>
-          <p className="mt-3 text-lg font-black text-slate-900">Scan, record, verify</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+        <article className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-ambient-sm backdrop-blur-md">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400/70">Use this page for</p>
+          <p className="mt-3 text-lg font-black text-white">Scan, record, verify</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
             Show your QR at arrival, add fresh body metrics, and inspect the raw records behind your follow-up view.
           </p>
         </article>
-        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Progress Hub is for</p>
-          <p className="mt-3 text-lg font-black text-slate-900">Overview and next actions</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+        <article className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-ambient-sm backdrop-blur-md">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400/70">Progress Hub is for</p>
+          <p className="mt-3 text-lg font-black text-white">Overview and next actions</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
             Use the hub when you want the combined story: latest snapshot, PT context, coach notes, and follow-up focus.
           </p>
         </article>
-        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">PT dashboard is for</p>
-          <p className="mt-3 text-lg font-black text-slate-900">Booking and schedule changes</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+        <article className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-ambient-sm backdrop-blur-md">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400/70">PT dashboard is for</p>
+          <p className="mt-3 text-lg font-black text-white">Booking and schedule changes</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
             When you need coach matches, request status, or future PT sessions, switch to the dedicated PT workspace.
           </p>
         </article>
@@ -327,46 +327,54 @@ function CustomerCheckinHealthPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="lg:col-span-1">
-          <article className="gc-card flex flex-col items-center bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
-            <div className="mb-4 flex items-center gap-2 self-start">
-              <CheckCircle2 className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800">Check-in QR Code</h2>
+          <article className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-ambient-md backdrop-blur-xl flex flex-col items-center">
+            <div className="mb-6 flex items-center gap-3 self-start">
+              <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+                <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h2 className="text-xl font-black text-white">Check-in QR Code</h2>
             </div>
-            <div className="relative aspect-square w-full max-w-[240px] overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-2 shadow-inner">
+            <div className="relative aspect-square w-full max-w-[240px] overflow-hidden rounded-[2rem] border border-white/10 bg-white p-4 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
               {qrDataUrl ? (
                 <img src={qrDataUrl} alt="Check-in QR" className="h-full w-full object-contain" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
-                  Generating QR...
+                   <div className="animate-pulse">Generating QR...</div>
                 </div>
               )}
             </div>
-            <p className="mt-4 text-center text-sm text-slate-600">
+            <p className="mt-6 text-center text-sm leading-relaxed text-slate-300 px-4">
               Show this QR code at the front desk when you arrive to check in.
             </p>
           </article>
 
-          <article className="gc-card mt-6 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
-            <div className="mb-4 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800">Current Metrics</h2>
+          <article className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-ambient-md backdrop-blur-xl mt-6">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+                <Activity className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h2 className="text-xl font-black text-white">Current Metrics</h2>
             </div>
             {hasHealthData ? (
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Height</p>
-                    <p className="mt-2 text-3xl font-black text-slate-900">{currentHealth.heightCm}</p>
-                    <p className="text-sm font-semibold text-gym-600">cm</p>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Height</p>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-white">{currentHealth.heightCm}</span>
+                      <span className="text-sm font-bold text-emerald-400">cm</span>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Weight</p>
-                    <p className="mt-2 text-3xl font-black text-slate-900">{currentHealth.weightKg}</p>
-                    <p className="text-sm font-semibold text-gym-600">kg</p>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Weight</p>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-white">{currentHealth.weightKg}</span>
+                      <span className="text-sm font-bold text-emerald-400">kg</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_72%)] px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                <div className="rounded-[2.5rem] border border-white/10 bg-black/10 px-4 py-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <div className="mx-auto max-w-[360px]">
                     <div className="relative">
                       <svg viewBox="0 0 320 220" className="w-full overflow-visible">
@@ -382,6 +390,7 @@ function CustomerCheckinHealthPage() {
                                 stroke={segment.color}
                                 strokeWidth="34"
                                 strokeLinecap="butt"
+                                opacity="0.8"
                               />
                               <text
                                 x={labelPoint.x}
@@ -406,7 +415,7 @@ function CustomerCheckinHealthPage() {
                               key={mark}
                               x={point.x}
                               y={point.y}
-                              fill="#334155"
+                              fill="#94a3b8"
                               fontSize="7"
                               fontWeight="700"
                               textAnchor="middle"
@@ -421,7 +430,7 @@ function CustomerCheckinHealthPage() {
                         <path
                           d={getGaugeArcPath(98, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path}
                           fill="none"
-                          stroke="#ffffff"
+                          stroke="rgba(255,255,255,0.05)"
                           strokeWidth="30"
                           strokeLinecap="round"
                         />
@@ -432,66 +441,65 @@ function CustomerCheckinHealthPage() {
                         >
                           <path d="M 160 176 L 151 78 L 169 78 Z" fill={bmiLevel.accent} opacity="0.95" />
                         </g>
-                        <circle cx="160" cy="176" r="9" fill="#1E293B" />
+                        <circle cx="160" cy="176" r="10" fill="#0f172a" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
                         <circle cx="160" cy="176" r="4" fill="#ffffff" />
 
-                        <text x="160" y="135" fill="#9CA3AF" fontSize="11" fontWeight="700" textAnchor="middle">
+                        <text x="160" y="135" fill="#94a3b8" fontSize="11" fontWeight="700" textAnchor="middle">
                           BMI
                         </text>
-                        <text x="160" y="160" fill={bmiLevel.accent} fontSize="24" fontWeight="800" textAnchor="middle">
+                        <text x="160" y="162" fill="white" fontSize="28" fontBold="900" textAnchor="middle" style={{ filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }}>
                           {currentBmi == null ? '--' : currentBmi.toFixed(1)}
                         </text>
                       </svg>
                     </div>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
+                  <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Category</p>
-                      <p className={`mt-2 text-2xl font-black ${bmiLevel.textClass}`}>{bmiLevel.label}</p>
-                      <p className={`mt-1 text-sm font-semibold ${bmiLevel.textClass}`}>{bmiLevel.summary}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Category</p>
+                      <p className={`mt-2 text-xl font-black ${bmiLevel.textClass.replace('emerald-600', 'emerald-400').replace('sky-600', 'sky-400').replace('rose-500', 'rose-400')}`}>{bmiLevel.label}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Difference</p>
-                      <p className={`mt-2 text-base font-bold ${bmiLevel.textClass}`}>{getBmiDifferenceText(currentBmi)}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Difference</p>
+                      <p className={`mt-2 text-sm font-bold ${bmiLevel.textClass.replace('emerald-600', 'emerald-400').replace('sky-600', 'sky-400').replace('rose-500', 'rose-400')}`}>{getBmiDifferenceText(currentBmi)}</p>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Interpretation</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{bmiLevel.guidance}</p>
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Interpretation</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-300">{bmiLevel.guidance}</p>
                   </div>
 
-                  <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+                  <div className="mt-4 space-y-1.5 border-t border-white/10 pt-4">
                     {BMI_CLASS_ROWS.map((row) => {
                       const active = isRangeMatch(currentBmi, row.min, row.max)
                       return (
                         <div
                           key={row.label}
-                          className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${
-                            active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600'
+                          className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-[11px] transition ${
+                            active ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-slate-400 border border-transparent'
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className={`text-xs ${active ? 'opacity-100' : 'opacity-0'}`}>{'>'}</span>
-                            <span className={active ? 'font-bold' : ''}>{row.label}</span>
+                             {active && <span className="h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
+                            <span>{row.label}</span>
                           </div>
-                          <span className={active ? 'font-bold' : 'font-medium'}>{describeBmiRange(row.min, row.max)}</span>
+                          <span>{describeBmiRange(row.min, row.max)}</span>
                         </div>
                       )
                     })}
                   </div>
 
-                  <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Healthy Weight</p>
-                      <p className="mt-2 text-lg font-black text-slate-900">
+                  <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-black/20 border border-white/5 px-4 py-3 text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Healthy Weight</p>
+                      <p className="mt-2 text-sm font-black text-white">
                         {healthyWeightRange ? `${healthyWeightRange.min.toFixed(1)} - ${healthyWeightRange.max.toFixed(1)} kg` : '--'}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Updated</p>
-                      <p className="mt-2 text-lg font-black text-slate-900">{formatDate(currentHealth.updatedAt)}</p>
+                    <div className="rounded-2xl bg-black/20 border border-white/5 px-4 py-3 text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Updated</p>
+                      <p className="mt-2 text-sm font-black text-white">{formatDate(currentHealth.updatedAt)}</p>
                     </div>
                   </div>
                 </div>
@@ -511,39 +519,38 @@ function CustomerCheckinHealthPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_72%)] px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                <div className="rounded-[2.5rem] border border-white/10 bg-black/10 px-4 py-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <div className="mx-auto max-w-[360px]">
                     <div className="relative">
                       <svg viewBox="0 0 320 220" className="w-full overflow-visible">
-                        <path d={getGaugeArcPath(118, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path} fill="none" stroke="#E5E7EB" strokeWidth="34" />
-                        <path d={getGaugeArcPath(98, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path} fill="none" stroke="#ffffff" strokeWidth="30" strokeLinecap="round" />
-                        <circle cx="160" cy="176" r="9" fill="#CBD5E1" />
-                        <circle cx="160" cy="176" r="4" fill="#ffffff" />
-                        <text x="160" y="135" fill="#9CA3AF" fontSize="11" fontWeight="700" textAnchor="middle">
+                        <path d={getGaugeArcPath(118, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="34" />
+                        <path d={getGaugeArcPath(98, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path} fill="none" stroke="rgba(255,255,255,0.02)" strokeWidth="30" strokeLinecap="round" />
+                        <circle cx="160" cy="176" r="10" fill="#1e293b" />
+                        <circle cx="160" cy="176" r="4" fill="#334155" />
+                        <text x="160" y="135" fill="#475569" fontSize="11" fontWeight="700" textAnchor="middle">
                           BMI
                         </text>
-                        <text x="160" y="160" fill="#94A3B8" fontSize="24" fontWeight="800" textAnchor="middle">
+                        <text x="160" y="162" fill="#475569" fontSize="28" fontWeight="900" textAnchor="middle">
                           --
                         </text>
                       </svg>
                     </div>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
+                  <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Category</p>
-                      <p className="mt-2 text-2xl font-black text-slate-500">No data</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-500">Add your latest body metrics</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Category</p>
+                      <p className="mt-2 text-xl font-black text-slate-600">No data</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Difference</p>
-                      <p className="mt-2 text-base font-bold text-slate-400">--</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Difference</p>
+                      <p className="mt-2 text-sm font-bold text-slate-600">--</p>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Interpretation</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Interpretation</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-500">
                       Enter height and weight to generate your BMI trend and healthy-weight target.
                     </p>
                   </div>
@@ -554,38 +561,40 @@ function CustomerCheckinHealthPage() {
         </section>
 
         <section className="space-y-6 lg:col-span-2">
-          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
-            <div className="mb-4 flex items-center gap-2">
-              <UserCog className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800">Update Body Metrics</h2>
+          <article className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-ambient-md backdrop-blur-xl">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+                <UserCog className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h2 className="text-xl font-black text-white">Update Body Metrics</h2>
             </div>
             <form onSubmit={handleHealthSubmit} className="flex flex-wrap items-end gap-4">
               <div className="min-w-[140px] flex-1">
-                <label className="mb-1 block text-xs font-semibold text-slate-600">Height (cm)</label>
+                <label className="mb-2 block text-xs font-semibold text-slate-400 uppercase tracking-wider">Height (cm)</label>
                 <div className="relative">
-                  <Ruler className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Ruler className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
                     type="number"
                     step="0.1"
                     required
                     value={healthForm.heightCm}
                     onChange={(e) => setHealthForm({ ...healthForm, heightCm: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-3 text-sm focus:border-gym-500 focus:outline-none"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
                     placeholder="170"
                   />
                 </div>
               </div>
               <div className="min-w-[140px] flex-1">
-                <label className="mb-1 block text-xs font-semibold text-slate-600">Weight (kg)</label>
+                <label className="mb-2 block text-xs font-semibold text-slate-400 uppercase tracking-wider">Weight (kg)</label>
                 <div className="relative">
-                  <Scale className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Scale className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
                     type="number"
                     step="0.1"
                     required
                     value={healthForm.weightKg}
                     onChange={(e) => setHealthForm({ ...healthForm, weightKg: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-3 text-sm focus:border-gym-500 focus:outline-none"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
                     placeholder="65"
                   />
                 </div>
@@ -593,69 +602,75 @@ function CustomerCheckinHealthPage() {
               <button
                 type="submit"
                 disabled={submittingHealth}
-                className="inline-flex items-center gap-2 rounded-lg bg-gym-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-gym-700 disabled:opacity-50"
+                className="inline-flex h-[46px] items-center gap-2 rounded-xl bg-emerald-500 px-8 text-sm font-bold text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition hover:bg-emerald-400 disabled:opacity-50"
               >
                 {submittingHealth ? 'Saving...' : <><Plus className="h-4 w-4" /> Save metrics</>}
               </button>
             </form>
           </article>
 
-          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
-            <div className="mb-4 flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800">Coach Notes</h2>
+          <article className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-ambient-md backdrop-blur-xl">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+                <ClipboardList className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h2 className="text-xl font-black text-white">Coach Notes</h2>
             </div>
             <div className="custom-scrollbar max-h-[300px] space-y-4 overflow-y-auto pr-2">
               {coachNotes.length > 0 ? (
                 coachNotes.map((note) => (
-                  <div key={note.noteId} className="rounded-xl border-l-4 border-gym-500 bg-slate-50 p-4">
-                    <div className="mb-2 flex items-start justify-between">
-                      <p className="text-sm font-bold text-slate-800">{note.coachName}</p>
-                      <span className="text-[10px] font-bold uppercase text-slate-400">
+                  <div key={note.noteId} className="rounded-2xl border-l-[6px] border-emerald-500 bg-black/30 p-5 shadow-inner">
+                    <div className="mb-3 flex items-start justify-between">
+                      <p className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{note.coachName}</p>
+                      <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border border-white/5">
                         {formatDate(note.sessionDate)}
                       </span>
                     </div>
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
                       {note.noteContent}
                     </p>
                   </div>
                 ))
               ) : (
-                <p className="py-4 text-sm italic text-slate-500">No coach notes available yet.</p>
+                <div className="py-8 text-center bg-black/10 rounded-2xl border border-dashed border-white/10">
+                  <p className="text-sm italic text-slate-500">No coach notes available yet.</p>
+                </div>
               )}
             </div>
           </article>
 
-          <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
-            <div className="mb-4 flex items-center gap-2">
-              <History className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800">Check-in History</h2>
+          <article className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-ambient-md backdrop-blur-xl">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+                <History className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h2 className="text-xl font-black text-white">Check-in History</h2>
             </div>
-            <div className="overflow-hidden rounded-xl border border-slate-100">
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <thead className="bg-white/5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                   <tr>
-                    <th className="px-4 py-3">Time</th>
-                    <th className="px-4 py-3">Membership</th>
-                    <th className="px-4 py-3">Confirmed by</th>
+                    <th className="px-5 py-4">Time</th>
+                    <th className="px-5 py-4">Membership</th>
+                    <th className="px-5 py-4">Confirmed by</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-white/5">
                   {checkinHistory.length > 0 ? (
                     checkinHistory.map((item) => (
-                      <tr key={item.checkInId} className="transition hover:bg-slate-50/50">
-                        <td className="px-4 py-3 font-medium text-slate-700">{formatDateTime(item.checkInTime)}</td>
-                        <td className="px-4 py-3 text-slate-600">
-                          <span className="inline-flex items-center rounded-full bg-gym-50 px-2 py-0.5 text-[10px] font-bold text-gym-700">
+                      <tr key={item.checkInId} className="transition-colors hover:bg-white/5">
+                        <td className="px-5 py-4 font-bold text-slate-200">{formatDateTime(item.checkInTime)}</td>
+                        <td className="px-5 py-4">
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
                             {item.planName}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-500">{item.checkedByName || '-'}</td>
+                        <td className="px-5 py-4 text-slate-400 text-xs">{item.checkedByName || '-'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="3" className="px-4 py-8 text-center italic text-slate-400">
+                      <td colSpan="3" className="px-5 py-10 text-center italic text-slate-500 bg-white/5">
                         No check-in history yet.
                       </td>
                     </tr>
@@ -666,21 +681,23 @@ function CustomerCheckinHealthPage() {
           </article>
 
           {healthHistory.length > 0 && (
-            <article className="gc-card bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">
-              <div className="mb-4 flex items-center gap-2">
-                <History className="h-5 w-5 text-gym-600" />
-                <h2 className="text-lg font-bold text-slate-800">Health History</h2>
+            <article className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-ambient-md backdrop-blur-xl">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+                  <History className="h-6 w-6 text-emerald-400" />
+                </div>
+                <h2 className="text-xl font-black text-white">Health History</h2>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {healthHistory.map((item, index) => (
-                  <div key={`${item.recordedAt}-${index}`} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <div key={`${item.recordedAt}-${index}`} className="flex items-center justify-between rounded-2xl border border-white/5 bg-black/30 p-5 group transition-all hover:border-emerald-500/30">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{formatDateTime(item.recordedAt)}</p>
-                      <p className="text-xs text-slate-500">Height {item.heightCm} cm | Weight {item.weightKg} kg</p>
+                      <p className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{formatDateTime(item.recordedAt)}</p>
+                      <p className="text-xs text-slate-400 mt-1 uppercase tracking-wide">Height {item.heightCm} cm | Weight {item.weightKg} kg</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs uppercase tracking-wide text-slate-500">BMI</p>
-                      <p className="text-sm font-bold text-slate-800">{parseBmi(item.bmi)?.toFixed(1) ?? '--'}</p>
+                      <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-1">BMI Score</p>
+                      <p className="text-lg font-black text-emerald-400">{parseBmi(item.bmi)?.toFixed(1) ?? '--'}</p>
                     </div>
                   </div>
                 ))}
@@ -691,9 +708,12 @@ function CustomerCheckinHealthPage() {
       </div>
 
       {error && (
-        <div className="animate-in slide-in-from-right fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl bg-rose-600 p-4 text-white shadow-2xl">
-          <p className="text-sm font-bold">{error}</p>
-          <button onClick={() => setError('')} className="rounded-lg p-1 hover:bg-white/20">
+        <div className="animate-in slide-in-from-right fixed bottom-6 right-6 z-50 flex items-center gap-4 rounded-[1.5rem] border border-rose-500/20 bg-rose-950/40 p-5 text-white shadow-2xl backdrop-blur-xl">
+          <div className="rounded-lg bg-rose-500/20 p-2">
+             <Activity className="h-5 w-5 text-rose-400" />
+          </div>
+          <p className="text-sm font-bold tracking-tight">{error}</p>
+          <button onClick={() => setError('')} className="ml-2 rounded-lg p-1.5 hover:bg-white/10 transition-colors">
             <Plus className="h-4 w-4 rotate-45" />
           </button>
         </div>

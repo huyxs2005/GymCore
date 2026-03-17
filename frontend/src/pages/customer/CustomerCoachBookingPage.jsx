@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { X } from 'lucide-react'
 import WeekdayDropdown from '../../components/common/WeekdayDropdown'
@@ -179,6 +179,7 @@ function CustomerCoachBookingPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const bookingSectionRef = useRef(null)
 
   const [form, setForm] = useState({
     endDate: '',
@@ -923,8 +924,8 @@ function CustomerCoachBookingPage() {
 
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav}>
-      <div className="max-w-7xl mx-auto space-y-6 pb-10">
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.18),_transparent_40%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-6 text-white shadow-xl">
+      <div className="space-y-6 pb-10">
+        <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_38%),linear-gradient(135deg,_rgba(10,10,15,0.98),_rgba(18,18,26,0.94)_55%,_rgba(38,25,6,0.92))] p-6 text-white shadow-[0_24px_60px_rgba(0,0,0,0.38)] backdrop-blur-xl">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">PT Dashboard</p>
@@ -962,7 +963,10 @@ function CustomerCoachBookingPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('match')}
+                  onClick={() => {
+                    setActiveTab('match')
+                    bookingSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+                  }}
                   className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
                 >
                   Book PT Plan
@@ -1099,19 +1103,21 @@ function CustomerCoachBookingPage() {
           )}
         </section>
 
-        <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-sm">
+        <section ref={bookingSectionRef} className="rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-ambient-sm backdrop-blur-md">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Match Coaches</button>
-              <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
-              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback Coach</button>
+            <div className="flex border-b border-white/10 pb-2">
+              <nav className="-mb-[9px] flex space-x-6" aria-label="Tabs">
+                <button onClick={() => setActiveTab('match')} className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-bold transition-colors ${activeTab === 'match' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:border-white/20 hover:text-slate-200'}`}>Match Coaches</button>
+                <button onClick={() => setActiveTab('schedule')} className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-bold transition-colors ${activeTab === 'schedule' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:border-white/20 hover:text-slate-200'}`}>My PT Schedule</button>
+                <button onClick={() => setActiveTab('feedback')} className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-bold transition-colors ${activeTab === 'feedback' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:border-white/20 hover:text-slate-200'}`}>Feedback Coach</button>
+              </nav>
             </div>
             <div className="grid gap-3 md:grid-cols-3 xl:min-w-[52rem]">
               {plannerStatusSummary.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
-                  <p className="mt-2 text-lg font-bold text-slate-900">{item.value}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
+                  <p className="mt-2 text-lg font-bold text-white">{item.value}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">{item.detail}</p>
                 </div>
               ))}
             </div>
@@ -1126,42 +1132,46 @@ function CustomerCoachBookingPage() {
         )}
 
         {activeTab === 'match' && (
-          <div className="space-y-6">
+          <div className="space-y-6 mt-6">
             <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-              <div className="bg-white border border-slate-200 rounded-[30px] p-5 space-y-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="gc-card bg-white/5 border-white/10 shadow-ambient-sm rounded-[2rem] p-6 space-y-4 backdrop-blur-md">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-gym-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-gym-700">1. Plan</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">2. Preview</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">3. Request</span>
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
-                    <p className="text-sm text-slate-600">Set your recurring PT schedule first, then preview coach matches with the same rules used by live booking.</p>
+                    <h3 className="text-xl font-black text-white">Your desired PT schedule</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-300">
+                      Pick your preferred weekly breakdown, then we will match you with available coaches.
+                    </p>
                   </div>
-                  <button
-                    onClick={openPlannerModal}
-                    className="px-4 py-2 rounded-xl bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700"
-                  >
-                    Open Schedule Planner
-                  </button>
+                  {ptBookingGate.blocked ? (
+                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 shadow-sm backdrop-blur-sm">
+                      <p className="font-bold">{ptBookingGateSummary.badge}</p>
+                      <p className="mt-1 text-xs font-semibold text-amber-200/80">{ptBookingGate.reason}</p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={openPlannerModal}
+                      className="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 shadow hover:bg-emerald-400 transition"
+                    >
+                      {weeklySlots.length > 0 ? 'Edit desired schedule' : 'Setup desired schedule'}
+                    </button>
+                  )}
                 </div>
 
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 space-y-2">
-                  <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                    <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
-                    <span>Repeat end date: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
-                    <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
-                    <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4 space-y-2">
+                  <div className="flex flex-wrap gap-5 text-xs text-slate-300">
+                    <span>Earliest possible start: <strong className="text-white">{minimumBookingStartValue}</strong></span>
+                    <span>Repeat end date: <strong className="text-white">{form.endDate || '-'}</strong></span>
+                    <span>Selected recurring slots: <strong className="text-white">{weeklySlots.length}</strong></span>
+                    <span>Selected weekdays: <strong className="text-white">{selectedSlotsByDay.size}</strong></span>
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-slate-400">
                     The booking preview follows the live PT rule: coaches can take up to 1 week to approve, and approved schedules begin on the next eligible Monday.
                   </p>
                   {weeklySlots.length === 0 && (
                     <p className="text-sm text-slate-500">No recurring slots selected yet.</p>
                   )}
                   {weeklySlots.length > 0 && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3 mt-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <WeekdayDropdown
@@ -1179,7 +1189,7 @@ function CustomerCoachBookingPage() {
                           />
                         </div>
                         {selectedWeeklySummaryGroup ? (
-                          <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          <div className="rounded-full bg-white/10 border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
                             {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
                           </div>
                         ) : null}
@@ -1187,7 +1197,7 @@ function CustomerCoachBookingPage() {
                       {selectedWeeklySummaryGroup ? (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                           {selectedWeeklySummaryGroup.slots.map((item) => (
-                            <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                            <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-slate-200">
                               {formatSlotLabel(item.timeSlotId)}
                             </span>
                           ))}
@@ -1197,7 +1207,7 @@ function CustomerCoachBookingPage() {
                   )}
                 </div>
 
-                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
+                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-900 font-bold hover:bg-white shadow-sm disabled:opacity-50 transition">
                   {loading ? 'Loading...' : '2) Preview Matches'}
                 </button>
               </div>
@@ -1227,28 +1237,36 @@ function CustomerCoachBookingPage() {
             </div>
 
             {hasPreviewedMatches && (
-              <div className="space-y-4">
-                <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
-                  <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
-                  <p className="text-sm text-emerald-700">These coaches can cover every requested recurring slot through your selected booking end date.</p>
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
-                    {matches.fullMatches.map((coach) => (
-                      <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
-                    ))}
+              <div className="space-y-6 mt-6">
+                <h3 className="text-xl font-black text-white border-b border-white/10 pb-3">Available Coaches</h3>
+                {matches.fullMatches.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold uppercase tracking-[0.16em] text-emerald-400">100% Match</h4>
+                    <p className="text-sm text-slate-400">These coaches can cover every requested recurring slot through your selected booking end date.</p>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {matches.fullMatches.map((coach) => (
+                        <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
-                  <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
-                  <p className="text-sm text-red-700">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
-                    {matches.partialMatches.map((coach) => (
-                      <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
-                    ))}
+                )}
+                {matches.partialMatches.length > 0 && (
+                  <div className="space-y-4 mt-8">
+                    <h4 className="text-sm font-bold uppercase tracking-[0.16em] text-amber-500">Partial Match</h4>
+                    <p className="text-sm leading-6 text-slate-400">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {matches.partialMatches.map((coach) => (
+                        <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+                {matches.fullMatches.length === 0 && matches.partialMatches.length === 0 && (
+                  <div className="rounded-[2rem] border border-white/10 bg-white/5 backdrop-blur-md p-8 text-center text-slate-400 shadow-ambient-sm">
+                    <p className="text-lg font-bold text-white">No coaches match right now</p>
+                    <p className="mt-2 font-medium">Try adjusting your times or end date.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1256,17 +1274,17 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'schedule' && (
           <div className="space-y-6">
-            <h3 className="text-xl font-bold text-slate-900">My PT Schedule</h3>
+            <h3 className="text-xl font-bold text-white border-b border-white/10 pb-3">My PT Schedule</h3>
 
             {scheduleData.pendingRequests.length > 0 && (
-              <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <h4 className="font-bold text-amber-800 mb-2">Pending Requests</h4>
+              <section className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 backdrop-blur-sm">
+                <h4 className="font-bold text-amber-500 mb-2">Pending Requests</h4>
                 <div className="space-y-2">
                   {scheduleData.pendingRequests.map((r) => (
-                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-amber-200 px-3 py-2 text-sm">
-                      <div className="font-semibold text-slate-800">{r.coachName}</div>
-                      <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
-                      <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
+                    <div key={r.ptRequestId} className="bg-white/5 rounded-xl border border-amber-500/30 px-3 py-2 text-sm shadow-sm backdrop-blur-md">
+                      <div className="font-semibold text-white">{r.coachName}</div>
+                      <div className="text-slate-300">Window: {r.startDate} to {r.endDate}</div>
+                      <div className="text-xs text-amber-300/80 mt-1">If approved, this recurring PT plan starts from the next eligible Monday.</div>
                     </div>
                   ))}
                 </div>
@@ -1274,13 +1292,13 @@ function CustomerCoachBookingPage() {
             )}
 
             {scheduleData.deniedRequests.length > 0 && (
-              <section className="bg-red-50 border border-red-200 rounded-2xl p-4">
-                <h4 className="font-bold text-red-800 mb-2">Denied Requests</h4>
+              <section className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 backdrop-blur-sm">
+                <h4 className="font-bold text-rose-400 mb-2">Denied Requests</h4>
                 <div className="space-y-2">
                   {scheduleData.deniedRequests.map((r) => (
-                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-red-200 px-3 py-2 text-sm">
-                      <div className="font-semibold text-slate-800">{r.coachName}: {r.startDate} to {r.endDate}</div>
-                      <div className="text-red-700">Reason: {r.denyReason || 'No reason provided'}</div>
+                    <div key={r.ptRequestId} className="bg-white/5 rounded-xl border border-red-500/30 px-3 py-2 text-sm shadow-sm backdrop-blur-md">
+                      <div className="font-semibold text-white">{r.coachName}: {r.startDate} to {r.endDate}</div>
+                      <div className="text-rose-300 mt-1">Reason: {r.denyReason || 'No reason provided'}</div>
                     </div>
                   ))}
                 </div>
@@ -1288,39 +1306,39 @@ function CustomerCoachBookingPage() {
             )}
 
             {!loading && scheduleData.items.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-12 text-center text-sm text-slate-500">
+              <div className="rounded-[2rem] border border-dashed border-white/20 bg-white/5 p-12 text-center text-sm text-slate-400 backdrop-blur-sm">
                 No PT sessions yet.
               </div>
             ) : (
-              <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
+              <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+                <div className="gc-card bg-white/5 border-white/10 rounded-[2rem] p-6 shadow-ambient-sm backdrop-blur-md">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Monthly view</p>
-                      <h4 className="text-lg font-bold text-slate-900">Your coaching calendar</h4>
+                      <h4 className="text-xl font-black text-white mt-1">Your coaching calendar</h4>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 backdrop-blur-sm">
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                        className="rounded-xl px-4 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
                       >
                         Prev
                       </button>
-                      <div className="min-w-32 text-center text-sm font-bold text-slate-800">
+                      <div className="min-w-[140px] text-center text-sm font-black text-white px-2">
                         {parseDateValue(scheduleMonthCursor)?.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                       </div>
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                        className="rounded-xl px-4 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
                       >
                         Next
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-3 backdrop-blur-sm">
                     <div className="grid grid-cols-7 gap-1">
                       {DAYS.map((day) => (
                         <div key={`schedule-header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1339,21 +1357,21 @@ function CustomerCoachBookingPage() {
                             aria-label={hasSessions ? `${day.value}, ${daySessions.length} coaching slot${daySessions.length > 1 ? 's' : ''}` : day.value}
                             className={`min-h-24 rounded-2xl border p-2 text-left transition ${
                               isSelected
-                                ? 'border-gym-600 bg-gym-50 shadow-sm'
+                                ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.3)] text-emerald-100'
                                 : hasSessions
-                                  ? 'border-emerald-200 bg-emerald-50/70 hover:border-gym-400 hover:bg-gym-50'
+                                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:border-emerald-400 hover:bg-emerald-500/20'
                                   : day.isCurrentMonth
-                                    ? 'border-slate-200 bg-white text-slate-700'
-                                    : 'border-slate-100 bg-slate-100 text-slate-300'
+                                    ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+                                    : 'border-white/5 bg-transparent text-slate-600'
                             } ${hasSessions ? 'cursor-pointer' : 'cursor-default'}`}
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <span className={`text-sm font-semibold ${day.isCurrentMonth ? 'text-slate-800' : 'text-slate-300'}`}>{day.dayNumber}</span>
-                              {hasSessions && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.14)]" />}
+                              <span className={`text-sm font-semibold ${day.isCurrentMonth ? (isSelected ? 'text-emerald-100' : 'text-slate-200') : 'text-slate-600'}`}>{day.dayNumber}</span>
+                              {hasSessions && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
                             </div>
                             {hasSessions && (
                               <div className="mt-6">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-black/30 border border-emerald-500/30 px-2 py-1 text-[11px] font-bold text-emerald-300">
                                   <span>{daySessions.length}</span>
                                   <span>{daySessions.length === 1 ? 'slot' : 'slots'}</span>
                                 </div>
@@ -1366,18 +1384,18 @@ function CustomerCoachBookingPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="gc-card bg-white/5 border-white/10 rounded-[2rem] p-6 shadow-ambient-sm backdrop-blur-md">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Selected date</p>
-                  <h4 className="mt-2 text-lg font-bold text-slate-900">
+                  <h4 className="mt-2 text-xl font-bold text-white">
                     {selectedScheduleDate ? formatHumanDate(selectedScheduleDate) : 'Pick a green-marked day'}
                   </h4>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-slate-400">
                     Dates with coaching sessions are marked with a green signal in the calendar.
                   </p>
 
                   <div className="mt-4 space-y-3">
                     {selectedScheduleItems.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                      <div className="rounded-2xl border border-dashed border-white/20 bg-black/20 p-4 text-sm text-slate-400">
                         No coaching sessions selected for this day.
                       </div>
                     )}
@@ -1387,8 +1405,8 @@ function CustomerCoachBookingPage() {
                         <div key={s.ptSessionId} className={`rounded-2xl border p-4 space-y-3 ${appearance.card}`}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <h5 className="font-bold text-slate-900">{s.coachName}</h5>
-                              <p className="text-sm text-slate-600">
+                              <h5 className="font-bold text-white">{s.coachName}</h5>
+                              <p className="text-sm text-slate-300">
                                 Slot {s.slotIndex} | {String(s.startTime || '').slice(0, 5)} - {String(s.endTime || '').slice(0, 5)}
                               </p>
                             </div>
@@ -1454,17 +1472,19 @@ function CustomerCoachBookingPage() {
         )}
 
         {activeTab === 'feedback' && (
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold text-slate-900">Feedback Coach</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-6">
+            <h3 className="text-xl font-black text-white border-b border-white/10 pb-3">Feedback Coach</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {completedSessions.map((s) => (
-                <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4">
-                  <div className="font-semibold text-slate-900">{s.coachName}</div>
-                  <div className="text-sm text-slate-600">{s.sessionDate} | Slot {s.slotIndex}</div>
-                  <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gym-600 text-white">Rate this session</button>
+                <div key={s.ptSessionId} className="gc-card bg-white/5 border-white/10 rounded-[2rem] p-5 shadow-ambient-sm backdrop-blur-md flex flex-col justify-between">
+                  <div>
+                    <div className="font-black text-white text-lg mb-1">{s.coachName}</div>
+                    <div className="text-sm font-medium text-slate-300">{formatHumanDate(s.sessionDate)} | Slot {s.slotIndex}</div>
+                  </div>
+                  <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-5 w-full px-4 py-2.5 text-sm font-bold rounded-2xl bg-emerald-500 text-slate-950 shadow hover:bg-emerald-400 transition">Rate this session</button>
                 </div>
               ))}
-              {!loading && completedSessions.length === 0 && <div className="text-sm text-slate-500">No completed sessions to rate.</div>}
+              {!loading && completedSessions.length === 0 && <div className="col-span-full rounded-[2rem] border border-dashed border-white/20 bg-white/5 p-12 text-center text-sm text-slate-400 backdrop-blur-sm">No completed sessions to rate.</div>}
             </div>
           </div>
         )}
@@ -2109,23 +2129,32 @@ function CoachCard({ coach, onReview }) {
   const isFullMatch = String(coach.matchType || '').toUpperCase() === 'FULL'
 
   return (
-    <article className={`rounded-xl border p-4 space-y-2 ${isFullMatch ? 'border-emerald-200 bg-white' : 'border-red-200 bg-red-50/35'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h5 className="font-bold text-slate-900">{coach.fullName}</h5>
-          <p className="text-xs text-slate-500">{coach.email}</p>
+    <article className={`gc-card rounded-[2rem] border p-5 space-y-3 shadow-sm flex flex-col justify-between ${isFullMatch ? 'border-emerald-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]' : 'border-amber-200 bg-[linear-gradient(180deg,#fffbeb,#fef3c7)]'}`}>
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h5 className="font-black text-slate-900 text-lg flex items-center gap-2">
+              {coach.fullName}
+              {isFullMatch ? (
+                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Perfect Match</span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Partial Match</span>
+              )}
+            </h5>
+            <p className="text-xs font-semibold text-slate-500 mt-1">{coach.email}</p>
+          </div>
+          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${isFullMatch ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+            {coach.matchedSlots}/{coach.requestedSlots} slots
+          </span>
         </div>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-700' : 'bg-red-500/15 text-red-700'}`}>
-          {coach.matchedSlots}/{coach.requestedSlots} slots
-        </span>
+      <p className="text-sm leading-6 text-slate-600 line-clamp-3">{coach.bio || 'No bio available for this coach.'}</p>
+      <div className="text-[11px] font-semibold text-slate-600 space-y-1 mt-2">
+        {bookedCount > 0 && <div className="text-amber-700">• {bookedCount} slot(s) already booked in this range</div>}
+        {weeklyUnavailableCount > 0 && <div className="text-amber-700">• {weeklyUnavailableCount} slot(s) not in coach weekly availability</div>}
       </div>
-      <p className="text-sm text-slate-600">{coach.bio || 'No bio'}</p>
-      <div className="text-xs text-slate-600">
-        {bookedCount > 0 && <div>{bookedCount} slot(s) already booked in selected range.</div>}
-        {weeklyUnavailableCount > 0 && <div>{weeklyUnavailableCount} slot(s) not in coach weekly availability.</div>}
       </div>
-      <button onClick={() => onReview(coach)} className="w-full mt-2 px-3 py-2 rounded-lg bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700">
-        Review Calendar Match
+      <button onClick={() => onReview(coach)} className={`w-full mt-5 px-4 py-2.5 rounded-2xl text-white text-sm font-bold shadow transition ${isFullMatch ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-200' : 'bg-amber-600 hover:bg-amber-500 shadow-amber-200'}`}>
+        Review & Request
       </button>
     </article>
   )
@@ -2139,8 +2168,8 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
   const selectedLabel = formatHumanDate(selectedValue)
 
   return (
-    <div className="absolute left-1/2 top-2 z-30 w-[min(26rem,calc(100vw-3rem))] -translate-x-1/2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-      <div className="bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.14),_transparent_55%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] px-4 py-4 text-white">
+    <div className="absolute left-1/2 top-2 z-30 w-[min(26rem,calc(100vw-3rem))] -translate-x-1/2 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl">
+      <div className="bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_38%),linear-gradient(135deg,_rgba(10,10,15,0.98),_rgba(18,18,26,0.94)_55%,_rgba(38,25,6,0.92))] px-5 py-5 text-white">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-bold">{title}</p>
