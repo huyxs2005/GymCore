@@ -22,11 +22,11 @@ function SearchResultCard({ item, active, onSelect }) {
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-base font-bold text-slate-900">{item.fullName}</p>
-          <p className="mt-1 text-sm text-slate-500">{item.email || item.phone || 'No contact'}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-bold text-slate-900 break-words">{item.fullName}</p>
+          <p className="mt-1 text-sm text-slate-500 break-words">{item.email || item.phone || 'No contact'}</p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${item.locked ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+        <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${item.locked ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
           {item.locked ? 'Locked' : 'Open'}
         </span>
       </div>
@@ -55,12 +55,12 @@ function InfoCard({ icon, title, subtitle, children }) {
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="rounded-2xl bg-gym-50 p-3 text-gym-700">
+        <div className="shrink-0 rounded-2xl bg-gym-50 p-3 text-gym-700">
           <IconComponent className="h-5 w-5" />
         </div>
-        <div>
-          <h3 className="text-base font-bold text-slate-900">{title}</h3>
-          {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-bold text-slate-900 break-words">{title}</h3>
+          {subtitle ? <p className="mt-1 text-sm text-slate-500 break-words">{subtitle}</p> : null}
         </div>
       </div>
       <div className="mt-4">{children}</div>
