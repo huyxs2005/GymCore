@@ -164,7 +164,9 @@ public class GeminiChatService {
     }
 
     private int parseRetryAfterSeconds(String body) {
-        if (!StringUtils.hasText(body)) return 0;
+        if (!StringUtils.hasText(body)) {
+            return 0;
+        }
         Matcher retryDelay = RETRY_DELAY_SECONDS_PATTERN.matcher(body);
         if (retryDelay.find()) {
             try {
@@ -188,14 +190,20 @@ public class GeminiChatService {
 
     private Map<String, Object> buildRequestBody(List<Map<String, Object>> messages, Map<String, Object> context) {
         Map<String, Object> body = new LinkedHashMap<>();
+
         String foodCatalog = buildFoodCatalogContext();
+        String coachCatalog = buildCoachCatalogContext();
+        String productCatalog = buildProductCatalogContext();
+
         body.put("systemInstruction", Map.of(
                 "parts", List.of(Map.of("text",
-                        buildSystemInstruction(context, foodCatalog)))));
+                        buildSystemInstruction(context, foodCatalog, coachCatalog, productCatalog)))));
+
         body.put("contents", mapMessages(messages));
         body.put("generationConfig", Map.of(
                 "temperature", 0.6,
                 "maxOutputTokens", 512));
+
         return body;
     }
 
@@ -226,60 +234,82 @@ public class GeminiChatService {
                     .fromUriString("https://generativelanguage.googleapis.com/v1/models")
                     .queryParam("key", apiKey.trim())
                     .toUriString();
-    
+
             ResponseEntity<Map> response = restTemplate.exchange(
                     listUrl,
                     HttpMethod.GET,
                     new HttpEntity<>(new HttpHeaders()),
                     Map.class
             );
-    
+
             Map body = response.getBody();
-            if (body == null) return Optional.empty();
-    
+            if (body == null) {
+                return Optional.empty();
+            }
+
             Object modelsObj = body.get("models");
             if (!(modelsObj instanceof List<?> models) || models.isEmpty()) {
                 return Optional.empty();
             }
-    
+
             List<String> candidates = new ArrayList<>();
-    
+
             for (Object modelObj : models) {
-                if (!(modelObj instanceof Map<?, ?> modelMap)) continue;
-    
+                if (!(modelObj instanceof Map<?, ?> modelMap)) {
+                    continue;
+                }
+
                 Object nameObj = modelMap.get("name");
-                if (nameObj == null) continue;
-    
+                if (nameObj == null) {
+                    continue;
+                }
+
                 String name = String.valueOf(nameObj).trim();
-                if (!name.startsWith("models/")) continue;
-    
+                if (!name.startsWith("models/")) {
+                    continue;
+                }
+
                 String id = name.substring("models/".length());
                 String lower = id.toLowerCase();
-    
+
                 // ---- HARD FILTER ----
-                if (!lower.startsWith("gemini-")) continue;
-                if (lower.contains("image")) continue;
-                if (lower.contains("vision")) continue;
-                if (lower.contains("preview")) continue;
-                if (lower.contains("research")) continue;
-                if (lower.contains("embedding")) continue;
-    
+                if (!lower.startsWith("gemini-")) {
+                    continue;
+                }
+                if (lower.contains("image")) {
+                    continue;
+                }
+                if (lower.contains("vision")) {
+                    continue;
+                }
+                if (lower.contains("preview")) {
+                    continue;
+                }
+                if (lower.contains("research")) {
+                    continue;
+                }
+                if (lower.contains("embedding")) {
+                    continue;
+                }
+
                 // ---- CHECK API SUPPORT ----
                 Object methodsObj = modelMap.get("supportedGenerationMethods");
-                boolean supportsGenerate =
-                        methodsObj instanceof List<?> list &&
-                        list.stream().anyMatch(v ->
-                                "generateContent".equalsIgnoreCase(String.valueOf(v)));
-    
-                if (!supportsGenerate) continue;
-    
+                boolean supportsGenerate
+                        = methodsObj instanceof List<?> list
+                        && list.stream().anyMatch(v
+                                -> "generateContent".equalsIgnoreCase(String.valueOf(v)));
+
+                if (!supportsGenerate) {
+                    continue;
+                }
+
                 candidates.add(id);
             }
-    
+
             if (candidates.isEmpty()) {
                 return Optional.empty();
             }
-    
+
             // ---- PRIORITY ORDER ----
             List<String> priority = List.of(
                     "gemini-2.5-flash",
@@ -287,7 +317,7 @@ public class GeminiChatService {
                     "gemini-1.5-pro",
                     "gemini-1.5-flash"
             );
-    
+
             for (String preferred : priority) {
                 for (String candidateModel : candidates) {
                     if (candidateModel.equalsIgnoreCase(preferred)) {
@@ -296,56 +326,80 @@ public class GeminiChatService {
                     }
                 }
             }
-    
+
             // If none matched priority, use first safe candidate
             String fallback = candidates.get(0);
             log.info("Gemini fallback model selected='{}'", fallback);
             return Optional.of(fallback);
-    
+
         } catch (RuntimeException ex) {
             log.warn("Failed to discover Gemini fallback model: {}", ex.getMessage());
             return Optional.empty();
         }
     }
 
-    private String buildSystemInstruction(Map<String, Object> context, String foodCatalog) {
+    private String buildSystemInstruction(
+            Map<String, Object> context,
+            String foodCatalog,
+            String coachCatalog,
+            String productCatalog) {
+
         String mode = context == null ? "" : String.valueOf(context.getOrDefault("mode", "")).trim();
         String consultativeContext = buildConsultativeContext(context);
         String allowedActions = buildAllowedActionContext(context);
         String selectedContext = buildSelectedItemContext(context);
         String responseLanguage = determineResponseLanguage(context);
+
         return """
-                You are GymCore AI assistant.
+            You are GymCore AI assistant.
 
-                Reply in %s.
-                Match the user's language consistently from the start. If the latest user message is Vietnamese, stay in Vietnamese. If it is English, stay in English.
-                Use plain text only. Do not use Markdown formatting, bold markers, heading markers, or code fences.
-                Be concise, practical, and consultative.
-                Scope: workouts, foods, weekly guidance, and routing users into real GymCore flows.
-                Never claim an action was completed inside chat. You can only explain or route the user to supported GymCore screens.
-                If user asks for medical advice, respond with general guidance and advise consulting a professional.
-                When recommending next steps, only use the allowed GymCore actions below. Do not invent unsupported routes, bookings, workouts, foods, or product capabilities.
-                PT booking must remain a receiving flow. Do not act like chat itself can replace coach programming or complete booking.
+            Reply in %s.
+            Match the user's language consistently.
+            Use plain text only.
+            Be concise, practical, and consultative.
 
-                IMPORTANT FOOD CONSTRAINT:
-                - When suggesting foods, you MUST ONLY recommend food names from the allowed catalog below.
-                - Do NOT invent new food names.
-                - If no suitable item exists in the catalog, clearly say no suitable database food was found.
-                - Prefer answers in bullet points with exact food names.
+            Scope: workouts, foods, coaches, products, and GymCore flows.
 
-                Current screen: %s
-                Consultative customer context:
-                %s
+            IMPORTANT DATABASE CONSTRAINT (STRICT):
+            - You MUST ONLY use data from the provided database catalogs below.
+            - Do NOT invent any food, coach, or product.
+            - Do NOT suggest anything outside database items.
+            - If no suitable item exists → say: "Không tìm thấy dữ liệu phù hợp trong hệ thống."
+            - All recommendations MUST match EXACT names from database.
 
-                Current page selections:
-                %s
+            BEHAVIOR RULE:
+            - You can explain concepts (e.g., nutrition, workout principles),
+              BUT when listing or recommending items → MUST use database only.
 
-                Allowed GymCore actions:
-                %s
+            Current screen: %s
 
-                Allowed food catalog from database:
-                %s
-                """.formatted(responseLanguage, mode, consultativeContext, selectedContext, allowedActions, foodCatalog);
+            Consultative customer context:
+            %s
+
+            Current page selections:
+            %s
+
+            Allowed GymCore actions:
+            %s
+
+            Allowed food catalog from database:
+            %s
+
+            Allowed coach catalog from database:
+            %s
+
+            Allowed product catalog from database:
+            %s
+            """.formatted(
+                responseLanguage,
+                mode,
+                consultativeContext,
+                selectedContext,
+                allowedActions,
+                foodCatalog,
+                coachCatalog,
+                productCatalog
+        );
     }
 
     private String determineResponseLanguage(Map<String, Object> context) {
@@ -473,10 +527,18 @@ public class GeminiChatService {
         String foodName = normalizeText(food.get("name"));
         if (foodName != null) {
             List<String> nutrition = new ArrayList<>();
-            if (food.get("calories") != null) nutrition.add("calories " + food.get("calories"));
-            if (food.get("protein") != null) nutrition.add("protein " + food.get("protein"));
-            if (food.get("carbs") != null) nutrition.add("carbs " + food.get("carbs"));
-            if (food.get("fat") != null) nutrition.add("fat " + food.get("fat"));
+            if (food.get("calories") != null) {
+                nutrition.add("calories " + food.get("calories"));
+            }
+            if (food.get("protein") != null) {
+                nutrition.add("protein " + food.get("protein"));
+            }
+            if (food.get("carbs") != null) {
+                nutrition.add("carbs " + food.get("carbs"));
+            }
+            if (food.get("fat") != null) {
+                nutrition.add("fat " + food.get("fat"));
+            }
             String suffix = nutrition.isEmpty() ? summarizeSelectionDetail(food.get("description")) : " (" + String.join(", ", nutrition) + ")";
             lines.add("- Selected food: " + foodName + suffix);
         }
@@ -499,7 +561,9 @@ public class GeminiChatService {
             String actionId = normalizeText(action.get("id"));
             String label = normalizeText(action.get("label"));
             String route = normalizeText(action.get("route"));
-            if (route == null) continue;
+            if (route == null) {
+                continue;
+            }
             builder.append("- ")
                     .append(actionId != null ? actionId : "route")
                     .append(" -> ")
@@ -523,7 +587,9 @@ public class GeminiChatService {
             Map<String, Object> action = asMap(item);
             String route = normalizeText(action.get("route"));
             String label = normalizeText(action.get("label"));
-            if (route == null || label == null) continue;
+            if (route == null || label == null) {
+                continue;
+            }
             Map<String, Object> copy = new LinkedHashMap<>();
             copy.put("id", normalizeText(action.get("id")));
             copy.put("label", label);
@@ -576,7 +642,9 @@ public class GeminiChatService {
     }
 
     private String normalizeText(Object rawValue) {
-        if (rawValue == null) return null;
+        if (rawValue == null) {
+            return null;
+        }
         String text = String.valueOf(rawValue).trim();
         return text.isEmpty() ? null : text;
     }
@@ -601,12 +669,16 @@ public class GeminiChatService {
                 row.put("fat", rs.getObject("Fat"));
                 return row;
             });
-            if (foods.isEmpty()) return "- No active foods in database.";
+            if (foods.isEmpty()) {
+                return "- No active foods in database.";
+            }
 
             StringBuilder builder = new StringBuilder();
             for (Map<String, Object> food : foods) {
                 String name = String.valueOf(food.getOrDefault("name", "")).trim();
-                if (!StringUtils.hasText(name)) continue;
+                if (!StringUtils.hasText(name)) {
+                    continue;
+                }
                 builder.append("- ").append(name)
                         .append(" | Cal: ").append(formatNumber(food.get("calories")))
                         .append(" | P: ").append(formatNumber(food.get("protein")))
@@ -622,8 +694,106 @@ public class GeminiChatService {
         }
     }
 
+    private String buildCoachCatalogContext() {
+        try {
+            List<Map<String, Object>> coaches = jdbcTemplate.query("""
+                SELECT TOP (40)
+                       u.FullName,
+                       c.ExperienceYears,
+                       COALESCE(agg.AvgRating, 0) AS AvgRating
+                FROM dbo.Coaches c
+                JOIN dbo.Users u ON u.UserID = c.CoachID
+                LEFT JOIN (
+                    SELECT CoachID, AVG(CAST(Rating AS FLOAT)) AS AvgRating
+                    FROM dbo.CoachFeedback
+                    GROUP BY CoachID
+                ) agg ON agg.CoachID = c.CoachID
+                WHERE u.IsActive = 1
+                ORDER BY u.FullName
+                """, (rs, rowNum) -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("name", rs.getString("FullName"));
+                row.put("experienceYears", rs.getObject("ExperienceYears"));
+                row.put("rating", rs.getObject("AvgRating"));
+                return row;
+            });
+
+            if (coaches.isEmpty()) {
+                return "- No active coaches in database.";
+            }
+
+            StringBuilder builder = new StringBuilder();
+            for (Map<String, Object> coach : coaches) {
+                String name = String.valueOf(coach.get("name")).trim();
+                if (!StringUtils.hasText(name)) {
+                    continue;
+                }
+
+                builder.append("- ").append(name)
+                        .append(" | Exp: ").append(formatNumber(coach.get("experienceYears")))
+                        .append(" years | Rating: ").append(formatNumber(coach.get("rating")))
+                        .append("\n");
+            }
+
+            return builder.toString().trim();
+
+        } catch (RuntimeException e) {
+            log.warn("Failed to load coach catalog: {}", e.getMessage());
+            return "- Coach catalog unavailable.";
+        }
+    }
+
+    private String buildProductCatalogContext() {
+        try {
+            List<Map<String, Object>> products = jdbcTemplate.query("""
+                SELECT TOP (60)
+                       p.ProductName,
+                       p.Price,
+                       p.ShortDescription
+                FROM dbo.Products p
+                WHERE p.IsActive = 1
+                ORDER BY p.ProductName
+                """, (rs, rowNum) -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("name", rs.getString("ProductName"));
+                row.put("price", rs.getObject("Price"));
+                row.put("desc", rs.getString("ShortDescription"));
+                return row;
+            });
+
+            if (products.isEmpty()) {
+                return "- No active products in database.";
+            }
+
+            StringBuilder builder = new StringBuilder();
+            for (Map<String, Object> product : products) {
+                String name = String.valueOf(product.get("name")).trim();
+                if (!StringUtils.hasText(name)) {
+                    continue;
+                }
+
+                builder.append("- ").append(name)
+                        .append(" | Price: ").append(formatNumber(product.get("price")));
+
+                if (product.get("desc") != null) {
+                    builder.append(" | ").append(product.get("desc"));
+                }
+
+                builder.append("\n");
+            }
+
+            return builder.toString().trim();
+
+        } catch (RuntimeException e) {
+            log.warn("Failed to load product catalog: {}", e.getMessage());
+            return "- Product catalog unavailable.";
+        }
+    }
+
     private static String formatNumber(Object value) {
-        if (value == null) return "-";
+        if (value == null) {
+            return "-";
+        }
         String text = String.valueOf(value).trim();
         return text.isEmpty() ? "-" : text;
     }
@@ -635,14 +805,20 @@ public class GeminiChatService {
 
         List<Map<String, Object>> contents = new ArrayList<>();
         for (Map<String, Object> msg : messages) {
-            if (msg == null) continue;
+            if (msg == null) {
+                continue;
+            }
             String role = String.valueOf(msg.getOrDefault("role", "")).trim().toLowerCase();
             String content = String.valueOf(msg.getOrDefault("content", "")).trim();
-            if (content.isEmpty()) continue;
+            if (content.isEmpty()) {
+                continue;
+            }
 
             String geminiRole = switch (role) {
-                case "assistant", "model" -> "model";
-                default -> "user";
+                case "assistant", "model" ->
+                    "model";
+                default ->
+                    "user";
             };
 
             contents.add(Map.of(
@@ -655,6 +831,7 @@ public class GeminiChatService {
         }
         return contents;
     }
+
     @PostConstruct
     public void debugGemini() {
         log.info("Gemini initialized. model='{}', apiKeyConfigured={}",
@@ -701,4 +878,3 @@ public class GeminiChatService {
         }
     }
 }
-
