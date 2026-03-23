@@ -408,13 +408,13 @@ function CustomerKnowledgePage() {
       subtitle="Browse workouts + foods and request goal-based recommendations."
       links={customerNav}
     >
-      <section className="gc-card-compact space-y-5">
+      <section className="space-y-6">
       <header className="overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.18),_transparent_34%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.92))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
               <h2 className="gc-section-kicker">Knowledge & AI</h2>
-              <h3 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">One workspace for learning, planning, and AI guidance</h3>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+              <h3 className="mt-3 text-3xl font-bold tracking-tight text-white">One workspace for learning, planning, and AI guidance</h3>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
                 Browse the workout and food library, keep your saved goals in sync, and use assistants that turn the same customer context into weekly plans and real PT booking previews.
               </p>
             </div>
@@ -428,7 +428,7 @@ function CustomerKnowledgePage() {
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    activeTab === tab.id ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    activeTab === tab.id ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                   }`}
                 >
                   {tab.label}
@@ -439,29 +439,29 @@ function CustomerKnowledgePage() {
 
           <div className="mt-6 grid gap-3 lg:grid-cols-3">
             {assistantConsoleSummary.map((item) => (
-        <article key={item.id} className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl shadow-ambient-sm">
+        <article key={item.id} className="rounded-3xl border border-white/10 bg-white/5/5 p-4 backdrop-blur-xl shadow-ambient-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{item.label}</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">{item.value}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{item.detail}</p>
+                <p className="mt-2 text-2xl font-bold text-white">{item.value}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{item.detail}</p>
               </article>
             ))}
           </div>
         </header>
 
-        <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[2rem] border border-white/10 bg-black/20 p-6 shadow-ambient backdrop-blur-md">
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-3xl border border-amber-100 bg-amber-50/70 p-4">
+            <div className="rounded-3xl border border-gym-500/20 bg-gym-500/100/10 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Saved fitness goals</p>
-                  <p className="mt-1 text-sm text-slate-600">Save the goals you care about so workout, food, and PT booking guidance all use the same customer context.</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gym-400">Saved fitness goals</p>
+                  <p className="mt-1 text-sm text-slate-400">Save the goals you care about so workout, food, and PT booking guidance all use the same customer context.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={saveCustomerGoals}
                 disabled={saveGoalsMutation.isPending}
-                className="rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-gym-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saveGoalsMutation.isPending ? 'Dang luu...' : 'Save my goals'}
               </button>
@@ -469,7 +469,7 @@ function CustomerKnowledgePage() {
                 type="button"
                 onClick={requestSavedRecommendations}
                 disabled={recommendationsMutation.isPending}
-                className="rounded-full border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-amber-500/20 bg-white/5/5 px-4 py-2 text-sm font-semibold text-gym-500 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {recommendationsMutation.isPending ? 'Dang goi y...' : 'Recommend from saved goals'}
               </button>
@@ -477,7 +477,7 @@ function CustomerKnowledgePage() {
                 type="button"
                 onClick={requestWeeklyPlan}
                 disabled={weeklyPlanMutation.isPending}
-                className="rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-white/10 bg-white/5/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/5/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {weeklyPlanMutation.isPending ? 'Dang lap ke hoach...' : 'Build my weekly plan'}
               </button>
@@ -492,8 +492,8 @@ function CustomerKnowledgePage() {
                     onClick={() => toggleSavedGoal(goal.goalId)}
                     className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                       selectedGoalIdsState.includes(goal.goalId)
-                        ? 'bg-amber-500 text-white'
-                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                        : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                     }`}
                   >
                     {goal.name}
@@ -501,11 +501,11 @@ function CustomerKnowledgePage() {
                 ))}
               </div>
 
-              {customerGoalsQuery.isLoading ? <p className="mt-3 text-sm text-slate-500">Loading saved goals...</p> : null}
+              {customerGoalsQuery.isLoading ? <p className="mt-3 text-sm text-slate-400">Loading saved goals...</p> : null}
               {customerGoalsQuery.isError ? <p className="mt-3 text-sm text-rose-600">Could not load saved goals.</p> : null}
               {saveGoalsMutation.isError ? <p className="mt-3 text-sm text-rose-600">Could not save your goals.</p> : null}
               {!customerGoalsQuery.isLoading ? (
-                <p className="mt-3 text-sm text-slate-600">
+                <p className="mt-3 text-sm text-slate-400">
                   Saved goals: {savedGoalCodes.length ? savedGoalCodes.join(', ') : 'none yet'}
                 </p>
               ) : null}
@@ -514,7 +514,7 @@ function CustomerKnowledgePage() {
               {recommendationsMutation.isError ? <p className="mt-3 text-sm text-rose-600">Could not load saved-goal recommendations.</p> : null}
             </div>
 
-            <aside className="rounded-3xl border border-slate-200 bg-[linear-gradient(145deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-5 text-white">
+            <aside className="rounded-3xl border border-white/10 bg-[linear-gradient(145deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-5 text-white">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Assistant console</p>
               <h3 className="mt-3 text-2xl font-bold">Move from guidance to action faster</h3>
               <p className="mt-3 text-sm leading-7 text-slate-200">
@@ -522,11 +522,11 @@ function CustomerKnowledgePage() {
               </p>
 
               <div className="mt-5 grid gap-3">
-                <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <div className="rounded-3xl border border-white/10 bg-white/5/10 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Workout assistant</p>
                   <p className="mt-2 text-sm text-white">Best when you want a fast workout outline, exercise shortlist, or a starting split before opening detail.</p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <div className="rounded-3xl border border-white/10 bg-white/5/10 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Coach booking assistant</p>
                   <p className="mt-2 text-sm text-white">Best when you already know the days and recurring slots you want, and need a real PT match preview.</p>
                 </div>
@@ -544,19 +544,19 @@ function CustomerKnowledgePage() {
           </div>
 
           {weeklyPlan.contractVersion ? (
-            <div className="mt-4 rounded-[28px] border border-slate-200 bg-white p-5">
+            <div className="mt-4 rounded-[1.75rem] border border-white/5 bg-black/30 p-6 shadow-ambient-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Mini weekly plan</p>
-                  <h3 className="mt-2 text-lg font-bold text-slate-900">
+                  <h3 className="mt-2 text-lg font-bold text-white">
                     {weeklyPlan.summary?.headline || 'This week guidance'}
                   </h3>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-slate-400">
                     {weeklyPlan.summary?.coachNote || 'Use this plan as guidance, then move into product flows to act on it.'}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                  <p className="font-semibold text-slate-900">{weeklyPlan.contractVersion}</p>
+                <div className="rounded-2xl border border-white/5 bg-white/5/5 px-4 py-3 text-xs text-slate-400">
+                  <p className="font-semibold text-white">{weeklyPlan.contractVersion}</p>
                   <p className="mt-1">Context: {renderContextSource(weeklyPlan.contextMeta)}</p>
                 </div>
               </div>
@@ -564,21 +564,21 @@ function CustomerKnowledgePage() {
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
                 <div className="grid gap-3 lg:grid-cols-3">
                   {normalizeAiList(weeklyPlan.sections).map((section) => (
-                    <article key={section.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <article key={section.id} className="rounded-3xl border border-white/5 bg-white/5/5 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{section.title}</p>
-                      <p className="mt-2 text-sm font-semibold text-slate-900">{section.intent || 'Guidance'}</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{section.guidance}</p>
+                      <p className="mt-2 text-sm font-semibold text-white">{section.intent || 'Guidance'}</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">{section.guidance}</p>
 
                       {normalizeAiList(section.items).length ? (
                         <div className="mt-3 space-y-2">
                           {normalizeAiList(section.items).map((item) => (
-                            <div key={`${section.id}-${item.id || item.workoutId || item.foodId || item.name}`} className="rounded-2xl border border-slate-200 bg-white p-3">
-                              <p className="text-sm font-semibold text-slate-900">{item.name || item.label}</p>
+                            <div key={`${section.id}-${item.id || item.workoutId || item.foodId || item.name}`} className="rounded-2xl border border-white/10 bg-white/5/5 p-3">
+                              <p className="text-sm font-semibold text-white">{item.name || item.label}</p>
                               {item.description || item.detail ? (
-                                <p className="mt-1 text-xs leading-5 text-slate-600">{item.description || item.detail}</p>
+                                <p className="mt-1 text-xs leading-5 text-slate-400">{item.description || item.detail}</p>
                               ) : null}
                               {normalizeAiList(item.reasons).length ? (
-                                <p className="mt-2 text-xs text-slate-500">{normalizeAiList(item.reasons).join(' • ')}</p>
+                                <p className="mt-2 text-xs text-slate-400">{normalizeAiList(item.reasons).join(' • ')}</p>
                               ) : null}
                             </div>
                           ))}
@@ -588,16 +588,16 @@ function CustomerKnowledgePage() {
                   ))}
                 </div>
 
-                <aside className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <aside className="space-y-3 rounded-3xl border border-white/5 bg-white/5/5 p-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Scope guardrails</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                    <p className="mt-2 text-sm font-semibold text-white">
                       {weeklyPlan.scopeGuardrails?.level || 'guidance-only'}
                     </p>
-                    <p className="mt-2 text-sm text-slate-600">
+                    <p className="mt-2 text-sm text-slate-400">
                       {weeklyPlan.scopeGuardrails?.coachDisclaimer || 'Guidance does not replace coach programming.'}
                     </p>
-                    <p className="mt-1 text-sm text-slate-600">
+                    <p className="mt-1 text-sm text-slate-400">
                       {weeklyPlan.scopeGuardrails?.medicalDisclaimer || 'Guidance does not replace medical advice.'}
                     </p>
                   </div>
@@ -605,13 +605,13 @@ function CustomerKnowledgePage() {
                   {normalizeAiList(weeklyPlan.nextActions).length ? (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Next actions</p>
-                      <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                      <ul className="mt-2 space-y-2 text-sm text-slate-300">
                         {normalizeAiList(weeklyPlan.nextActions).map((action) => (
                           <li key={action.id}>
                             <button
                               type="button"
                               onClick={() => handleAiAction(action)}
-                              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left font-semibold text-slate-700 transition hover:border-gym-300 hover:text-gym-700"
+                              className="w-full rounded-2xl border border-white/10 bg-white/5/5 px-3 py-2 text-left font-semibold text-slate-300 transition hover:border-gym-500/60 hover:bg-white/5 text-gym-400 transition hover:text-gym-400"
                             >
                               {action.label}
                             </button>
@@ -626,19 +626,19 @@ function CustomerKnowledgePage() {
           ) : null}
 
           {(savedRecommendations.workouts?.length || savedRecommendations.foods?.length) ? (
-            <div className="mt-4 space-y-4 rounded-[28px] border border-slate-200 bg-white p-5">
+            <div className="mt-4 space-y-4 rounded-[1.75rem] border border-white/5 bg-black/30 p-6 shadow-ambient-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Recommendation brief</p>
-                  <h3 className="mt-2 text-lg font-bold text-slate-900">
+                  <h3 className="mt-2 text-lg font-bold text-white">
                     {savedRecommendations.summary?.headline || 'Saved-goal recommendations'}
                   </h3>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-slate-400">
                     {savedRecommendations.summary?.rationale || 'Suggestions explain which customer signals informed the list.'}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                  <p className="font-semibold text-slate-900">
+                <div className="rounded-2xl border border-white/5 bg-white/5/5 px-4 py-3 text-xs text-slate-400">
+                  <p className="font-semibold text-white">
                     {savedRecommendations.summary?.focus || 'Current focus'}
                   </p>
                   <p className="mt-1">Source: {savedRecommendations.source || 'REQUEST'}</p>
@@ -649,8 +649,8 @@ function CustomerKnowledgePage() {
               {normalizeAiList(savedRecommendations.contextHighlights).length ? (
                 <div className="flex flex-wrap gap-2">
                   {normalizeAiList(savedRecommendations.contextHighlights).map((highlight) => (
-                    <div key={`${highlight.type}-${highlight.label}`} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
-                      <span className="font-semibold text-slate-900">{highlight.label}:</span> {highlight.value}
+                    <div key={`${highlight.type}-${highlight.label}`} className="rounded-full border border-white/5 bg-white/5/5 px-4 py-2 text-sm text-slate-300">
+                      <span className="font-semibold text-white">{highlight.label}:</span> {highlight.value}
                     </div>
                   ))}
                 </div>
@@ -658,27 +658,27 @@ function CustomerKnowledgePage() {
 
               <div className="grid gap-4 lg:grid-cols-2">
                 {normalizeAiList(savedRecommendations.sections).map((section) => (
-                  <article key={section.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <article key={section.id} className="rounded-3xl border border-white/5 bg-white/5/5 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-900">{section.title}</p>
-                      <span className="text-xs text-slate-500">{section.itemType || 'guidance'}</span>
+                      <p className="text-sm font-semibold text-white">{section.title}</p>
+                      <span className="text-xs text-slate-400">{section.itemType || 'guidance'}</span>
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">{section.description}</p>
+                    <p className="mt-2 text-sm text-slate-400">{section.description}</p>
                     <div className="mt-3 space-y-2">
                       {normalizeAiList(section.items).map((item) => (
-                        <div key={`${section.id}-${item.workoutId || item.foodId || item.name}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                          <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">
+                        <div key={`${section.id}-${item.workoutId || item.foodId || item.name}`} className="rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3">
+                          <p className="text-sm font-semibold text-white">{item.name}</p>
+                          <p className="mt-1 text-xs text-slate-400">
                             {item.difficulty || (item.calories != null ? `${item.calories} cal` : 'Guidance item')}
                           </p>
                           {normalizeAiList(item.reasons).length ? (
-                            <p className="mt-2 text-xs leading-5 text-slate-600">{normalizeAiList(item.reasons).join(' • ')}</p>
+                            <p className="mt-2 text-xs leading-5 text-slate-400">{normalizeAiList(item.reasons).join(' • ')}</p>
                           ) : null}
                           {item.action?.route ? (
                             <button
                               type="button"
                               onClick={() => handleAiAction(item.action)}
-                              className="mt-3 rounded-full border border-gym-200 bg-gym-50 px-3 py-2 text-xs font-semibold text-gym-700 transition hover:bg-gym-100"
+                              className="mt-3 rounded-full border border-gym-500/20 bg-gym-500/10 px-3 py-2 text-xs font-semibold text-gym-400 transition hover:bg-gym-500/20"
                             >
                               {item.action.label || 'Open detail'}
                             </button>
@@ -686,7 +686,7 @@ function CustomerKnowledgePage() {
                         </div>
                       ))}
                       {!normalizeAiList(section.items).length ? (
-                        <p className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                        <p className="rounded-2xl border border-dashed border-white/10 bg-white/5/5 px-4 py-3 text-sm text-slate-400">
                           {section.emptyState || 'No matching guidance yet.'}
                         </p>
                       ) : null}
@@ -696,7 +696,7 @@ function CustomerKnowledgePage() {
               </div>
 
               {savedRecommendations.summary?.safetyNote ? (
-                <p className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-gym-400">
                   {savedRecommendations.summary.safetyNote}
                 </p>
               ) : null}
@@ -708,7 +708,7 @@ function CustomerKnowledgePage() {
                       key={action.id}
                       type="button"
                       onClick={() => handleAiAction(action)}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-gym-300 hover:text-gym-700"
+                      className="rounded-full border border-white/5 bg-white/5/5 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:border-gym-500/60 hover:bg-white/5 text-gym-400 transition hover:text-gym-400"
                     >
                       {action.label}
                     </button>
@@ -722,17 +722,17 @@ function CustomerKnowledgePage() {
       <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,_rgba(26,26,36,0.94),_rgba(18,18,26,0.82))] p-5 shadow-ambient-sm backdrop-blur-md">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Workout assistant</p>
-                  <p className="mt-2 text-sm text-slate-600">Ask for a quick split, focus area, or shortlist, then open the suggested workouts directly.</p>
+                  <p className="text-sm font-semibold text-white">Workout assistant</p>
+                  <p className="mt-2 text-sm text-slate-400">Ask for a quick split, focus area, or shortlist, then open the suggested workouts directly.</p>
                 </div>
-                <span className="rounded-full border border-gym-200 bg-gym-50 px-3 py-1 text-xs font-semibold text-gym-700">Fast guidance</span>
+                <span className="rounded-full border border-gym-500/20 bg-gym-500/10 px-3 py-1 text-xs font-semibold text-gym-400">Fast guidance</span>
               </div>
               <textarea
                 value={workoutAssistantQuestion}
                 onChange={(event) => setWorkoutAssistantQuestion(event.target.value)}
                 rows={3}
                 placeholder="vd: toi muon lich tap 4 buoi cho muc tieu tang co"
-                className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-400 focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
               />
               <button
                 type="button"
@@ -743,8 +743,8 @@ function CustomerKnowledgePage() {
                 {workoutAssistantMutation.isPending ? 'Dang tra loi...' : 'Ask workout assistant'}
               </button>
               {workoutAssistantMutation.data?.answer ? (
-                <div className="mt-3 space-y-3 rounded-2xl bg-slate-50 p-3">
-                  <div className="whitespace-pre-wrap text-sm text-slate-700">{workoutAssistantMutation.data.answer}</div>
+                <div className="mt-3 space-y-3 rounded-2xl bg-white/5/5 p-3">
+                  <div className="whitespace-pre-wrap text-sm text-slate-300">{workoutAssistantMutation.data.answer}</div>
                   {normalizeAiList(workoutAssistantMutation.data.workouts).length ? (
                     <div className="flex flex-wrap gap-2">
                       {normalizeAiList(workoutAssistantMutation.data.workouts).map((workout) => (
@@ -759,7 +759,7 @@ function CustomerKnowledgePage() {
                                 workoutId: workout.workoutId,
                               },
                             )}
-                          className="rounded-full border border-gym-200 bg-white px-3 py-2 text-xs font-semibold text-gym-700 transition hover:bg-gym-50"
+                          className="rounded-full border border-gym-500/20 bg-white/5/5 px-3 py-2 text-xs font-semibold text-gym-400 transition hover:bg-gym-500/10"
                         >
                           {workout.name}
                         </button>
@@ -773,45 +773,45 @@ function CustomerKnowledgePage() {
       <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,_rgba(26,26,36,0.94),_rgba(18,18,26,0.82))] p-5 shadow-ambient-sm backdrop-blur-md">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Coach booking assistant</p>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="text-sm font-semibold text-white">Coach booking assistant</p>
+                  <p className="mt-2 text-sm text-slate-400">
                     Share your preferred PT schedule here and the assistant will preview coach matches using the same rules as the booking planner.
                   </p>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">Real PT preview</span>
+                <span className="rounded-full border border-white/5 bg-white/5/5 px-3 py-1 text-xs font-semibold text-slate-300">Real PT preview</span>
               </div>
               <textarea
                 value={coachAssistantQuestion}
                 onChange={(event) => setCoachAssistantQuestion(event.target.value)}
                 rows={3}
                 placeholder="vd: toi muon PT buoi toi va uu tien lich on dinh"
-                className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-400 focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
               />
               <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
                 <label className="block space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Booking end date</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Booking end date</span>
                   <input
                     type="date"
                     value={coachAssistantEndDate}
                     min={minimumBookingStartValue}
                     onChange={(event) => setCoachAssistantEndDate(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-gym-500 focus:bg-white focus:outline-none"
+                    className="w-full rounded-2xl border border-white/5 bg-white/5/5 px-4 py-3 text-sm text-white focus:border-gym-500 focus:bg-black focus:outline-none"
                   />
                 </label>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  <p className="font-semibold text-slate-900">Earliest start</p>
+                <div className="rounded-2xl border border-white/5 bg-white/5/5 px-4 py-3 text-sm text-slate-400">
+                  <p className="font-semibold text-white">Earliest start</p>
                   <p className="mt-1">{minimumBookingStartValue}</p>
                   <p className="mt-2 text-xs">The preview follows the live PT booking rule: at least 7 days of lead time, with the coaching plan starting from the next eligible Monday.</p>
                 </div>
               </div>
-              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mt-3 rounded-2xl border border-white/5 bg-white/5/5 p-4">
                 <div className="grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto]">
                   <label className="block space-y-1">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Weekday</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Weekday</span>
                     <select
                       value={coachAssistantDraftDay}
                       onChange={(event) => setCoachAssistantDraftDay(event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-gym-500 focus:outline-none"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3 text-sm text-white focus:border-gym-500 focus:outline-none"
                     >
                       {COACH_BOOKING_DAYS.map((day) => (
                         <option key={day.id} value={day.id}>
@@ -821,11 +821,11 @@ function CustomerKnowledgePage() {
                     </select>
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recurring time slot</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recurring time slot</span>
                     <select
                       value={coachAssistantDraftTimeSlotId}
                       onChange={(event) => setCoachAssistantDraftTimeSlotId(event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-gym-500 focus:outline-none"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3 text-sm text-white focus:border-gym-500 focus:outline-none"
                     >
                       <option value="">Select a slot</option>
                       {timeSlots.map((slot) => (
@@ -839,12 +839,12 @@ function CustomerKnowledgePage() {
                     type="button"
                     onClick={addCoachAssistantSlot}
                     disabled={!coachAssistantDraftTimeSlotId || timeSlotsQuery.isLoading}
-                    className="self-end rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="self-end rounded-full border border-white/10 bg-white/5/5 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-black/40 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Add slot
                   </button>
                 </div>
-                {timeSlotsQuery.isLoading ? <p className="mt-3 text-sm text-slate-500">Loading coach time slots...</p> : null}
+                {timeSlotsQuery.isLoading ? <p className="mt-3 text-sm text-slate-400">Loading coach time slots...</p> : null}
                 {timeSlotsQuery.isError ? <p className="mt-3 text-sm text-rose-600">Could not load coach time slots.</p> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {coachAssistantSlots.map((slot) => (
@@ -852,13 +852,13 @@ function CustomerKnowledgePage() {
                       key={`${slot.dayOfWeek}-${slot.timeSlotId}`}
                       type="button"
                       onClick={() => removeCoachAssistantSlot(slot.dayOfWeek, slot.timeSlotId)}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-rose-200 hover:text-rose-700"
+                      className="rounded-full border border-white/10 bg-white/5/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-rose-200 hover:text-rose-400"
                     >
                       {`${formatCoachAssistantSlotLabel(slot)} x`}
                     </button>
                   ))}
                   {!coachAssistantSlots.length ? (
-                    <p className="text-sm text-slate-500">Add at least one recurring slot so the assistant can run the real PT match preview.</p>
+                    <p className="text-sm text-slate-400">Add at least one recurring slot so the assistant can run the real PT match preview.</p>
                   ) : null}
                 </div>
               </div>
@@ -866,21 +866,21 @@ function CustomerKnowledgePage() {
                 type="button"
                 onClick={askCoachAssistant}
                 disabled={coachAssistantMutation.isPending}
-                className="mt-3 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-3 rounded-full bg-white/5/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {coachAssistantMutation.isPending ? 'Dang tra loi...' : 'Ask coach assistant'}
               </button>
               {coachAssistantMutation.data?.answer ? (
-                <div className="mt-3 space-y-3 rounded-2xl bg-slate-50 p-3">
-                  <div className="whitespace-pre-wrap text-sm text-slate-700">{coachAssistantMutation.data.answer}</div>
+                <div className="mt-3 space-y-3 rounded-2xl bg-white/5/5 p-3">
+                  <div className="whitespace-pre-wrap text-sm text-slate-300">{coachAssistantMutation.data.answer}</div>
                   {coachAssistantMutation.data?.matchStatus === 'READY' ? (
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-400">
                         <p className="font-semibold">Full matches</p>
                         <p className="mt-1 text-2xl font-bold">{coachAssistantMutation.data.fullMatches?.length ?? 0}</p>
                         <p className="mt-2 text-xs">These coaches can cover every requested recurring slot through {coachAssistantMutation.data.toDate}.</p>
                       </div>
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      <div className="rounded-2xl border border-amber-500/20 bg-amber-50 p-3 text-sm text-gym-400">
                         <p className="font-semibold">Partial matches</p>
                         <p className="mt-1 text-2xl font-bold">{coachAssistantMutation.data.partialMatches?.length ?? 0}</p>
                         <p className="mt-2 text-xs">These coaches fit part of the schedule, but some requested slots still conflict with availability or existing bookings.</p>
@@ -888,12 +888,12 @@ function CustomerKnowledgePage() {
                     </div>
                   ) : null}
                   {coachAssistantMutation.data?.blockingReason ? (
-                    <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <p className="rounded-2xl border border-rose-200 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
                       {coachAssistantMutation.data.blockingReason}
                     </p>
                   ) : null}
                   {coachAssistantMutation.data?.missingFields?.length ? (
-                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p className="rounded-2xl border border-amber-500/20 bg-amber-50 px-4 py-3 text-sm text-gym-500">
                       Add the missing booking inputs to run a real PT match preview: {coachAssistantMutation.data.missingFields.join(', ')}.
                     </p>
                   ) : null}
@@ -901,10 +901,10 @@ function CustomerKnowledgePage() {
                     <div className="space-y-2">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Suggested full matches</p>
                       {coachAssistantMutation.data.fullMatches.slice(0, 3).map((coach) => (
-                        <div key={`coach-assistant-full-${coach.coachId}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div key={`coach-assistant-full-${coach.coachId}`} className="rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3">
                           <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-900">{coach.fullName}</p>
-                            <span className="text-xs font-semibold text-emerald-700">
+                            <p className="text-sm font-semibold text-white">{coach.fullName}</p>
+                            <span className="text-xs font-semibold text-emerald-400">
                               {coach.matchedSlots}/{coach.requestedSlots} slots
                             </span>
                           </div>
@@ -916,7 +916,7 @@ function CustomerKnowledgePage() {
                     <button
                       type="button"
                       onClick={() => handleAiAction({ route: '/customer/coach-booking', label: 'Open coach booking' })}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300"
+                      className="rounded-full border border-white/10 bg-white/5/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-white/20"
                     >
                       Open coach booking
                     </button>
@@ -930,17 +930,17 @@ function CustomerKnowledgePage() {
         {activeTab === 'WORKOUTS' ? (
           <div className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <label className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5/5 px-4 py-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Search</span>
                 <input
                   type="text"
                   value={workoutSearch}
                   onChange={(event) => setWorkoutSearch(event.target.value)}
                   placeholder="Push, HIIT, beginner..."
-                  className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
                 />
               </label>
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+              <div className="rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3 text-sm font-semibold text-slate-300">
                 {filteredWorkouts.length} workout(s)
               </div>
             </div>
@@ -950,7 +950,7 @@ function CustomerKnowledgePage() {
                 type="button"
                 onClick={() => setWorkoutCategoryId('ALL')}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  workoutCategoryId === 'ALL' ? 'bg-gym-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  workoutCategoryId === 'ALL' ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                 }`}
               >
                 All
@@ -962,8 +962,8 @@ function CustomerKnowledgePage() {
                   onClick={() => setWorkoutCategoryId(String(category.workoutCategoryId))}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                     String(workoutCategoryId) === String(category.workoutCategoryId)
-                      ? 'bg-gym-600 text-white'
-                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                      : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                   }`}
                 >
                   {category.name}
@@ -971,7 +971,7 @@ function CustomerKnowledgePage() {
               ))}
             </div>
 
-            {workoutsQuery.isLoading ? <p className="text-sm text-slate-500">Loading workouts...</p> : null}
+            {workoutsQuery.isLoading ? <p className="text-sm text-slate-400">Loading workouts...</p> : null}
             {workoutsQuery.isError ? <p className="text-sm text-rose-600">Could not load workouts.</p> : null}
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -980,9 +980,9 @@ function CustomerKnowledgePage() {
                   key={workout.workoutId}
                   type="button"
                   onClick={() => openWorkoutDetail(workout.workoutId)}
-                  className="group overflow-hidden rounded-3xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5/5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="aspect-[4/3] overflow-hidden bg-slate-100">
+                  <div className="aspect-[4/3] overflow-hidden bg-black/40">
                     {workout.imageUrl ? (
                       <img
                         src={workout.imageUrl}
@@ -997,20 +997,20 @@ function CustomerKnowledgePage() {
                       {(workout.categories || []).map((category) => (
                         <span
                           key={`${workout.workoutId}-${category.workoutCategoryId}`}
-                          className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600"
+                          className="rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400"
                         >
                           {category.name}
                         </span>
                       ))}
                       {workout.difficulty ? (
-                        <span className="rounded-full bg-gym-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gym-700">
+                        <span className="rounded-full bg-gym-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gym-400">
                           {workout.difficulty}
                         </span>
                       ) : null}
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">{workout.name}</h3>
-                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{workout.description}</p>
+                      <h3 className="text-base font-bold text-white">{workout.name}</h3>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-400">{workout.description}</p>
                     </div>
                   </div>
                 </button>
@@ -1018,20 +1018,20 @@ function CustomerKnowledgePage() {
             </div>
 
             {selectedWorkoutId ? (
-              <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                {workoutDetailQuery.isLoading ? <p className="text-sm text-slate-500">Loading workout details...</p> : null}
+              <div className="rounded-3xl border border-white/10 bg-white/5/5 p-5">
+                {workoutDetailQuery.isLoading ? <p className="text-sm text-slate-400">Loading workout details...</p> : null}
                 {workoutDetailQuery.isError ? <p className="text-sm text-rose-600">Could not load workout details.</p> : null}
                 {workoutDetailQuery.data ? (
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900">{workoutDetailQuery.data.name}</h3>
-                        <p className="mt-1 text-sm text-slate-600">{workoutDetailQuery.data.description}</p>
+                        <h3 className="text-lg font-bold text-white">{workoutDetailQuery.data.name}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{workoutDetailQuery.data.description}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setSelectedWorkoutId(null)}
-                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        className="rounded-full border border-white/10 bg-white/5/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/5/5"
                       >
                         Close
                       </button>
@@ -1042,7 +1042,7 @@ function CustomerKnowledgePage() {
                         {(workoutDetailQuery.data.categories || []).map((category) => (
                           <span
                             key={`${workoutDetailQuery.data.workoutId}-${category.workoutCategoryId}`}
-                            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                            className="rounded-full bg-black/40 px-3 py-1 text-xs font-semibold text-slate-300"
                           >
                             {category.name}
                           </span>
@@ -1051,7 +1051,7 @@ function CustomerKnowledgePage() {
                     ) : null}
 
                     {toYouTubeEmbedUrl(workoutDetailQuery.data.videoUrl) ? (
-                      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                      <div className="overflow-hidden rounded-2xl border border-white/5 bg-white/5/5">
                         <div className="aspect-video w-full">
                           <iframe
                             title={`${workoutDetailQuery.data.name} video`}
@@ -1065,7 +1065,7 @@ function CustomerKnowledgePage() {
                       </div>
                     ) : null}
 
-                    <div className="whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                    <div className="whitespace-pre-wrap rounded-2xl bg-white/5/5 p-4 text-sm text-slate-300">
                       {workoutDetailQuery.data.instructions}
                     </div>
                   </div>
@@ -1078,17 +1078,17 @@ function CustomerKnowledgePage() {
         {activeTab === 'FOODS' ? (
           <div className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <label className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5/5 px-4 py-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Search</span>
                 <input
                   type="text"
                   value={foodSearch}
                   onChange={(event) => setFoodSearch(event.target.value)}
                   placeholder="Chicken, oatmeal..."
-                  className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
                 />
               </label>
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+              <div className="rounded-2xl border border-white/10 bg-white/5/5 px-4 py-3 text-sm font-semibold text-slate-300">
                 {filteredFoods.length} food(s)
               </div>
             </div>
@@ -1098,7 +1098,7 @@ function CustomerKnowledgePage() {
                 type="button"
                 onClick={() => setFoodCategoryId('ALL')}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  foodCategoryId === 'ALL' ? 'bg-gym-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  foodCategoryId === 'ALL' ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                 }`}
               >
                 All
@@ -1110,8 +1110,8 @@ function CustomerKnowledgePage() {
                   onClick={() => setFoodCategoryId(String(category.foodCategoryId))}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                     String(foodCategoryId) === String(category.foodCategoryId)
-                      ? 'bg-gym-600 text-white'
-                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                      : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                   }`}
                 >
                   {category.name}
@@ -1119,11 +1119,11 @@ function CustomerKnowledgePage() {
               ))}
             </div>
 
-            <div className="rounded-3xl border border-gym-100 bg-gym-50/40 p-4">
+            <div className="rounded-3xl border border-gym-500/20 bg-gym-500/100/5 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gym-700">AI personalized foods</p>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gym-400">AI personalized foods</p>
+                  <p className="mt-1 text-sm text-slate-400">
                     Chon nhan macro + tra loi nhanh de AI de xuat mon an phu hop tu database.
                   </p>
                 </div>
@@ -1145,8 +1145,8 @@ function CustomerKnowledgePage() {
                     onClick={() => toggleFoodTag(tag.id)}
                     className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                       selectedFoodTags.includes(tag.id)
-                        ? 'bg-gym-600 text-white'
-                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'bg-gym-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                        : 'border border-white/10 bg-white/5/5 text-slate-300 hover:bg-white/5/5'
                     }`}
                   >
                     {tag.label}
@@ -1156,11 +1156,11 @@ function CustomerKnowledgePage() {
 
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Muc tieu</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Muc tieu</span>
                   <select
                     value={foodAiAnswers.goal}
                     onChange={(event) => setFoodAiAnswers((prev) => ({ ...prev, goal: event.target.value }))}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-gym-500"
+                    className="w-full rounded-xl border border-white/10 bg-white/5/5 px-3 py-2 text-sm text-slate-200 outline-none focus:border-gym-500"
                   >
                     <option value="">Chon muc tieu</option>
                     <option value="Giam mo">Giam mo</option>
@@ -1170,11 +1170,11 @@ function CustomerKnowledgePage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Khung bua an</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Khung bua an</span>
                   <select
                     value={foodAiAnswers.mealTime}
                     onChange={(event) => setFoodAiAnswers((prev) => ({ ...prev, mealTime: event.target.value }))}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-gym-500"
+                    className="w-full rounded-xl border border-white/10 bg-white/5/5 px-3 py-2 text-sm text-slate-200 outline-none focus:border-gym-500"
                   >
                     <option value="">Chon bua</option>
                     <option value="Truoc tap">Truoc tap</option>
@@ -1184,12 +1184,12 @@ function CustomerKnowledgePage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Muon tranh</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Muon tranh</span>
                   <input
                     value={foodAiAnswers.avoid}
                     onChange={(event) => setFoodAiAnswers((prev) => ({ ...prev, avoid: event.target.value }))}
                     placeholder="vd: sua, hai san..."
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-gym-500"
+                    className="w-full rounded-xl border border-white/10 bg-white/5/5 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-400 focus:border-gym-500"
                   />
                 </label>
               </div>
@@ -1199,15 +1199,15 @@ function CustomerKnowledgePage() {
               ) : null}
 
               {personalizedFoodMutation.data?.summary ? (
-                <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700">
+                <p className="mt-3 rounded-xl bg-white/5/5 px-3 py-2 text-sm text-slate-300">
                   {personalizedFoodMutation.data.summary}
                 </p>
               ) : null}
 
               {(personalizedFoodMutation.data?.followUpQuestions || []).length ? (
-                <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cau hoi goi y tiep</p>
-                  <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5/5 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Cau hoi goi y tiep</p>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-300">
                     {(personalizedFoodMutation.data?.followUpQuestions || []).map((question) => (
                       <li key={question.id}>- {question.question}</li>
                     ))}
@@ -1222,18 +1222,18 @@ function CustomerKnowledgePage() {
                       key={`ai-food-${food.foodId}`}
                       type="button"
                       onClick={() => openFoodDetail(food.foodId)}
-                      className="rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-gym-300"
+                      className="rounded-2xl border border-white/10 bg-white/5/5 p-3 text-left transition hover:border-gym-500/60 hover:bg-white/5 text-gym-400 transition"
                     >
-                      <p className="text-sm font-semibold text-slate-900">{food.name}</p>
-                      <p className="mt-1 text-xs text-slate-500">Match score: {food.matchScore ?? '-'}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-slate-600">{(food.matchReasons || []).join(' • ')}</p>
+                      <p className="text-sm font-semibold text-white">{food.name}</p>
+                      <p className="mt-1 text-xs text-slate-400">Match score: {food.matchScore ?? '-'}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-400">{(food.matchReasons || []).join(' • ')}</p>
                     </button>
                   ))}
                 </div>
               ) : null}
             </div>
 
-            {foodsQuery.isLoading ? <p className="text-sm text-slate-500">Loading foods...</p> : null}
+            {foodsQuery.isLoading ? <p className="text-sm text-slate-400">Loading foods...</p> : null}
             {foodsQuery.isError ? <p className="text-sm text-rose-600">Could not load foods.</p> : null}
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1242,9 +1242,9 @@ function CustomerKnowledgePage() {
                   key={food.foodId}
                   type="button"
                   onClick={() => openFoodDetail(food.foodId)}
-                  className="group overflow-hidden rounded-3xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5/5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="aspect-[4/3] overflow-hidden bg-slate-100">
+                  <div className="aspect-[4/3] overflow-hidden bg-black/40">
                     {food.imageUrl ? (
                       <img
                         src={food.imageUrl}
@@ -1259,17 +1259,17 @@ function CustomerKnowledgePage() {
                       {(food.categories || []).map((category) => (
                         <span
                           key={`${food.foodId}-${category.foodCategoryId}`}
-                          className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600"
+                          className="rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400"
                         >
                           {category.name}
                         </span>
                       ))}
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">{food.name}</h3>
-                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{food.description}</p>
+                      <h3 className="text-base font-bold text-white">{food.name}</h3>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-400">{food.description}</p>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-700">
+                    <div className="grid grid-cols-4 gap-2 rounded-2xl bg-white/5/5 p-3 text-xs text-slate-300">
                       <div>
                         <p className="font-semibold">Cal</p>
                         <p>{food.calories ?? '-'}</p>
@@ -1293,20 +1293,20 @@ function CustomerKnowledgePage() {
             </div>
 
             {selectedFoodId ? (
-              <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                {foodDetailQuery.isLoading ? <p className="text-sm text-slate-500">Loading food details...</p> : null}
+              <div className="rounded-3xl border border-white/10 bg-white/5/5 p-5">
+                {foodDetailQuery.isLoading ? <p className="text-sm text-slate-400">Loading food details...</p> : null}
                 {foodDetailQuery.isError ? <p className="text-sm text-rose-600">Could not load food details.</p> : null}
                 {foodDetailQuery.data ? (
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900">{foodDetailQuery.data.name}</h3>
-                        <p className="mt-1 text-sm text-slate-600">{foodDetailQuery.data.description}</p>
+                        <h3 className="text-lg font-bold text-white">{foodDetailQuery.data.name}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{foodDetailQuery.data.description}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setSelectedFoodId(null)}
-                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        className="rounded-full border border-white/10 bg-white/5/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/5/5"
                       >
                         Close
                       </button>
@@ -1317,7 +1317,7 @@ function CustomerKnowledgePage() {
                         {(foodDetailQuery.data.categories || []).map((category) => (
                           <span
                             key={`${foodDetailQuery.data.foodId}-${category.foodCategoryId}`}
-                            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                            className="rounded-full bg-black/40 px-3 py-1 text-xs font-semibold text-slate-300"
                           >
                             {category.name}
                           </span>
@@ -1325,27 +1325,27 @@ function CustomerKnowledgePage() {
                       </div>
                     ) : null}
 
-                    <div className="grid grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                    <div className="grid grid-cols-4 gap-2 rounded-2xl bg-white/5/5 p-4 text-sm text-slate-300">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Calories</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Calories</p>
                         <p className="mt-1 font-semibold">{foodDetailQuery.data.calories ?? '-'}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Protein</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Protein</p>
                         <p className="mt-1 font-semibold">{foodDetailQuery.data.protein ?? '-'}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Carbs</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Carbs</p>
                         <p className="mt-1 font-semibold">{foodDetailQuery.data.carbs ?? '-'}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Fat</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Fat</p>
                         <p className="mt-1 font-semibold">{foodDetailQuery.data.fat ?? '-'}</p>
                       </div>
                     </div>
 
                     {foodDetailQuery.data.recipe ? (
-                      <div className="whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                      <div className="whitespace-pre-wrap rounded-2xl bg-white/5/5 p-4 text-sm text-slate-300">
                         {foodDetailQuery.data.recipe}
                       </div>
                     ) : null}
