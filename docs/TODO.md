@@ -168,7 +168,7 @@
 ## Medium Priority
 - [x] Complete bonus-duration coupon flow across backend, admin UI, and checkout compatibility.
   - `backend/src/main/java/com/gymcore/backend/modules/promotion/service/PromotionService.java`
-  - `frontend/src/pages/admin/AdminPromotionsPage.jsx`
+  - `frontend/src/pages/admin/AdminPr![1773840102939](image/TODO/1773840102939.png)![1773840104361](image/TODO/1773840104361.png)![1773840105265](image/TODO/1773840105265.png)![1773840105991](image/TODO/1773840105991.png)![1773840106129](image/TODO/1773840106129.png)![1773840113090](image/TODO/1773840113090.png)![1773840113696](image/TODO/1773840113696.png)![1773840113844](image/TODO/1773840113844.png)![1773840114000](image/TODO/1773840114000.png)![1773840114143](image/TODO/1773840114143.png)![1773840118488](image/TODO/1773840118488.png)![1773840119242](image/TODO/1773840119242.png)![1773840119389](image/TODO/1773840119389.png)omotionsPage.jsx`
   - `frontend/src/pages/customer/CustomerShopPage.jsx`
 - [x] Block duplicate PT booking attempts when customer already has a pending PT request or an active PT arrangement.
   - `backend/src/main/java/com/gymcore/backend/modules/coach/service/CoachBookingService.java`

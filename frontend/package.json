@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:coverage:bmi": "vitest run src/features/health/utils/bmi.test.js --coverage --coverage.include=src/features/health/utils/bmi.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.20",
