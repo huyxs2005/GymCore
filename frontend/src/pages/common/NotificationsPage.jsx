@@ -53,8 +53,8 @@ function NotificationToggle({ notification, toggleReadMutation }) {
       }
       className={`mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border transition ${
         notification.isRead
-          ? 'border-slate-300 bg-slate-200 text-slate-500 hover:bg-slate-100'
-          : 'border-gym-500 bg-white text-gym-600 hover:bg-gym-50'
+          ? 'border-white/15 bg-white/10 text-slate-400 hover:bg-white/15'
+          : 'border-gym-500/40 bg-gym-500/15 text-gym-200 hover:bg-gym-500/20'
       }`}
     >
       {notification.isRead ? <Check size={14} /> : null}
@@ -144,36 +144,36 @@ function NotificationsPage() {
   const historyCount = reminderCenter?.counts?.history ?? historyNotifications.length
 
   return (
-    <div className="min-h-[calc(100vh-5rem)] bg-gradient-to-b from-gym-50 via-white to-slate-50 px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-gym-50 via-white to-slate-50 px-6 py-5">
+    <div className="min-h-[calc(100vh-5rem)] bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.08),_transparent_42%),linear-gradient(180deg,_rgba(10,10,15,1),_rgba(18,18,26,1))] px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.88)] shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl">
+        <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.12),_transparent_40%),linear-gradient(180deg,_rgba(18,18,26,0.96),_rgba(10,10,15,0.92))] px-6 py-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Reminder Center</h1>
-              <p className="mt-1 text-sm text-slate-600">
+              <h1 className="text-2xl font-semibold text-slate-50">Reminder Center</h1>
+              <p className="mt-1 text-sm text-slate-400">
                 Handle urgent reminders first, then keep the quieter record of what you have already handled.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+              <div className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 shadow-ambient-sm backdrop-blur-md">
                 <button
                   type="button"
                   onClick={() => setFilter('all')}
-                  className={`rounded-xl px-4 py-2 text-sm transition ${filter === 'all' ? 'bg-gym-500 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`rounded-xl px-4 py-2 text-sm transition ${filter === 'all' ? 'bg-gym-500 text-white' : 'text-slate-400 hover:text-slate-50'}`}
                 >
                   All activity
                 </button>
                 <button
                   type="button"
                   onClick={() => setFilter('actionable')}
-                  className={`rounded-xl px-4 py-2 text-sm transition ${filter === 'actionable' ? 'bg-gym-500 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`rounded-xl px-4 py-2 text-sm transition ${filter === 'actionable' ? 'bg-gym-500 text-white' : 'text-slate-400 hover:text-slate-50'}`}
                 >
                   Actionable reminders
                 </button>
                 <button
                   type="button"
                   onClick={() => setFilter('history-unread')}
-                  className={`rounded-xl px-4 py-2 text-sm transition ${filter === 'history-unread' ? 'bg-gym-500 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`rounded-xl px-4 py-2 text-sm transition ${filter === 'history-unread' ? 'bg-gym-500 text-white' : 'text-slate-400 hover:text-slate-50'}`}
                 >
                   Unread history
                 </button>
@@ -182,7 +182,7 @@ function NotificationsPage() {
                 type="button"
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={unreadCount === 0}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:border-gym-300 hover:text-gym-800 disabled:cursor-not-allowed disabled:text-slate-400"
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-gym-500/30 hover:bg-white/10 hover:text-gym-200 disabled:cursor-not-allowed disabled:text-slate-500"
               >
                 <CheckCheck size={16} />
                 Mark Read
@@ -194,26 +194,26 @@ function NotificationsPage() {
         {isLoading ? (
           <div className="space-y-4 px-6 py-6">
             {[1, 2, 3].map((item) => (
-              <div key={item} className="h-20 animate-pulse rounded-2xl bg-slate-100" />
+              <div key={item} className="h-20 animate-pulse rounded-2xl bg-white/10" />
             ))}
           </div>
         ) : totalCount > 0 ? (
-          <div className="space-y-8 bg-white px-6 py-6">
+          <div className="space-y-8 bg-transparent px-6 py-6">
             <section className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-3xl border border-gym-200 bg-gym-50/80 p-5">
-                <p className="text-sm font-medium text-gym-700">Actionable reminders</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">{actionableCount}</p>
-                <p className="mt-2 text-sm text-slate-600">Direct next steps stay at the top until you handle them.</p>
+              <div className="rounded-3xl border border-gym-500/20 bg-gym-500/10 p-5">
+                <p className="text-sm font-medium text-gym-300">Actionable reminders</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-50">{actionableCount}</p>
+                <p className="mt-2 text-sm text-slate-400">Direct next steps stay at the top until you handle them.</p>
               </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50/90 p-5">
-                <p className="text-sm font-medium text-slate-700">Unread items</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">{unreadCount}</p>
-                <p className="mt-2 text-sm text-slate-600">Keep an eye on what still needs your attention.</p>
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <p className="text-sm font-medium text-slate-200">Unread items</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-50">{unreadCount}</p>
+                <p className="mt-2 text-sm text-slate-400">Keep an eye on what still needs your attention.</p>
               </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                <p className="text-sm font-medium text-slate-700">History kept visible</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">{historyCount}</p>
-                <p className="mt-2 text-sm text-slate-600">Read items stay searchable without competing with live reminders.</p>
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <p className="text-sm font-medium text-slate-200">History kept visible</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-50">{historyCount}</p>
+                <p className="mt-2 text-sm text-slate-400">Read items stay searchable without competing with live reminders.</p>
               </div>
             </section>
 
@@ -221,14 +221,14 @@ function NotificationsPage() {
               <section aria-labelledby="actionable-reminders-heading" className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 id="actionable-reminders-heading" className="text-xl font-semibold text-slate-900">
+                    <h2 id="actionable-reminders-heading" className="text-xl font-semibold text-slate-50">
                       Act now
                     </h2>
-                    <p className="mt-1 text-sm text-slate-600">
+                    <p className="mt-1 text-sm text-slate-400">
                       Urgent reminders stay separated from quieter account history.
                     </p>
                   </div>
-                  <span className="rounded-full border border-gym-200 bg-gym-100 px-3 py-1 text-xs font-semibold text-gym-800">
+                  <span className="rounded-full border border-gym-500/20 bg-gym-500/15 px-3 py-1 text-xs font-semibold text-gym-200">
                     {actionableCount} active
                   </span>
                 </div>
@@ -244,7 +244,7 @@ function NotificationsPage() {
                           data-testid={`page-notification-${notification.notificationId}`}
                           data-notification-bucket="actionable"
                           data-notification-tone="primary"
-                          className="rounded-3xl border border-gym-200 bg-gradient-to-br from-gym-50 via-white to-gym-100/50 p-5 shadow-sm shadow-gym-900/5"
+                          className="rounded-3xl border border-gym-500/20 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_35%),linear-gradient(180deg,_rgba(26,26,36,0.92),_rgba(18,18,26,0.92))] p-5 shadow-[0_0_40px_rgba(245,158,11,0.08)]"
                         >
                           <div className="flex items-start gap-4">
                             <NotificationToggle notification={notification} toggleReadMutation={toggleReadMutation} />
@@ -253,15 +253,15 @@ function NotificationsPage() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-gym-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-gym-800">
+                                <span className="rounded-full bg-gym-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-gym-200">
                                   {normalizeCategory(notification)}
                                 </span>
-                                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${notification.isRead ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-800'}`}>
+                                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${notification.isRead ? 'bg-white/10 text-slate-400' : 'bg-amber-500/15 text-amber-200'}`}>
                                   {notification.isRead ? 'Handled, keep visible' : 'Needs review'}
                                 </span>
                               </div>
-                              <h3 className="mt-3 text-lg font-semibold text-slate-900">{notification.title}</h3>
-                              <p className="mt-2 text-sm leading-6 text-slate-700">{notification.message}</p>
+                              <h3 className="mt-3 text-lg font-semibold text-slate-50">{notification.title}</h3>
+                              <p className="mt-2 text-sm leading-6 text-slate-200">{notification.message}</p>
                               <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
                                 {formatNotificationTimestamp(notification.createdAt)}
                               </p>
@@ -282,7 +282,7 @@ function NotificationsPage() {
                                       isRead: !notification.isRead,
                                     })
                                   }
-                                  className="text-sm font-medium text-gym-700 transition hover:text-gym-800"
+                                  className="text-sm font-medium text-gym-300 transition hover:text-gym-200"
                                 >
                                   {notification.isRead ? 'Keep as unread reminder' : 'Mark reminder read'}
                                 </button>
@@ -294,8 +294,8 @@ function NotificationsPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
-                    <p className="text-base font-medium text-slate-900">No active reminders right now.</p>
+                  <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 px-5 py-8 text-center">
+                    <p className="text-base font-medium text-slate-50">No active reminders right now.</p>
                     <p className="mt-2 text-sm text-slate-500">You are caught up. Your read history stays below for reference.</p>
                   </div>
                 )}
@@ -306,23 +306,23 @@ function NotificationsPage() {
               <section aria-labelledby="notification-history-heading" className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 id="notification-history-heading" className="text-xl font-semibold text-slate-900">
+                    <h2 id="notification-history-heading" className="text-xl font-semibold text-slate-50">
                       History
                     </h2>
-                    <p className="mt-1 text-sm text-slate-600">
+                    <p className="mt-1 text-sm text-slate-400">
                       Read items stay visible with quieter styling so they do not crowd live reminders.
                     </p>
                   </div>
-                  <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
                     {filteredHistoryNotifications.length} shown
                   </span>
                 </div>
 
                 {filteredHistoryNotifications.length > 0 ? (
-                  <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/60">
+                  <div className="overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.72)]">
                     {Object.entries(groupedNotifications).map(([label, items]) => (
-                      <section key={label} className="border-b border-slate-200 last:border-b-0">
-                        <div className="border-b border-slate-200 bg-slate-100/90 px-6 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-slate-600">
+                      <section key={label} className="border-b border-white/10 last:border-b-0">
+                        <div className="border-b border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
                           {label}
                         </div>
                         {items.map((notification) => {
@@ -333,27 +333,27 @@ function NotificationsPage() {
                               data-testid={`page-notification-${notification.notificationId}`}
                               data-notification-bucket="history"
                               data-notification-tone={notification.isRead ? 'muted' : 'secondary'}
-                              className={`border-b border-slate-200 px-6 py-5 last:border-b-0 ${notification.isRead ? 'bg-slate-50/80 opacity-80' : 'bg-white'}`}
+                              className={`border-b border-white/10 px-6 py-5 last:border-b-0 ${notification.isRead ? 'bg-white/5 opacity-80' : 'bg-[rgba(26,26,36,0.92)]'}`}
                             >
                               <div className="flex items-start gap-4">
                                 <NotificationToggle notification={notification} toggleReadMutation={toggleReadMutation} />
-                                <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-300 to-slate-500 text-sm font-black text-white shadow-sm">
+                                <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 text-sm font-black text-white shadow-sm">
                                   {getNotificationAvatarText(notification)}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${notification.isRead ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-800'}`}>
+                                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${notification.isRead ? 'bg-white/10 text-slate-400' : 'bg-amber-500/15 text-amber-200'}`}>
                                       {notification.isRead ? 'Read' : 'Unread history'}
                                     </span>
-                                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                                       {normalizeCategory(notification)}
                                     </span>
                                   </div>
-                                  <p className="mt-2 text-[1.02rem] leading-7 text-slate-600">
-                                    <span className={`${notification.isRead ? 'font-medium text-slate-700' : 'font-semibold text-slate-900'}`}>
+                                  <p className="mt-2 text-[1.02rem] leading-7 text-slate-400">
+                                    <span className={`${notification.isRead ? 'font-medium text-slate-200' : 'font-semibold text-slate-50'}`}>
                                       {notification.title}
                                     </span>{' '}
-                                    <span className={notification.isRead ? 'text-slate-500' : 'text-slate-600'}>{notification.message}</span>
+                                    <span className={notification.isRead ? 'text-slate-500' : 'text-slate-400'}>{notification.message}</span>
                                   </p>
                                   <p className="mt-1 text-sm text-slate-500">{formatNotificationTimestamp(notification.createdAt)}</p>
                                 </div>
@@ -361,12 +361,12 @@ function NotificationsPage() {
                                   {resolveNotificationLink(notification) ? (
                                     <Link
                                       to={resolveNotificationLink(notification)}
-                                      className="text-sm font-medium text-slate-700 transition hover:text-slate-900"
+                                      className="text-sm font-medium text-slate-200 transition hover:text-slate-50"
                                     >
                                       {destination?.label || 'Open'}
                                     </Link>
                                   ) : null}
-                                  <span className={`text-sm font-medium ${notification.isRead ? 'text-slate-500' : 'text-amber-700'}`}>
+                                  <span className={`text-sm font-medium ${notification.isRead ? 'text-slate-500' : 'text-amber-200'}`}>
                                     {notification.isRead ? 'Already handled' : 'Still unread'}
                                   </span>
                                 </div>
@@ -378,8 +378,8 @@ function NotificationsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
-                    <p className="text-base font-medium text-slate-900">
+                  <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 px-5 py-8 text-center">
+                    <p className="text-base font-medium text-slate-50">
                       {filter === 'history-unread' ? 'No unread history items' : 'No notification history yet'}
                     </p>
                     <p className="mt-2 text-sm text-slate-500">
@@ -392,10 +392,10 @@ function NotificationsPage() {
           </div>
         ) : (
           <div className="px-6 py-20 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gym-200 bg-gym-50 text-gym-700">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gym-500/20 bg-gym-500/10 text-gym-300">
               <Bell size={22} />
             </div>
-            <p className="text-lg font-medium text-slate-900">
+            <p className="text-lg font-medium text-slate-50">
               {filter === 'history-unread' ? 'No unread notification history' : 'No notifications yet'}
             </p>
             <p className="mt-2 text-sm text-slate-500">
@@ -409,3 +409,7 @@ function NotificationsPage() {
 }
 
 export default NotificationsPage
+
+
+
+

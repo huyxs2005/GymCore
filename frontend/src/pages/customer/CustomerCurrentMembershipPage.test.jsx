@@ -124,3 +124,5 @@ describe('CustomerCurrentMembershipPage', () => {
     expect(screen.getByText('View promotions')).toBeInTheDocument()
   })
 })
+
+

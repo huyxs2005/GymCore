@@ -172,16 +172,16 @@ function AiChatWidget({ context = {} }) {
         <div className="fixed bottom-6 right-6 z-[120] w-[min(420px,calc(100vw-3rem))] overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.94)] shadow-[0_28px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl">
           <header className="flex items-start justify-between gap-3 border-b border-white/10 bg-[linear-gradient(135deg,rgba(245,158,11,0.14),rgba(18,18,26,0.94)_48%)] px-5 py-4">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">{localizedCopy.chatLabel}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-zinc-500">{localizedCopy.chatLabel}</p>
               <p className="mt-1 font-display text-sm font-semibold tracking-tight text-slate-50">{localizedCopy.title}</p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-zinc-500">
                 {cooldownSecondsLeft > 0 ? `Cooling down: ${cooldownSecondsLeft}s` : localizedCopy.hint}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-full p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-50"
+              className="rounded-full p-2 text-zinc-500 transition hover:bg-white/5 hover:text-slate-50"
               aria-label="Close AI chat"
             >
               <X size={18} />
@@ -193,7 +193,7 @@ function AiChatWidget({ context = {} }) {
               <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm leading-6 ${
-                    message.role === 'user' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'bg-slate-100 text-slate-900'
+                    message.role === 'user' ? 'bg-gym-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.28)]' : 'border border-white/10 bg-white/5 text-slate-100'
                   }`}
                 >
                   {message.content}
@@ -202,7 +202,7 @@ function AiChatWidget({ context = {} }) {
             ))}
             {pending ? (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm text-slate-500">{localizedCopy.thinking}</div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-400">{localizedCopy.thinking}</div>
               </div>
             ) : null}
           </div>
@@ -219,14 +219,14 @@ function AiChatWidget({ context = {} }) {
                   }
                 }}
                 placeholder={cooldownSecondsLeft > 0 ? 'Please wait...' : localizedCopy.placeholder}
-                className="w-full bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                className="w-full bg-transparent text-sm text-slate-100 focus:outline-none placeholder:text-zinc-500"
                 disabled={pending || cooldownSecondsLeft > 0}
               />
               <button
                 type="button"
                 onClick={send}
                 disabled={pending || cooldownSecondsLeft > 0 || !input.trim()}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gym-500 text-slate-950 shadow-glow transition hover:brightness-110 hover:shadow-glow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gym-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Send message"
               >
                 <Send size={16} />
@@ -239,7 +239,7 @@ function AiChatWidget({ context = {} }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-[110] inline-flex h-14 w-14 items-center justify-center rounded-full bg-gym-500 text-slate-950 shadow-glow transition hover:brightness-110 hover:shadow-glow-lg"
+        className="fixed bottom-6 right-6 z-[110] inline-flex h-14 w-14 items-center justify-center rounded-full bg-gym-500 text-slate-950 shadow-[0_0_28px_rgba(245,158,11,0.3)] transition hover:brightness-110"
         aria-label="Open AI chat"
       >
         <MessageCircle size={22} />
@@ -249,3 +249,5 @@ function AiChatWidget({ context = {} }) {
 }
 
 export default AiChatWidget
+
+

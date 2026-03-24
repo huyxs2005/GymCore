@@ -45,3 +45,5 @@ describe('QrCodeDialog', () => {
     expect(await screen.findByText('Unauthorized')).toBeInTheDocument()
   })
 })
+
+

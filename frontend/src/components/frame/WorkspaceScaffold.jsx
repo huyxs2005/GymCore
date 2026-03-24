@@ -34,76 +34,59 @@ const adminNavIcons = {
 }
 
 const adminNavGroups = [
-  {
-    title: 'Operations',
-    match: ['/admin/dashboard', '/admin/support', '/admin/users', '/admin/memberships', '/admin/coach-management'],
-  },
-  {
-    title: 'Catalog',
-    match: ['/admin/goals', '/admin/workouts', '/admin/foods', '/admin/products'],
-  },
-  {
-    title: 'Commerce',
-    match: ['/admin/invoices', '/admin/promotions'],
-  },
-  {
-    title: 'Reporting',
-    match: ['/admin/coach-insights', '/admin/reports'],
-  },
+  { title: 'Operations', match: ['/admin/dashboard', '/admin/support', '/admin/users', '/admin/memberships', '/admin/coach-management'] },
+  { title: 'Catalog', match: ['/admin/goals', '/admin/workouts', '/admin/foods', '/admin/products'] },
+  { title: 'Commerce', match: ['/admin/invoices', '/admin/promotions'] },
+  { title: 'Reporting', match: ['/admin/coach-insights', '/admin/reports'] },
 ]
 
 function groupAdminLinks(links) {
   const grouped = adminNavGroups
-    .map((group) => ({
-      ...group,
-      links: links.filter((link) => group.match.includes(link.to)),
-    }))
+    .map((group) => ({ ...group, links: links.filter((link) => group.match.includes(link.to)) }))
     .filter((group) => group.links.length > 0)
 
   const groupedPaths = new Set(grouped.flatMap((group) => group.links.map((link) => link.to)))
   const ungroupedLinks = links.filter((link) => !groupedPaths.has(link.to))
 
-  if (ungroupedLinks.length > 0) {
-    grouped.push({
-      title: 'More',
-      links: ungroupedLinks,
-    })
-  }
-
+  if (ungroupedLinks.length > 0) grouped.push({ title: 'More', links: ungroupedLinks })
   return grouped
 }
 
-function WorkspaceScaffold({ title, subtitle, links = [], children }) {
+function WorkspaceScaffold({
+  title,
+  subtitle,
+  links = [],
+  actions = null,
+  headerMeta = null,
+  variant,
+  children,
+}) {
   const location = useLocation()
-  const isAdminShell = location.pathname.startsWith('/admin/') && links.length > 0
+  const inferredVariant = variant || (location.pathname.startsWith('/admin/') && links.length > 0 ? 'admin-rail' : 'workspace')
+  const isAdminRail = inferredVariant === 'admin-rail'
   const [isAdminSidebarOpen, setIsAdminSidebarOpen] = useState(true)
-  const groupedAdminLinks = isAdminShell ? groupAdminLinks(links) : []
+  const groupedAdminLinks = isAdminRail ? groupAdminLinks(links) : []
 
   return (
     <div className="bg-transparent">
       <Toaster position="top-right" reverseOrder={false} />
-      {isAdminShell ? (
-        <main className="min-h-screen w-full bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.08),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.1),_transparent_20%),linear-gradient(180deg,_rgba(10,10,15,0.12),_rgba(10,10,15,0))] py-8 pr-4 sm:pr-6">
-          <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
-            <aside
-              className={`sticky top-24 h-fit overflow-hidden rounded-r-[32px] border border-l-0 border-white/10 bg-[rgba(18,18,26,0.88)] shadow-[0_24px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl transition-all duration-200 ${
-                isAdminSidebarOpen ? 'w-[280px]' : 'w-[88px]'
-              }`}
-            >
-              <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_42%),linear-gradient(180deg,rgba(26,26,36,0.95),rgba(18,18,26,0.92))] px-5 py-5">
+      {isAdminRail ? (
+        <main className="gc-shell-boundary py-8">
+          <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+            <aside className={`gc-panel sticky top-24 h-fit overflow-hidden p-4 transition-[width] duration-200 ${isAdminSidebarOpen ? 'w-full max-w-[300px]' : 'w-full max-w-[96px]'}`}>
+              <div className="space-y-5 border-b border-white/10 px-2 pb-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className={`${isAdminSidebarOpen ? 'block' : 'hidden'} min-w-0`}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">Admin</p>
-                    <h1 className="mt-3 font-display text-2xl font-bold tracking-tight text-slate-50">{title}</h1>
-                    <p className="mt-2 text-sm text-slate-500">{subtitle}</p>
+                  <div className={`${isAdminSidebarOpen ? 'block' : 'hidden'} min-w-0 space-y-3`}>
+                    <p className="gc-page-kicker">Admin Rail</p>
+                    <h1 className="font-display text-[1.85rem] font-black tracking-tight text-white">{title}</h1>
+                    <p className="text-sm leading-7 text-zinc-400">{subtitle}</p>
                   </div>
                   <button
                     type="button"
                     aria-label={isAdminSidebarOpen ? 'Collapse admin sidebar' : 'Expand admin sidebar'}
                     onClick={() => setIsAdminSidebarOpen((value) => !value)}
-                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                    className="gc-button-icon"
                   >
-                    <span className="sr-only">{isAdminSidebarOpen ? 'Collapse admin sidebar' : 'Expand admin sidebar'}</span>
                     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                       <path d="M4 7h16" />
                       <path d="M4 12h16" />
@@ -111,44 +94,38 @@ function WorkspaceScaffold({ title, subtitle, links = [], children }) {
                     </svg>
                   </button>
                 </div>
+
                 {isAdminSidebarOpen ? (
-                  <div className="mt-5 rounded-3xl border border-white/10 bg-white/5 px-4 py-4 shadow-ambient-sm backdrop-blur-md">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Workspace mode</p>
-                    <p className="mt-2 font-display text-sm font-semibold tracking-tight text-slate-50">Operations-first admin console</p>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
-                      Move between support, staff, catalog, and reporting without losing the current admin context.
+                  <div className="gc-panel-soft space-y-3 px-4 py-4">
+                    <p className="gc-page-kicker">Control Room</p>
+                    <p className="font-display text-lg font-bold text-white">Dense data, clear next actions, less visual noise.</p>
+                    <p className="text-sm leading-7 text-zinc-400">
+                      This rail keeps admin workflows grouped by operations, catalog, commerce, and reporting instead of scattered page by page.
                     </p>
                   </div>
                 ) : null}
               </div>
 
-              <nav className="space-y-4 px-3 pb-4 pt-4" aria-label="Admin sidebar">
+              <nav className="space-y-5 px-2 pt-5" aria-label="Admin sidebar">
                 {groupedAdminLinks.map((group) => (
-                  <div key={group.title} className="space-y-1">
-                    {isAdminSidebarOpen ? (
-                      <p className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                        {group.title}
-                      </p>
-                    ) : null}
+                  <div key={group.title} className="space-y-2">
+                    {isAdminSidebarOpen ? <p className="px-3 text-[0.68rem] font-black uppercase tracking-[0.22em] text-zinc-500">{group.title}</p> : null}
                     {group.links.map((link) => {
                       const LinkIcon = adminNavIcons[link.to] || FileText
-
                       return (
                         <NavLink
                           key={link.to}
                           to={link.to}
                           aria-label={!isAdminSidebarOpen ? link.label : undefined}
                           title={!isAdminSidebarOpen ? link.label : undefined}
-                          className={({ isActive }) =>
-                            `flex min-h-12 items-center rounded-2xl px-4 py-3 text-sm font-semibold transition duration-200 ${
-                              isActive
-                                ? 'border border-gym-300 bg-gym-500 text-slate-950 shadow-glow'
-                                : 'border border-transparent text-slate-400 hover:border-white/10 hover:bg-white/5 hover:text-slate-50'
-                            } ${isAdminSidebarOpen ? 'justify-start gap-3' : 'justify-center'}`
-                          }
+                          className={({ isActive }) => [
+                            'flex min-h-12 items-center rounded-[20px] border px-4 py-3 text-sm font-bold transition-[transform,background-color,color,border-color,box-shadow] duration-200',
+                            isActive ? 'border-amber-300/30 bg-gym-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.22)]' : 'border-transparent bg-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white',
+                            isAdminSidebarOpen ? 'justify-start gap-3' : 'justify-center',
+                          ].join(' ')}
                         >
                           <LinkIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                          {isAdminSidebarOpen ? <span>{link.label}</span> : null}
+                          {isAdminSidebarOpen ? <span className="min-w-0 truncate">{link.label}</span> : null}
                         </NavLink>
                       )
                     })}
@@ -157,25 +134,38 @@ function WorkspaceScaffold({ title, subtitle, links = [], children }) {
               </nav>
             </aside>
 
-            <section className="space-y-6 pl-0">
+            <section className="min-w-0 space-y-6">
+              <header className="gc-panel overflow-hidden p-6 sm:p-8">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                  <div className="space-y-4">
+                    <p className="gc-page-kicker">Operations Console</p>
+                    <h1 className="gc-page-title text-[clamp(2.1rem,4vw,4rem)]">{title}</h1>
+                    <p className="gc-page-copy">{subtitle}</p>
+                    {headerMeta ? <div className="text-sm text-zinc-400">{headerMeta}</div> : null}
+                  </div>
+                  {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+                </div>
+              </header>
               {children}
             </section>
           </div>
         </main>
       ) : (
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-          <section className="relative mb-10 overflow-hidden rounded-[32px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,18,26,0.8),rgba(10,10,15,0.75))] p-8 shadow-[0_24px_60px_rgba(0,0,0,0.34)] backdrop-blur-2xl">
-            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gym-500/5 blur-[100px]" />
-            <div className="relative">
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gym-500/60 font-display">Workspace Protocol</p>
-              <h1 className="mt-4 font-display text-4xl font-black tracking-tight text-white uppercase">{title}</h1>
-              <div className="mt-4 h-1 w-12 rounded-full bg-gym-500 shadow-glow" />
-              <p className="mt-6 max-w-2xl text-sm leading-relaxed text-slate-500 font-medium">{subtitle}</p>
-            </div>
+        <main className="gc-shell-boundary py-8">
+          <section className="space-y-6">
+              <header className="gc-panel overflow-hidden p-6 sm:p-8">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                  <div className="space-y-4">
+                    <p className="gc-page-kicker">Workspace</p>
+                    <h1 className="gc-page-title text-[clamp(2rem,4vw,3.6rem)]">{title}</h1>
+                    <p className="gc-page-copy">{subtitle}</p>
+                    {headerMeta ? <div className="text-sm text-zinc-400">{headerMeta}</div> : null}
+                  </div>
+                  {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+                </div>
+            </header>
+            {children}
           </section>
-
-
-          {children}
         </main>
       )}
     </div>
@@ -183,3 +173,5 @@ function WorkspaceScaffold({ title, subtitle, links = [], children }) {
 }
 
 export default WorkspaceScaffold
+
+

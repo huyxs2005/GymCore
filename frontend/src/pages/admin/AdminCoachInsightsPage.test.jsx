@@ -87,3 +87,5 @@ describe('AdminCoachInsightsPage', () => {
     expect(directoryScope.queryByText('Coach Linh')).not.toBeInTheDocument()
   })
 })
+
+

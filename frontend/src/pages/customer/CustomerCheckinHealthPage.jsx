@@ -7,6 +7,7 @@ import { customerNav } from '../../config/navigation'
 import { checkinApi } from '../../features/checkin/api/checkinApi'
 import { healthApi } from '../../features/health/api/healthApi'
 import { getBmiLevel } from '../../features/health/utils/bmi'
+import { formatDate, formatDateTime } from '../../utils/formatters'
 
 const BMI_GAUGE_MIN = 16
 const BMI_GAUGE_MAX = 40
@@ -28,20 +29,6 @@ const BMI_CLASS_ROWS = [
 
 function resolveApiMessage(error, fallback) {
   return error?.response?.data?.message || fallback
-}
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleString('en-GB')
-}
-
-function formatDate(value) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleDateString('en-GB')
 }
 
 function parseBmi(value) {
@@ -120,6 +107,34 @@ function hasCurrentHealthData(currentHealth) {
   )
 }
 
+function getBmiToneClasses(levelLabel) {
+  if (levelLabel === 'Underweight') {
+    return {
+      bgClass: 'bg-sky-500/10',
+      borderClass: 'border-sky-500/20',
+    }
+  }
+
+  if (levelLabel === 'Normal') {
+    return {
+      bgClass: 'bg-emerald-500/10',
+      borderClass: 'border-emerald-500/20',
+    }
+  }
+
+  if (levelLabel === 'Overweight') {
+    return {
+      bgClass: 'bg-rose-500/10',
+      borderClass: 'border-rose-500/20',
+    }
+  }
+
+  return {
+    bgClass: 'bg-white/5',
+    borderClass: 'border-white/10',
+  }
+}
+
 function CustomerCheckinHealthPage() {
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [checkinHistory, setCheckinHistory] = useState([])
@@ -138,6 +153,7 @@ function CustomerCheckinHealthPage() {
   const hasHealthData = hasCurrentHealthData(currentHealth)
   const currentBmi = parseBmi(currentHealth?.bmi)
   const bmiLevel = getBmiLevel(currentBmi)
+  const bmiTone = getBmiToneClasses(bmiLevel.label)
   const bmiNeedleAngle = getBmiNeedleAngle(currentBmi)
   const healthyWeightRange = getHealthyWeightRange(currentHealth?.heightCm)
 
@@ -196,7 +212,7 @@ function CustomerCheckinHealthPage() {
 
   if (loading) {
     return (
-      <WorkspaceScaffold title="Loading..." links={customerNav}>
+      <WorkspaceScaffold title="Loading…" links={customerNav}>
         <div className="flex h-64 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-gym-500 border-t-transparent"></div>
         </div>
@@ -291,23 +307,37 @@ function CustomerCheckinHealthPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="lg:col-span-1">
-          <article className="gc-card flex flex-col items-center" style={{ background: 'linear-gradient(180deg, #ffffff, #f8fafc)' }}>
-            <div className="mb-4 flex items-center gap-2 self-start">
-              <CheckCircle2 className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800" style={{ color: '#1e293b' }}>Check-in QR Code</h2>
+          <article className="gc-glass-panel relative overflow-hidden p-6">
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-28 rounded-full bg-[radial-gradient(circle,_rgba(245,158,11,0.16),_transparent_72%)] blur-3xl" />
+            <div className="relative mb-4 flex items-center gap-3 self-start">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gym-500/20 bg-gym-500/10 text-gym-400 shadow-[0_0_24px_rgba(245,158,11,0.14)]">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gym-400">Front desk access</p>
+                <h2 className="mt-1 text-lg font-black text-slate-100">Check-in QR Code</h2>
+              </div>
             </div>
-            <div className="relative aspect-square w-full max-w-[240px] overflow-hidden rounded-xl border border-slate-100 p-2 shadow-inner" style={{ backgroundColor: '#f8fafc' }}>
+            <div className="relative aspect-square w-full max-w-[240px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.16),_transparent_35%),linear-gradient(180deg,_rgba(26,26,36,0.98),_rgba(18,18,26,0.94))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_24px_60px_rgba(0,0,0,0.36)]">
               {qrDataUrl ? (
-                <img src={qrDataUrl} alt="Check-in QR" className="h-full w-full object-contain" />
+                <div className="flex h-full w-full items-center justify-center rounded-[1.3rem] border border-white/10 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+                  <img src={qrDataUrl} alt="Check-in QR" width="400" height="400" className="h-full w-full object-contain" />
+                </div>
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs" style={{ color: '#94a3b8' }}>
-                  Generating QR...
+                <div className="flex h-full w-full items-center justify-center rounded-[1.3rem] border border-dashed border-white/10 bg-black/20 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Generating QR…
                 </div>
               )}
             </div>
-            <p className="mt-4 text-center text-sm" style={{ color: '#475569' }}>
-              Show this QR code at the front desk when you arrive to check in.
+            <p className="relative mt-4 text-center text-sm leading-6 text-slate-400">
+              Show this code at arrival to register your visit quickly without leaving the customer workspace.
             </p>
+            <div className="relative mt-5 rounded-[1.4rem] border border-white/10 bg-black/20 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Quick note</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                If the QR is still generating, keep this page open for a moment. The desk can refresh your token from their side if needed.
+              </p>
+            </div>
           </article>
 
           <article className="gc-glass-panel mt-6 p-6">
@@ -440,7 +470,7 @@ function CustomerCheckinHealthPage() {
                     </div>
                   </div>
 
-                  <div className={`mt-5 rounded-2xl border px-5 py-4 ${bmiLevel.bgClass} ${bmiLevel.borderClass}`}>
+                  <div className={`mt-5 rounded-2xl border px-5 py-4 ${bmiTone.bgClass} ${bmiTone.borderClass}`}>
                     <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${bmiLevel.textClass}`}>Interpretation</p>
                     <p className="mt-2 text-[13px] leading-relaxed text-slate-300">{bmiLevel.guidance}</p>
                   </div>
@@ -467,7 +497,7 @@ function CustomerCheckinHealthPage() {
 
                   <div className="mt-5 grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/5 bg-black/20 px-5 py-4">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Target Weight</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Healthy Weight</p>
                       <p className="mt-2 text-lg font-black text-emerald-400">
                         {healthyWeightRange ? `${healthyWeightRange.min.toFixed(1)} - ${healthyWeightRange.max.toFixed(1)} kg` : '--'}
                       </p>
@@ -485,15 +515,15 @@ function CustomerCheckinHealthPage() {
                   <div className="rounded-2xl border border-white/5 bg-black/20 px-5 py-4 text-center">
                     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">Height</p>
                     <div className="mt-2 flex items-baseline justify-center gap-1">
-                      <p className="text-3xl font-black text-slate-600">--</p>
-                      <p className="text-sm font-bold text-slate-600">cm</p>
+                      <p className="text-3xl font-black text-slate-300">--</p>
+                      <p className="text-sm font-bold text-slate-500">cm</p>
                     </div>
                   </div>
                   <div className="rounded-2xl border border-white/5 bg-black/20 px-5 py-4 text-center">
                     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">Weight</p>
                     <div className="mt-2 flex items-baseline justify-center gap-1">
-                      <p className="text-3xl font-black text-slate-600">--</p>
-                      <p className="text-sm font-bold text-slate-600">kg</p>
+                      <p className="text-3xl font-black text-slate-300">--</p>
+                      <p className="text-sm font-bold text-slate-500">kg</p>
                     </div>
                   </div>
                 </div>
@@ -519,7 +549,7 @@ function CustomerCheckinHealthPage() {
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Category</p>
                       <p className="mt-2 text-2xl font-black text-slate-500">No data</p>
-                      <p className="mt-1 text-xs font-bold text-slate-500">Add your latest status</p>
+                      <p className="mt-1 text-xs font-bold text-slate-500">Add your latest body metrics</p>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Difference</p>
@@ -553,8 +583,11 @@ function CustomerCheckinHealthPage() {
                 <div className="relative">
                   <Ruler className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
+                    name="heightCm"
                     type="number"
                     step="0.1"
+                    inputMode="decimal"
+                    autoComplete="off"
                     required
                     value={healthForm.heightCm}
                     onChange={(e) => setHealthForm({ ...healthForm, heightCm: e.target.value })}
@@ -568,8 +601,11 @@ function CustomerCheckinHealthPage() {
                 <div className="relative">
                   <Scale className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
+                    name="weightKg"
                     type="number"
                     step="0.1"
+                    inputMode="decimal"
+                    autoComplete="off"
                     required
                     value={healthForm.weightKg}
                     onChange={(e) => setHealthForm({ ...healthForm, weightKg: e.target.value })}
@@ -583,9 +619,12 @@ function CustomerCheckinHealthPage() {
                 disabled={submittingHealth}
                 className="gc-button-primary"
               >
-                {submittingHealth ? 'Saving Engine...' : <><Plus className="mr-2 h-4 w-4" /> Commit Data</>}
+                {submittingHealth ? 'Saving…' : <><Plus className="mr-2 h-4 w-4" /> Save Metrics</>}
               </button>
             </form>
+            <p className="mt-4 text-xs leading-6 text-slate-500">
+              Add your latest body metrics here to keep the BMI gauge, healthy-weight range, and coach follow-up history in sync.
+            </p>
           </article>
 
           <article className="gc-glass-panel p-6">
@@ -707,7 +746,7 @@ function CustomerCheckinHealthPage() {
             <Plus className="h-4 w-4 rotate-45" strokeWidth={3} />
           </div>
           <p className="pr-4 text-sm font-bold text-slate-200">{error}</p>
-          <button onClick={() => setError('')} className="rounded-lg bg-white/5 p-1.5 hover:bg-white/10 text-slate-400 hover:text-white transition">
+          <button aria-label="Dismiss health error" onClick={() => setError('')} className="rounded-lg bg-white/5 p-1.5 hover:bg-white/10 text-slate-400 hover:text-white transition">
             <Plus className="h-4 w-4 rotate-45" strokeWidth={3} />
           </button>
         </div>
@@ -717,3 +756,6 @@ function CustomerCheckinHealthPage() {
 }
 
 export default CustomerCheckinHealthPage
+
+
+

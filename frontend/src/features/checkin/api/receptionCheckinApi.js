@@ -11,3 +11,5 @@ export const receptionCheckinApi = {
     return apiClient.get('/v1/reception/checkin/history').then((response) => response.data)
   },
 }
+
+

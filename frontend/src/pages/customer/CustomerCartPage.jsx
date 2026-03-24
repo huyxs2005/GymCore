@@ -11,6 +11,7 @@ import { cartApi } from '../../features/product/api/cartApi'
 import { orderApi } from '../../features/product/api/orderApi'
 import { promotionApi } from '../../features/promotion/api/promotionApi'
 import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
+import { formatCurrency } from '../../utils/formatters'
 
 function CustomerCartPage() {
   const queryClient = useQueryClient()
@@ -190,7 +191,7 @@ function CustomerCartPage() {
     if (discountPercent > 0) {
       parts.push(`${discountPercent}% off`)
     } else if (discountAmount > 0) {
-      parts.push(`${discountAmount.toLocaleString()} VND off`)
+      parts.push(`${formatCurrency(discountAmount)} off`)
     }
     if (bonusMonths > 0) {
       parts.push(`+${bonusMonths} membership month${bonusMonths > 1 ? 's' : ''}`)
@@ -206,12 +207,12 @@ function CustomerCartPage() {
     >
       {showSuccessMessage ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="animate-in fade-in zoom-in rounded-3xl bg-white p-8 text-center shadow-2xl duration-300">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+          <div className="animate-in fade-in zoom-in rounded-3xl bg-[rgba(18,18,26,0.92)] p-8 text-center shadow-2xl duration-300">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
               <Receipt size={32} />
             </div>
-            <h2 className="mb-2 text-2xl font-bold text-slate-900">Order Successful!</h2>
-            <p className="text-slate-600">Your payment was confirmed. Check your email or order history for the order ID, then bring it to the gym front desk for pickup.</p>
+            <h2 className="mb-2 text-2xl font-bold text-slate-50">Order Successful!</h2>
+            <p className="text-slate-400">Your payment was confirmed. Check your email or order history for the order ID, then bring it to the gym front desk for pickup.</p>
           </div>
         </div>
       ) : null}
@@ -226,57 +227,64 @@ function CustomerCartPage() {
       />
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Link to="/customer/shop" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <Link to="/customer/shop" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5">
           <ArrowLeft size={16} />
           Back to catalog
         </Link>
-        <Link to="/customer/orders" className="inline-flex items-center gap-2 rounded-full border border-gym-200 bg-gym-50 px-4 py-2 text-sm font-semibold text-gym-700 hover:bg-gym-100">
+        <Link to="/customer/orders" className="inline-flex items-center gap-2 rounded-full border border-gym-500/20 bg-gym-500/10 px-4 py-2 text-sm font-semibold text-gym-300 hover:bg-gym-500/15">
           View buying history
         </Link>
       </div>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <article className="gc-card-compact space-y-4">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div>
               <p className="gc-section-kicker">Cart items</p>
               <p className="mt-1 text-sm text-slate-500">{cartItemCount} item(s) ready for checkout.</p>
             </div>
-            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-              {Number(cart.subtotal || 0).toLocaleString('en-US')} {cart.currency || 'VND'} subtotal
+            <div className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-slate-200">
+              {formatCurrency(cart.subtotal, cart.currency || 'VND')} subtotal
             </div>
           </header>
 
-          {cartQuery.isLoading ? <p className="text-sm text-slate-500">Loading cart...</p> : null}
+          {cartQuery.isLoading ? <p aria-live="polite" className="text-sm text-slate-500">Loading cart…</p> : null}
           {cartQuery.isError ? <p className="text-sm text-rose-600">Could not load cart.</p> : null}
           {!cartQuery.isLoading && cartItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-slate-500">
               Your cart is empty. Go back to the product catalog and add supplements first.
             </div>
           ) : null}
 
           <div className="space-y-3">
             {cartItems.map((item) => (
-              <article key={item.productId} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <article key={item.productId} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-1 items-start gap-3 min-w-0">
-                    <img src={getDynamicProductImage(item.name)} alt={item.name} className="h-14 w-14 rounded-xl object-cover border border-slate-200" />
+                    <img
+                      src={getDynamicProductImage(item.name)}
+                      alt={item.name}
+                      width="56"
+                      height="56"
+                      loading="lazy"
+                      className="h-14 w-14 rounded-xl border border-white/10 object-cover"
+                    />
                     <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold text-slate-900">{item.name}</p>
-                      <p className="mt-1 text-sm text-slate-500">{Number(item.price || 0).toLocaleString('en-US')} VND / unit</p>
+                      <p className="text-base font-semibold text-slate-50">{item.name}</p>
+                      <p className="mt-1 text-sm text-slate-500">{formatCurrency(item.price)} / unit</p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => removeCartItemMutation.mutate(item.productId)} className="text-[11px] font-medium text-rose-600 hover:text-rose-700">
+                  <button type="button" onClick={() => removeCartItemMutation.mutate(item.productId)} className="text-[11px] font-medium text-rose-600 hover:text-rose-300">
                     Remove
                   </button>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-sm">
-                    <button type="button" onClick={() => handleUpdateCartQty(item.productId, Number(item.quantity || 0) - 1)} className="rounded-full px-2 text-slate-500 hover:text-slate-900">-</button>
-                    <span className="min-w-[2rem] text-center font-semibold text-slate-800">{item.quantity}</span>
-                    <button type="button" onClick={() => handleUpdateCartQty(item.productId, Number(item.quantity || 0) + 1)} className="rounded-full px-2 text-slate-500 hover:text-slate-900">+</button>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-2 py-1 text-sm">
+                    <button type="button" onClick={() => handleUpdateCartQty(item.productId, Number(item.quantity || 0) - 1)} className="rounded-full px-2 text-slate-500 hover:text-slate-50">-</button>
+                    <span className="min-w-[2rem] text-center font-semibold text-slate-100">{item.quantity}</span>
+                    <button type="button" onClick={() => handleUpdateCartQty(item.productId, Number(item.quantity || 0) + 1)} className="rounded-full px-2 text-slate-500 hover:text-slate-50">+</button>
                   </div>
-                  <p className="text-sm font-semibold text-slate-900">{Number(item.lineTotal || 0).toLocaleString('en-US')} VND</p>
+                  <p className="text-sm font-semibold text-slate-50">{formatCurrency(item.lineTotal)}</p>
                 </div>
               </article>
             ))}
@@ -284,15 +292,15 @@ function CustomerCartPage() {
         </article>
 
         <aside className="gc-card-compact space-y-4">
-          <header className="border-b border-slate-100 pb-4">
+          <header className="border-b border-white/10 pb-4">
             <p className="gc-section-kicker">Checkout</p>
             <p className="mt-1 text-sm text-slate-500">Apply one order coupon, then continue to PayOS.</p>
           </header>
 
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-600">Subtotal</span>
-              <span className="font-semibold text-slate-900">{Number(cart.subtotal || 0).toLocaleString('en-US')} {cart.currency || 'VND'}</span>
+              <span className="text-slate-400">Subtotal</span>
+              <span className="font-semibold text-slate-50">{formatCurrency(cart.subtotal, cart.currency || 'VND')}</span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs">
               <span className="text-slate-500">Discount</span>
@@ -302,7 +310,13 @@ function CustomerCartPage() {
 
           <div>
             <label htmlFor="cart-page-promo-code" className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Apply coupon</label>
-            <select id="cart-page-promo-code" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-gym-500 focus:outline-none" value={checkoutOptions.promoCode} onChange={(event) => handlePromoCodeChange(event.target.value)}>
+            <select
+              id="cart-page-promo-code"
+              name="cartPromoCode"
+              className="gc-select"
+              value={checkoutOptions.promoCode}
+              onChange={(event) => handlePromoCodeChange(event.target.value)}
+            >
               <option value="">No coupon applied</option>
               {productCoupons.map((claim) => (
                 <option key={claim.ClaimID} value={claim.PromoCode}>{claim.PromoCode} - {formatClaimBenefit(claim)}</option>
@@ -310,12 +324,12 @@ function CustomerCartPage() {
             </select>
             {productCoupons.length === 0 ? <p className="mt-1 text-[10px] text-slate-400">No available coupons in your wallet. Claim some in the Promotions page.</p> : null}
             {membershipOnlyCoupons.length > 0 ? <p className="mt-1 text-[10px] text-amber-600">{membershipOnlyCoupons.length} coupon(s) are membership-only and cannot be used for product checkout.</p> : null}
-            {previewCouponMutation.isPending ? <p className="mt-2 text-[11px] text-slate-500">Checking coupon...</p> : null}
-            {couponPreview && checkoutOptions.promoCode ? <p className="mt-2 rounded-lg border border-gym-100 bg-gym-50 px-2 py-1 text-[11px] text-gym-800">Preview: discount {Number(couponPreview.estimatedDiscount || 0).toLocaleString()} VND, total {Number(couponPreview.estimatedFinalAmount || cart.subtotal || 0).toLocaleString()} VND.</p> : null}
-            {couponPreviewError ? <p className="mt-2 rounded-lg border border-rose-100 bg-rose-50 px-2 py-1 text-[11px] text-rose-700">{couponPreviewError}</p> : null}
+            {previewCouponMutation.isPending ? <p aria-live="polite" className="mt-2 text-[11px] text-slate-500">Checking coupon…</p> : null}
+            {couponPreview && checkoutOptions.promoCode ? <p className="mt-2 rounded-lg border border-gym-100 bg-gym-500/10 px-2 py-1 text-[11px] text-gym-200">Preview: discount {formatCurrency(couponPreview.estimatedDiscount)}, total {formatCurrency(couponPreview.estimatedFinalAmount || cart.subtotal || 0)}.</p> : null}
+            {couponPreviewError ? <p className="mt-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-300">{couponPreviewError}</p> : null}
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-gym-100 bg-gym-50 p-4 text-sm text-gym-900">
+          <div className="space-y-3 rounded-2xl border border-gym-100 bg-gym-500/10 p-4 text-sm text-gym-100">
             <div className="flex items-center gap-2 font-semibold">
               <Mail size={16} />
               Receipt details
@@ -328,9 +342,9 @@ function CustomerCartPage() {
             <p>Bring the order ID to the gym front desk. The receptionist will confirm pickup there.</p>
           </div>
 
-          <button type="button" disabled={checkoutMutation.isPending || cartItems.length === 0} onClick={handleCheckout} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400 disabled:text-slate-100">
+          <button type="button" disabled={checkoutMutation.isPending || cartItems.length === 0} onClick={handleCheckout} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gym-700 bg-gym-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-gym-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-white/15 disabled:bg-white/10 disabled:text-slate-500">
             <CreditCard size={16} />
-            {checkoutMutation.isPending ? 'Redirecting to PayOS...' : 'Checkout with PayOS'}
+            {checkoutMutation.isPending ? 'Redirecting to PayOS…' : 'Checkout with PayOS'}
           </button>
         </aside>
       </section>
@@ -349,14 +363,14 @@ function RecipientModal({ open, info, onChange, onCancel, onConfirm, checkoutPen
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-400">Pickup receipt</p>
-            <h3 className="mt-2 text-2xl font-bold text-slate-900">Confirm receipt details</h3>
-            <p className="mt-2 text-sm text-slate-600">We will email your receipt and order ID here. Bring that order ID to the receptionist for pickup.</p>
+            <h3 className="mt-2 text-2xl font-bold text-slate-50">Confirm receipt details</h3>
+            <p className="mt-2 text-sm text-slate-400">We will email your receipt and order ID here. Bring that order ID to the receptionist for pickup.</p>
           </div>
-          <button type="button" onClick={onCancel} className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800" aria-label="Close recipient modal">
+          <button type="button" onClick={onCancel} className="rounded-full p-2 text-slate-500 transition hover:bg-white/10 hover:text-slate-100" aria-label="Close recipient modal">
             <X size={18} />
           </button>
         </div>
@@ -364,24 +378,50 @@ function RecipientModal({ open, info, onChange, onCancel, onConfirm, checkoutPen
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Full name</span>
-            <input type="text" value={info.fullName} onChange={(event) => updateField('fullName', event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-gym-500 focus:bg-white focus:outline-none" placeholder="Account full name" />
+            <input
+              type="text"
+              name="recipientFullName"
+              autoComplete="name"
+              value={info.fullName}
+              onChange={(event) => updateField('fullName', event.target.value)}
+              className="gc-input"
+              placeholder="Account full name…"
+            />
           </label>
           <label className="space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone (optional)</span>
-            <input type="text" value={info.phone} onChange={(event) => updateField('phone', event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-gym-500 focus:bg-white focus:outline-none" placeholder="Contact phone number" />
+            <input
+              type="tel"
+              name="recipientPhone"
+              autoComplete="tel"
+              inputMode="tel"
+              value={info.phone}
+              onChange={(event) => updateField('phone', event.target.value)}
+              className="gc-input"
+              placeholder="Contact phone number…"
+            />
           </label>
           <label className="space-y-1.5 sm:col-span-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</span>
-            <input type="email" value={info.email} onChange={(event) => updateField('email', event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-gym-500 focus:bg-white focus:outline-none" placeholder="Receipt email address" />
+            <input
+              type="email"
+              name="recipientEmail"
+              autoComplete="email"
+              spellCheck={false}
+              value={info.email}
+              onChange={(event) => updateField('email', event.target.value)}
+              className="gc-input"
+              placeholder="Receipt email address…"
+            />
           </label>
         </div>
 
         <div className="mt-6 flex gap-3">
-          <button type="button" onClick={onCancel} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+          <button type="button" onClick={onCancel} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5">
             Back to cart
           </button>
-          <button type="button" onClick={onConfirm} disabled={!canConfirm || checkoutPending} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-gym-700 bg-gym-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-gym-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300 disabled:text-slate-100">
-            {checkoutPending ? 'Redirecting to PayOS...' : 'Confirm and pay'}
+          <button type="button" onClick={onConfirm} disabled={!canConfirm || checkoutPending} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-gym-700 bg-gym-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-gym-700 disabled:cursor-not-allowed disabled:border-white/15 disabled:bg-white/10 disabled:text-slate-500">
+            {checkoutPending ? 'Redirecting to PayOS…' : 'Confirm and pay'}
           </button>
         </div>
       </div>
@@ -390,3 +430,8 @@ function RecipientModal({ open, info, onChange, onCancel, onConfirm, checkoutPen
 }
 
 export default CustomerCartPage
+
+
+
+
+

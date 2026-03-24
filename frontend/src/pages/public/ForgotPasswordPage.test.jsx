@@ -95,3 +95,5 @@ describe('ForgotPasswordPage - Resend OTP Cooldown', () => {
     expect(resendBtn).toHaveTextContent(/^Resend OTP$/i)
   })
 })
+
+

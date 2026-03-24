@@ -11,3 +11,5 @@ export const workoutApi = {
     return apiClient.get(`/v1/workouts/${workoutId}`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

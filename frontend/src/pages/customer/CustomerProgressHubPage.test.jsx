@@ -174,3 +174,5 @@ describe('CustomerProgressHubPage', () => {
     expect(screen.getByText('QR unavailable')).toBeInTheDocument()
   })
 })
+
+

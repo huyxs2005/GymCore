@@ -172,3 +172,5 @@ describe('ReceptionPickupPage', () => {
     expect(button).toBeDisabled()
   })
 })
+
+

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AuthPageShell from '../../components/auth/AuthPageShell'
+import FormField from '../../components/ui/FormField'
 import { authApi } from '../../features/auth/api/authApi'
 
 function ForgotPasswordPage() {
@@ -14,9 +16,7 @@ function ForgotPasswordPage() {
   const [step, setStep] = useState('request')
 
   useEffect(() => {
-    if (cooldownSeconds <= 0) {
-      return undefined
-    }
+    if (cooldownSeconds <= 0) return undefined
     const timer = setTimeout(() => setCooldownSeconds((prev) => Math.max(0, prev - 1)), 1000)
     return () => clearTimeout(timer)
   }, [cooldownSeconds])
@@ -33,22 +33,20 @@ function ForgotPasswordPage() {
       setCooldownSeconds(Number(data.resendCooldownSeconds || 5))
       setMessage('OTP sent to your email.')
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || 'Could not send OTP.')
+      setErrorMessage(error?.response?.data?.message || 'Could not send OTP. Check the email and try again.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   async function handleResendOtp() {
-    if (cooldownSeconds > 0 || isResending) {
-      return
-    }
+    if (cooldownSeconds > 0 || isResending) return
+
     try {
       setIsResending(true)
       setErrorMessage('')
       setMessage('')
 
-      // Start the 5s countdown immediately (even if the network is slow).
       const startedAtMs = Date.now()
       setCooldownSeconds(5)
 
@@ -73,86 +71,63 @@ function ForgotPasswordPage() {
       setErrorMessage('')
       setMessage('')
       await authApi.verifyForgotPasswordOtp({ email, otp })
-
-      // Redirect to the reset-password step only after OTP is verified.
       navigate('/auth/forgot-password/reset', {
         replace: true,
         state: { email, otp },
       })
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || 'OTP verification failed.')
+      setErrorMessage(error?.response?.data?.message || 'OTP verification failed. Check the code and try again.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <h1 className="text-2xl font-bold text-slate-900">Forgot password</h1>
-      <p className="mt-2 text-sm text-slate-600">Request OTP, then confirm OTP and set your new password.</p>
-
+    <AuthPageShell
+      kicker="Password Recovery"
+      title="Verify the OTP first, then reset the password."
+      description="This follows the documented two-step forgot-password flow: request and verify OTP here, then continue to the reset screen."
+      asideItems={[
+        'Request OTP on this page.',
+        'Verify OTP on this page.',
+        'Set the new password only after OTP succeeds.',
+      ]}
+    >
       {step === 'request' ? (
-        <form onSubmit={handleRequestOtp} className="mt-6 space-y-4 gc-card">
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Email</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="gc-input"
-              required
-            />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
+        <form onSubmit={handleRequestOtp} className="space-y-5">
+          <FormField id="forgot-email" label="Email address" required>
+            <input id="forgot-email" type="email" autoComplete="email" inputMode="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} className="gc-input" placeholder="name@example.com" required />
+          </FormField>
+          {errorMessage ? <div role="alert" className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
+          {message ? <div aria-live="polite" className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm leading-6 text-emerald-100">{message}</div> : null}
+          <button type="submit" disabled={isSubmitting} className="gc-button-primary w-full">
             {isSubmitting ? 'Sending OTP...' : 'Send OTP'}
           </button>
         </form>
       ) : null}
 
       {step === 'verify' ? (
-        <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4 gc-card">
-          <p className="text-sm text-slate-600">Enter the 6-digit OTP sent to {email}.</p>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">OTP</span>
-            <input
-              value={otp}
-              onChange={(event) => setOtp(event.target.value)}
-              className="gc-input"
-              maxLength={6}
-              required
-            />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
+        <form onSubmit={handleVerifyOtp} className="space-y-5">
+          <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-slate-300">
+            Enter the 6-digit OTP sent to <span className="font-semibold text-white">{email}</span>.
+          </div>
+          <FormField id="forgot-otp" label="OTP" required>
+            <input id="forgot-otp" aria-label="OTP" inputMode="numeric" autoComplete="one-time-code" spellCheck={false} value={otp} onChange={(event) => setOtp(event.target.value)} className="gc-input" maxLength={6} placeholder="123456" required />
+          </FormField>
+          {errorMessage ? <div role="alert" className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
+          {message ? <div aria-live="polite" className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm leading-6 text-emerald-100">{message}</div> : null}
+          <button type="submit" disabled={isSubmitting} className="gc-button-primary w-full">
             {isSubmitting ? 'Verifying...' : 'Verify OTP'}
           </button>
-          <button
-            type="button"
-            onClick={handleResendOtp}
-            disabled={cooldownSeconds > 0 || isResending}
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <button type="button" onClick={handleResendOtp} disabled={cooldownSeconds > 0 || isResending} className="gc-button-secondary w-full">
             {cooldownSeconds > 0 ? `Resend OTP (${cooldownSeconds}s)` : 'Resend OTP'}
           </button>
         </form>
       ) : null}
-
-      {step === 'done' ? (
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</div>
-      ) : null}
-    </div>
+    </AuthPageShell>
   )
 }
 
 export default ForgotPasswordPage
+
+

@@ -7,12 +7,27 @@ import { adminNav } from '../../config/navigation'
 import { Plus, Edit, Ticket, Image as ImageIcon, CheckCircle, XCircle, CircleOff, Calendar, FileText, Layout, Sparkles, Percent, BadgeDollarSign, Gift, Target, TicketPercent, Search, Check, ChevronDown, ShieldCheck, Upload, Trash2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import { formatDate as formatDateValue } from '../../utils/formatters'
 
 const POST_BANNER_MAX_BYTES = 5 * 1024 * 1024
 const MAX_COUPON_DISCOUNT_PERCENT = 100
 const MAX_COUPON_DISCOUNT_AMOUNT = 9999999999.99
 const DECIMAL_INPUT_PATTERN = /^\d+(\.\d{1,2})?$/
 const WHOLE_NUMBER_INPUT_PATTERN = /^\d+$/
+const INPUT_CLASS = 'gc-input'
+const TEXTAREA_CLASS = 'gc-textarea'
+const FILTER_CLASS = 'gc-select min-h-0 rounded-2xl bg-[rgba(18,18,26,0.92)] px-3 py-2'
+
+function formatDisplayNumber(value) {
+  const normalized = Number(value ?? 0)
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+  }).format(normalized)
+}
+
+function formatDateRange(start, end) {
+  return `${formatDateValue(start)} - ${formatDateValue(end)}`
+}
 
 function toOptionalNumber(value) {
   if (value == null) return null
@@ -68,7 +83,7 @@ function formatCouponBenefit(coupon) {
   if (discountPercent != null && discountPercent > 0) {
     parts.push(`${discountPercent}% off`)
   } else if (discountAmount != null && discountAmount > 0) {
-    parts.push(`${discountAmount.toLocaleString()} VND off`)
+    parts.push(`${formatDisplayNumber(discountAmount)} VND off`)
   }
   if (bonusMonths > 0) {
     parts.push(`+${bonusMonths} membership month${bonusMonths > 1 ? 's' : ''}`)
@@ -142,18 +157,18 @@ function mapPostToForm(post) {
 function SummaryCard({ label, value, icon, tone = 'slate' }) {
   const IconComponent = icon
   const toneClasses = {
-    slate: 'bg-slate-50 text-slate-700',
+    slate: 'bg-white/5 text-slate-300',
     green: 'bg-green-50 text-green-700',
-    blue: 'bg-blue-50 text-blue-700',
-    amber: 'bg-amber-50 text-amber-700',
+    blue: 'bg-sky-500/10 text-sky-300',
+    amber: 'bg-amber-500/10 text-amber-300',
   }
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
+          <p className="mt-2 text-3xl font-black text-white">{value}</p>
         </div>
         <span className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl ${toneClasses[tone] || toneClasses.slate}`}>
           <IconComponent size={20} />
@@ -409,7 +424,7 @@ const AdminPromotionsPage = () => {
       parts.push(`${parsedPercent.value}% off`)
     }
     if (couponForm.discountMode === 'amount' && !parsedAmount.error && parsedAmount.value > 0) {
-      parts.push(`${parsedAmount.value.toLocaleString()} VND off`)
+      parts.push(`${formatDisplayNumber(parsedAmount.value)} VND off`)
     }
     if (couponForm.applyTarget === 'MEMBERSHIP' && bonusMonths > 0) {
       parts.push(`+${bonusMonths} membership month${bonusMonths > 1 ? 's' : ''}`)
@@ -496,6 +511,8 @@ const AdminPromotionsPage = () => {
   }
 
   const effectivePostBannerPreview = postBannerPreviewUrl || postForm.bannerUrl
+  const isCouponMutationPending = createCouponMutation.isPending || updateCouponMutation.isPending
+  const isPostMutationPending = createPostMutation.isPending || updatePostMutation.isPending
 
   function handleApplyTargetChange(targetValue) {
     setCouponForm((prev) => ({
@@ -686,7 +703,7 @@ const AdminPromotionsPage = () => {
     >
       <div className="space-y-8">
         {/* Quick Create Section */}
-        <section className="relative overflow-hidden bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-gym-200/50 group">
+        <section className="relative overflow-hidden bg-[rgba(18,18,26,0.92)] rounded-[2.5rem] p-8 text-white shadow-2xl shadow-gym-200/50 group">
           <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-96 h-96 bg-gym-600/20 rounded-full blur-[80px] group-hover:bg-gym-600/30 transition-colors duration-700"></div>
           <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-64 h-64 bg-blue-600/10 rounded-full blur-[60px]"></div>
 
@@ -704,14 +721,14 @@ const AdminPromotionsPage = () => {
             <div className="flex flex-wrap gap-4">
               <button
                 onClick={() => openCouponModal()}
-                className="px-8 py-4 bg-gym-600 hover:bg-gym-700 text-white rounded-2xl font-bold flex items-center gap-3 transition-all active:scale-95 shadow-lg shadow-gym-600/20"
+                className="gc-button-primary flex items-center gap-3 px-8 py-4 font-bold shadow-lg shadow-amber-500/20"
               >
                 <Ticket size={20} />
                 New Coupon
               </button>
               <button
                 onClick={() => openPostModal()}
-                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl font-bold flex items-center gap-3 transition-all active:scale-95 backdrop-blur-md"
+                className="gc-button-secondary flex items-center gap-3 px-8 py-4 font-bold backdrop-blur-md"
               >
                 <Layout size={20} />
                 New Marketing Post
@@ -720,17 +737,17 @@ const AdminPromotionsPage = () => {
           </div>
         </section>
 
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-white/10">
           <button
             onClick={() => setActiveTab('coupons')}
-            className={`px-6 py-3 text-sm font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'coupons' ? 'border-gym-600 text-gym-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+            className={`px-6 py-3 text-sm font-bold transition-[transform,opacity,box-shadow,background-color,border-color,color] border-b-2 flex items-center gap-2 ${activeTab === 'coupons' ? 'border-gym-600 text-gym-600' : 'border-transparent text-zinc-500 hover:text-slate-300'
               }`}
           >
             <Ticket size={16} /> Discount Coupons
           </button>
           <button
             onClick={() => setActiveTab('posts')}
-            className={`px-6 py-3 text-sm font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'posts' ? 'border-gym-600 text-gym-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+            className={`px-6 py-3 text-sm font-bold transition-[transform,opacity,box-shadow,background-color,border-color,color] border-b-2 flex items-center gap-2 ${activeTab === 'posts' ? 'border-gym-600 text-gym-600' : 'border-transparent text-zinc-500 hover:text-slate-300'
               }`}
           >
             <Layout size={16} /> Marketing Posts
@@ -746,36 +763,41 @@ const AdminPromotionsPage = () => {
               <SummaryCard label="Membership coupons" value={couponSummary.membership} icon={Gift} tone="amber" />
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="bg-[rgba(18,18,26,0.92)] rounded-2xl shadow-sm border border-white/10 overflow-hidden">
             <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <Ticket className="text-gym-600" size={20} />
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Ticket className="text-amber-300" size={20} />
                 Active Coupons
               </h3>
               <button
                 onClick={() => openCouponModal()}
-                className="bg-gym-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gym-700 transition-all"
+                className="gc-button-primary flex items-center gap-2 px-4 py-2 text-sm font-bold"
               >
                 <Plus size={16} /> Create Coupon
               </button>
             </div>
 
-            <div className="grid gap-3 border-b border-slate-100 bg-slate-50/70 px-6 py-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
-              <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+            <div className="grid gap-3 border-b border-white/10 bg-white/5 px-6 py-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
+              <label className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-3 py-2 transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-within:border-amber-500/30 focus-within:bg-white/[0.07] focus-within:ring-2 focus-within:ring-amber-500/15">
                 <Search size={14} className="text-slate-400" />
+                <span className="sr-only">Search coupons</span>
                 <input
-                  type="text"
+                  type="search"
+                  name="couponSearch"
                   value={couponSearch}
                   onChange={(event) => setCouponSearch(event.target.value)}
-                  placeholder="Search code, description, or benefit"
-                  className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Search code, description, or benefit…"
+                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
                 />
               </label>
               <select
                 aria-label="Coupon target filter"
                 value={couponTargetFilter}
                 onChange={(event) => setCouponTargetFilter(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                name="couponTargetFilter"
+                className={FILTER_CLASS}
               >
                 <option value="all">All targets</option>
                 <option value="ORDER">Product order</option>
@@ -785,7 +807,8 @@ const AdminPromotionsPage = () => {
                 aria-label="Coupon status filter"
                 value={couponStatusFilter}
                 onChange={(event) => setCouponStatusFilter(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                name="couponStatusFilter"
+                className={FILTER_CLASS}
               >
                 <option value="all">All statuses</option>
                 <option value="active">Active only</option>
@@ -795,7 +818,8 @@ const AdminPromotionsPage = () => {
                 aria-label="Coupon benefit filter"
                 value={couponBenefitFilter}
                 onChange={(event) => setCouponBenefitFilter(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                name="couponBenefitFilter"
+                className={FILTER_CLASS}
               >
                 <option value="all">All benefit types</option>
                 <option value="discount">Discount only</option>
@@ -806,7 +830,7 @@ const AdminPromotionsPage = () => {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                <thead className="bg-white/5 text-zinc-500 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-6 py-4 font-bold">Code</th>
                     <th className="px-6 py-4 font-bold">Target</th>
@@ -816,38 +840,38 @@ const AdminPromotionsPage = () => {
                     <th className="px-6 py-4 font-bold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-white/10">
                   {loadingCoupons ? (
-                    <tr><td colSpan="6" className="p-10 text-center text-slate-400">Loading coupons...</td></tr>
+                    <tr><td colSpan="6" className="p-10 text-center text-slate-400" aria-live="polite">Loading coupons…</td></tr>
                   ) : filteredCoupons.length === 0 ? (
                     <tr><td colSpan="6" className="p-10 text-center text-slate-400">No coupons match the current filters.</td></tr>
                   ) : filteredCoupons.map(coupon => (
-                    <tr key={coupon.PromotionID} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={coupon.PromotionID} className="transition-colors hover:bg-white/5">
                       <td className="px-6 py-4">
-                        <span className="font-mono font-bold text-gym-600 bg-gym-50 px-2 py-1 rounded">
+                        <span className="rounded bg-amber-500/10 px-2 py-1 font-mono font-bold text-amber-300">
                           {coupon.PromoCode}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${String(coupon.ApplyTarget).toUpperCase() === 'MEMBERSHIP' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${String(coupon.ApplyTarget).toUpperCase() === 'MEMBERSHIP' ? 'bg-amber-500/10 text-amber-300' : 'bg-sky-500/10 text-sky-300'}`}>
                           {String(coupon.ApplyTarget).toUpperCase() === 'MEMBERSHIP' ? 'Membership' : 'Product order'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="font-bold text-slate-900">
+                        <span className="font-bold text-white">
                           {formatCouponBenefit(coupon).replace(/^(ORDER|MEMBERSHIP):\s*/, '')}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-500">
-                        {new Date(coupon.ValidFrom).toLocaleDateString()} - {new Date(coupon.ValidTo).toLocaleDateString()}
+                      <td className="px-6 py-4 text-xs text-zinc-500">
+                        {formatDateRange(coupon.ValidFrom, coupon.ValidTo)}
                       </td>
                       <td className="px-6 py-4">
                         {coupon.IsActive ? (
-                          <span className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2 py-0.5 rounded-full w-fit">
+                          <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-300 w-fit">
                             <CheckCircle size={12} /> Active
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-slate-400 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                          <span className="flex items-center gap-1 text-slate-400 text-xs font-bold bg-white/10 px-2 py-0.5 rounded-full w-fit">
                             <XCircle size={12} /> Inactive
                           </span>
                         )}
@@ -855,7 +879,7 @@ const AdminPromotionsPage = () => {
                       <td className="px-6 py-4 text-right flex justify-end gap-2">
                         <button
                           onClick={() => openCouponModal(coupon)}
-                          className="p-2 text-slate-400 hover:text-gym-600 hover:bg-gym-50 rounded-lg transition-all"
+                          className="rounded-lg p-2 text-slate-400 transition-[color,background-color,transform] duration-200 ease-out hover:bg-amber-500/15 hover:text-amber-300 active:scale-[0.98]"
                         >
                           <Edit size={16} />
                         </button>
@@ -866,7 +890,7 @@ const AdminPromotionsPage = () => {
                             `Deactivate ${coupon.PromoCode}?`,
                             'This coupon will stop being claimable and usable at checkout. Existing claim history stays in the system.',
                           )}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-rose-500/15 rounded-lg transition-[transform,opacity,box-shadow,background-color,border-color,color]"
                         >
                           <CircleOff size={16} />
                         </button>
@@ -881,36 +905,41 @@ const AdminPromotionsPage = () => {
         )}
 
         {activeTab === 'posts' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="bg-[rgba(18,18,26,0.92)] rounded-2xl shadow-sm border border-white/10 overflow-hidden">
             <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <ImageIcon className="text-gym-600" size={20} />
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <ImageIcon className="text-amber-300" size={20} />
                 Marketing Posts
               </h3>
               <button
                 onClick={() => openPostModal()}
-                className="bg-gym-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gym-700 transition-all"
+                className="gc-button-primary flex items-center gap-2 px-4 py-2 text-sm font-bold"
               >
                 <Plus size={16} /> Create Post
               </button>
             </div>
 
-            <div className="grid gap-3 border-b border-slate-100 bg-slate-50/70 px-6 py-4 lg:grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,1fr))]">
-              <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+            <div className="grid gap-3 border-b border-white/10 bg-white/5 px-6 py-4 lg:grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,1fr))]">
+              <label className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-3 py-2 transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-within:border-amber-500/30 focus-within:bg-white/[0.07] focus-within:ring-2 focus-within:ring-amber-500/15">
                 <Search size={14} className="text-slate-400" />
+                <span className="sr-only">Search posts</span>
                 <input
-                  type="text"
+                  type="search"
+                  name="postSearch"
                   value={postSearch}
                   onChange={(event) => setPostSearch(event.target.value)}
-                  placeholder="Search title, content, or coupon"
-                  className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Search title, content, or coupon…"
+                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
                 />
               </label>
               <select
                 aria-label="Post status filter"
                 value={postStatusFilter}
                 onChange={(event) => setPostStatusFilter(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                name="postStatusFilter"
+                className={FILTER_CLASS}
               >
                 <option value="all">All post statuses</option>
                 <option value="active">Active only</option>
@@ -920,7 +949,8 @@ const AdminPromotionsPage = () => {
                 aria-label="Post target filter"
                 value={postTargetFilter}
                 onChange={(event) => setPostTargetFilter(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                name="postTargetFilter"
+                className={FILTER_CLASS}
               >
                 <option value="all">All linked targets</option>
                 <option value="ORDER">Product order</option>
@@ -930,7 +960,7 @@ const AdminPromotionsPage = () => {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                <thead className="bg-white/5 text-zinc-500 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-6 py-4 font-bold">Post Info</th>
                     <th className="px-6 py-4 font-bold">Target Coupon</th>
@@ -939,53 +969,53 @@ const AdminPromotionsPage = () => {
                     <th className="px-6 py-4 font-bold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-white/10">
                   {loadingPosts ? (
-                    <tr><td colSpan="5" className="p-10 text-center text-slate-400">Loading posts...</td></tr>
+                    <tr><td colSpan="5" className="p-10 text-center text-slate-400" aria-live="polite">Loading posts…</td></tr>
                   ) : filteredPosts.length === 0 ? (
                     <tr><td colSpan="5" className="p-10 text-center text-slate-400">No promotion posts match the current filters.</td></tr>
                   ) : filteredPosts.map(post => (
-                    <tr key={post.PromotionPostID} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={post.PromotionPostID} className="transition-colors hover:bg-white/5">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {post.BannerUrl ? (
-                            <img src={post.BannerUrl} className="w-10 h-10 object-cover rounded-md" alt="" />
+                            <img src={post.BannerUrl} className="w-10 h-10 object-cover rounded-md" alt="" width="40" height="40" loading="lazy" />
                           ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-400">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white/10 text-slate-400">
                               <ImageIcon size={16} />
                             </div>
                           )}
                           <div>
-                            <p className="font-bold text-slate-900 text-sm">{post.Title}</p>
-                            <p className="text-xs text-slate-500 line-clamp-1">{post.Content}</p>
+                            <p className="font-bold text-white text-sm">{post.Title}</p>
+                            <p className="text-xs text-zinc-500 line-clamp-1">{post.Content}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="font-mono text-xs font-bold text-gym-600 bg-gym-50 px-2 py-1 rounded">
+                        <span className="rounded bg-amber-500/10 px-2 py-1 font-mono text-xs font-bold text-amber-300">
                           {post.PromoCode}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-500">
-                        {new Date(post.StartAt).toLocaleDateString()} - {new Date(post.EndAt).toLocaleDateString()}
+                      <td className="px-6 py-4 text-xs text-zinc-500">
+                        {formatDateRange(post.StartAt, post.EndAt)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="space-y-2">
                           {post.IsActive ? (
-                            <span className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2 py-0.5 rounded-full w-fit">
+                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-300 w-fit">
                               <CheckCircle size={12} /> Active
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1 text-slate-400 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                            <span className="flex items-center gap-1 text-slate-400 text-xs font-bold bg-white/10 px-2 py-0.5 rounded-full w-fit">
                               <XCircle size={12} /> Inactive
                             </span>
                           )}
                           {post.IsImportant ? (
-                            <span className="flex items-center gap-1 text-amber-700 text-xs font-bold bg-amber-50 px-2 py-0.5 rounded-full w-fit">
+                            <span className="flex items-center gap-1 text-amber-300 text-xs font-bold bg-amber-500/10 px-2 py-0.5 rounded-full w-fit">
                               <ShieldCheck size={12} /> Broadcasts to all customers
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1 text-slate-500 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                            <span className="flex items-center gap-1 text-zinc-500 text-xs font-bold bg-white/10 px-2 py-0.5 rounded-full w-fit">
                               <Layout size={12} /> Promotions page only
                             </span>
                           )}
@@ -994,7 +1024,7 @@ const AdminPromotionsPage = () => {
                       <td className="px-6 py-4 text-right flex justify-end gap-2">
                         <button
                           onClick={() => openPostModal(post)}
-                          className="p-2 text-slate-400 hover:text-gym-600 hover:bg-gym-50 rounded-lg transition-all"
+                          className="rounded-lg p-2 text-slate-400 transition-[color,background-color,transform] duration-200 ease-out hover:bg-amber-500/15 hover:text-amber-300 active:scale-[0.98]"
                         >
                           <Edit size={16} />
                         </button>
@@ -1005,7 +1035,7 @@ const AdminPromotionsPage = () => {
                             `Deactivate ${post.Title}?`,
                             'This marketing post will disappear from the customer Promotions page, but the linked coupon itself will remain unchanged.',
                           )}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-rose-500/15 rounded-lg transition-[transform,opacity,box-shadow,background-color,border-color,color]"
                         >
                           <CircleOff size={16} />
                         </button>
@@ -1020,23 +1050,23 @@ const AdminPromotionsPage = () => {
 
         {/* Coupon Modal */}
         {isCouponModalOpen && portalRoot ? createPortal((
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/65 backdrop-blur-sm animate-in fade-in">
             <div
               role="dialog"
               aria-modal="true"
               aria-labelledby="coupon-modal-title"
-              className="relative w-full max-w-[1240px] max-h-[92vh] overflow-hidden rounded-[2rem] bg-white shadow-2xl animate-in zoom-in-95"
+              className="relative w-full max-w-[1240px] max-h-[92vh] overflow-hidden rounded-[2rem] bg-[rgba(18,18,26,0.92)] shadow-2xl animate-in zoom-in-95"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 bg-white px-8 py-6">
+              <div className="flex items-center justify-between border-b border-white/10 bg-[rgba(18,18,26,0.92)] px-8 py-6">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Coupon Builder</p>
-                  <h3 id="coupon-modal-title" className="mt-1 font-extrabold text-slate-900 text-2xl">{editingItem ? 'Edit Coupon' : 'New Coupon'}</h3>
+                  <h3 id="coupon-modal-title" className="mt-1 font-extrabold text-white text-2xl">{editingItem ? 'Edit Coupon' : 'New Coupon'}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={closeCouponModal}
                   aria-label="Close coupon modal"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] text-zinc-500 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-white/10 hover:text-slate-300 hover:bg-white/5"
                 >
                   <XCircle size={22} />
                 </button>
@@ -1044,21 +1074,21 @@ const AdminPromotionsPage = () => {
               <form noValidate className="max-h-[calc(92vh-88px)] overflow-y-auto px-8 py-8" onSubmit={submitCouponForm}>
                 <div className="grid gap-8 xl:grid-cols-[1.55fr_1fr]">
                   <div className="space-y-6">
-                    <section className="space-y-5 rounded-[1.75rem] border border-slate-100 bg-slate-50/80 p-6">
+                    <section className="space-y-5 rounded-[1.75rem] border border-white/10 bg-white/5/80 p-6">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Coupon Basics</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Define the code and the audience</h4>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">Coupon Basics</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Define the code and the audience</h4>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="coupon-promo-code" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon Code</label>
-                        <input id="coupon-promo-code" name="promoCode" value={couponForm.promoCode} onChange={(event) => updateCouponForm('promoCode', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 focus:ring-2 focus:ring-gym-200 outline-none transition-all font-mono" placeholder="WELCOME10" />
+                        <label htmlFor="coupon-promo-code" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon Code</label>
+                        <input id="coupon-promo-code" name="promoCode" value={couponForm.promoCode} onChange={(event) => updateCouponForm('promoCode', event.target.value)} autoComplete="off" spellCheck={false} className={`${INPUT_CLASS} font-mono`} placeholder="WELCOME10" />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="coupon-description" className="text-xs font-bold text-slate-500 uppercase">Description</label>
-                        <input id="coupon-description" name="description" value={couponForm.description} onChange={(event) => updateCouponForm('description', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" placeholder="10% off for first order" />
+                        <label htmlFor="coupon-description" className="text-xs font-bold text-zinc-500 uppercase">Description</label>
+                        <input id="coupon-description" name="description" value={couponForm.description} onChange={(event) => updateCouponForm('description', event.target.value)} autoComplete="off" className={INPUT_CLASS} placeholder="10% off for first order" />
                       </div>
                       <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Target size={12} /> Apply Target</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Target size={12} /> Apply Target</label>
                         <div className="grid gap-4 lg:grid-cols-2">
                           {[
                             { value: 'ORDER', label: 'Product order', description: 'Use for supplements and checkout discounts.', icon: BadgeDollarSign },
@@ -1072,15 +1102,15 @@ const AdminPromotionsPage = () => {
                                 type="button"
                                 onClick={() => handleApplyTargetChange(option.value)}
                                 aria-label={`${option.label} ${option.description}`}
-                                className={`rounded-[1.4rem] border p-5 text-left transition-all ${selected ? 'border-gym-500 bg-gym-50 ring-2 ring-gym-100 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                className={`rounded-[1.4rem] border p-5 text-left transition-[transform,opacity,box-shadow,background-color,border-color] duration-200 ease-out active:scale-[0.98] ${selected ? 'border-amber-500/35 bg-amber-500/10 ring-2 ring-amber-500/20 shadow-[0_0_24px_rgba(245,158,11,0.12)]' : 'border-white/10 bg-[rgba(18,18,26,0.92)] hover:border-white/15 hover:bg-white/5'}`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${selected ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${selected ? 'bg-amber-500 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
                                     <Icon size={18} />
                                   </span>
                                   <div>
-                                    <p className="font-bold text-slate-900">{option.label}</p>
-                                    <p className="text-xs text-slate-500">{option.description}</p>
+                                    <p className="font-bold text-white">{option.label}</p>
+                                    <p className="text-xs text-zinc-500">{option.description}</p>
                                   </div>
                                 </div>
                               </button>
@@ -1090,13 +1120,13 @@ const AdminPromotionsPage = () => {
                       </div>
                     </section>
 
-                    <section className="space-y-5 rounded-[1.75rem] border border-slate-100 bg-white p-6">
+                    <section className="space-y-5 rounded-[1.75rem] border border-white/10 bg-[rgba(18,18,26,0.92)] p-6">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Benefit Design</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Choose one discount type, then add bonus time if needed</h4>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">Benefit Design</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Choose one discount type, then add bonus time if needed</h4>
                       </div>
                       <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Discount Model</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase">Discount Model</label>
                         <div className="grid gap-4 xl:grid-cols-3">
                           {[
                             { value: 'none', label: 'No discount', description: 'Useful for bonus-month-only membership coupons.', icon: CircleOff },
@@ -1111,15 +1141,15 @@ const AdminPromotionsPage = () => {
                                 type="button"
                                 onClick={() => handleDiscountModeChange(option.value)}
                                 aria-label={`${option.label} ${option.description}`}
-                                className={`rounded-[1.4rem] border p-5 text-left transition-all ${selected ? 'border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+                                className={`rounded-[1.4rem] border p-5 text-left transition-[transform,opacity,box-shadow,background-color,border-color] duration-200 ease-out active:scale-[0.98] ${selected ? 'border-amber-500/30 bg-white/[0.06] text-white shadow-[0_0_24px_rgba(245,158,11,0.1)]' : 'border-white/10 bg-white/5 hover:border-white/15 hover:bg-white/[0.06]'}`}
                               >
                                 <div className="flex items-start gap-3">
-                                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${selected ? 'bg-white/15 text-white' : 'bg-white text-slate-600'}`}>
+                                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${selected ? 'bg-amber-500/15 text-amber-200' : 'bg-[rgba(18,18,26,0.92)] text-slate-400'}`}>
                                     <Icon size={18} />
                                   </span>
                                   <div>
-                                    <p className={`font-bold ${selected ? 'text-white' : 'text-slate-900'}`}>{option.label}</p>
-                                    <p className={`mt-1 text-xs ${selected ? 'text-slate-200' : 'text-slate-500'}`}>{option.description}</p>
+                                    <p className={`font-bold ${selected ? 'text-white' : 'text-white'}`}>{option.label}</p>
+                                    <p className={`mt-1 text-xs ${selected ? 'text-slate-200' : 'text-zinc-500'}`}>{option.description}</p>
                                   </div>
                                 </div>
                               </button>
@@ -1129,18 +1159,18 @@ const AdminPromotionsPage = () => {
                       </div>
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-1">
-                          <label htmlFor="coupon-discount-percent" className="text-xs font-bold text-slate-500 uppercase">Discount (%)</label>
-                          <input id="coupon-discount-percent" name="discountPercent" type="text" inputMode="decimal" value={couponForm.discountPercent} onChange={(event) => updateCouponForm('discountPercent', event.target.value)} disabled={couponForm.discountMode !== 'percent'} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400" placeholder="10" />
+                          <label htmlFor="coupon-discount-percent" className="text-xs font-bold text-zinc-500 uppercase">Discount (%)</label>
+                          <input id="coupon-discount-percent" name="discountPercent" type="text" inputMode="decimal" value={couponForm.discountPercent} onChange={(event) => updateCouponForm('discountPercent', event.target.value)} autoComplete="off" disabled={couponForm.discountMode !== 'percent'} className={`${INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400`} placeholder="10" />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="coupon-discount-amount" className="text-xs font-bold text-slate-500 uppercase">Discount (VND)</label>
-                          <input id="coupon-discount-amount" name="discountAmount" type="text" inputMode="decimal" value={couponForm.discountAmount} onChange={(event) => updateCouponForm('discountAmount', event.target.value)} disabled={couponForm.discountMode !== 'amount'} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400" placeholder="50000" />
+                          <label htmlFor="coupon-discount-amount" className="text-xs font-bold text-zinc-500 uppercase">Discount (VND)</label>
+                          <input id="coupon-discount-amount" name="discountAmount" type="text" inputMode="decimal" value={couponForm.discountAmount} onChange={(event) => updateCouponForm('discountAmount', event.target.value)} autoComplete="off" disabled={couponForm.discountMode !== 'amount'} className={`${INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400`} placeholder="50000" />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="coupon-bonus-months" className="text-xs font-bold text-slate-500 uppercase">Bonus Membership Months</label>
-                        <input id="coupon-bonus-months" name="bonusDurationMonths" type="text" inputMode="numeric" value={couponForm.bonusDurationMonths} onChange={(event) => updateCouponForm('bonusDurationMonths', event.target.value)} disabled={couponForm.applyTarget !== 'MEMBERSHIP'} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400" placeholder="0" />
-                        <p className="text-xs text-slate-500">
+                        <label htmlFor="coupon-bonus-months" className="text-xs font-bold text-zinc-500 uppercase">Bonus Membership Months</label>
+                        <input id="coupon-bonus-months" name="bonusDurationMonths" type="text" inputMode="numeric" value={couponForm.bonusDurationMonths} onChange={(event) => updateCouponForm('bonusDurationMonths', event.target.value)} autoComplete="off" disabled={couponForm.applyTarget !== 'MEMBERSHIP'} className={`${INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400`} placeholder="0" />
+                        <p className="text-xs text-zinc-500">
                           {couponForm.applyTarget === 'MEMBERSHIP'
                             ? 'Membership coupons can give bonus time in addition to one discount type.'
                             : 'Bonus months are locked for product-order coupons.'}
@@ -1150,63 +1180,63 @@ const AdminPromotionsPage = () => {
                   </div>
 
                   <aside className="space-y-6 xl:sticky xl:top-0 xl:self-start">
-                    <section className="rounded-[1.75rem] border border-gym-100 bg-gym-50 p-6">
-                      <p className="text-xs font-black uppercase tracking-[0.22em] text-gym-700">Live Preview</p>
-                      <div className="mt-4 rounded-[1.4rem] bg-white p-5 shadow-sm">
+                    <section className="rounded-[1.75rem] border border-amber-500/20 bg-amber-500/10 p-6">
+                      <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Live Preview</p>
+                      <div className="mt-4 rounded-[1.4rem] bg-[rgba(18,18,26,0.92)] p-5 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                          <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
                             {couponForm.applyTarget === 'MEMBERSHIP' ? 'Membership' : 'Product order'}
                           </span>
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${couponForm.isActive ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${couponForm.isActive ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/10 text-zinc-500'}`}>
                             {couponForm.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </div>
-                        <p className="mt-4 font-mono text-lg font-black text-slate-900">{couponForm.promoCode || 'CODE_PREVIEW'}</p>
-                        <p className="mt-2 text-sm font-semibold text-slate-900">{liveCouponBenefit}</p>
-                        <p className="mt-2 text-sm text-slate-500">
+                        <p className="mt-4 font-mono text-lg font-black text-white">{couponForm.promoCode || 'CODE_PREVIEW'}</p>
+                        <p className="mt-2 text-sm font-semibold text-white">{liveCouponBenefit}</p>
+                        <p className="mt-2 text-sm text-zinc-500">
                           {couponForm.description || 'Add a short internal/customer-facing description for this coupon.'}
                         </p>
                       </div>
                     </section>
 
-                    <section className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6 space-y-5">
+                    <section className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 space-y-5">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Validity Window</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Schedule when this coupon can be claimed</h4>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">Validity Window</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Schedule when this coupon can be claimed</h4>
                       </div>
                       <div className="grid gap-4">
                         <div className="space-y-1">
-                          <label htmlFor="coupon-valid-from" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid From</label>
-                          <input id="coupon-valid-from" name="validFrom" type="date" value={couponForm.validFrom} onChange={(event) => updateCouponForm('validFrom', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                          <label htmlFor="coupon-valid-from" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid From</label>
+                          <input id="coupon-valid-from" name="validFrom" type="date" value={couponForm.validFrom} onChange={(event) => updateCouponForm('validFrom', event.target.value)} className={INPUT_CLASS} />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="coupon-valid-to" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid To</label>
-                          <input id="coupon-valid-to" name="validTo" type="date" value={couponForm.validTo} onChange={(event) => updateCouponForm('validTo', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                          <label htmlFor="coupon-valid-to" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Valid To</label>
+                          <input id="coupon-valid-to" name="validTo" type="date" value={couponForm.validTo} onChange={(event) => updateCouponForm('validTo', event.target.value)} className={INPUT_CLASS} />
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => updateCouponForm('isActive', !couponForm.isActive)}
-                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-all ${couponForm.isActive ? 'border-gym-200 bg-gym-50' : 'border-slate-200 bg-white'}`}
+                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] ${couponForm.isActive ? 'border-amber-500/20 bg-amber-500/10' : 'border-white/10 bg-[rgba(18,18,26,0.92)]'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${couponForm.isActive ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${couponForm.isActive ? 'bg-amber-500 text-slate-950' : 'bg-white/10 text-zinc-500'}`}>
                             <ShieldCheck size={18} />
                           </span>
                           <div>
-                            <p className="text-sm font-bold text-slate-900">Set as active</p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-sm font-bold text-white">Set as active</p>
+                            <p className="text-xs text-zinc-500">
                               {couponForm.isActive ? 'This coupon is currently live for customers.' : 'Keep this coupon saved but unavailable for claim/use.'}
                             </p>
                           </div>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${couponForm.isActive ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${couponForm.isActive ? 'bg-amber-500 text-slate-950' : 'bg-white/10 text-zinc-500'}`}>
                           {couponForm.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </button>
-                      <div className="rounded-[1.4rem] border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                      <div className="rounded-[1.4rem] border border-sky-500/20 bg-sky-500/10 p-4 text-sm text-sky-100">
                         <p className="font-bold">Coupon design rules</p>
-                        <ul className="mt-2 space-y-1 text-xs text-blue-800 list-disc pl-4">
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-sky-200">
                           <li>Use one discount type at a time: percent or fixed VND.</li>
                           <li>Only membership coupons can include bonus months.</li>
                           <li>Every coupon must provide at least one real benefit.</li>
@@ -1217,21 +1247,21 @@ const AdminPromotionsPage = () => {
                 </div>
 
                 {couponFormError ? (
-                  <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300" aria-live="polite">
                     {couponFormError}
                   </div>
                 ) : null}
 
-                <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-100 pt-6">
+                <div className="mt-8 flex items-center justify-end gap-3 border-t border-white/10 pt-6">
                   <button
                     type="button"
                     onClick={closeCouponModal}
-                    className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50"
+                    className="gc-button-secondary px-5 py-3 text-sm font-bold"
                   >
                     Cancel
                   </button>
-                  <button type="submit" disabled={createCouponMutation.isPending || updateCouponMutation.isPending} className="min-w-[220px] rounded-full bg-gym-600 px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-gym-200 transition-all hover:bg-gym-700 hover:shadow-xl active:scale-[0.98]">
-                    {editingItem ? 'Save Changes' : 'Create Coupon'}
+                  <button type="submit" disabled={isCouponMutationPending} className="gc-button-primary min-w-[220px] px-6 py-3 text-sm font-extrabold shadow-lg shadow-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60">
+                    {isCouponMutationPending ? 'Saving…' : editingItem ? 'Save Changes' : 'Create Coupon'}
                   </button>
                 </div>
               </form>
@@ -1241,49 +1271,49 @@ const AdminPromotionsPage = () => {
 
         {/* Post Modal */}
         {isPostModalOpen && portalRoot ? createPortal((
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/65 backdrop-blur-sm animate-in fade-in">
             <div
               role="dialog"
               aria-modal="true"
               aria-labelledby="post-modal-title"
-              className="relative w-full max-w-[1160px] max-h-[92vh] overflow-hidden rounded-[2rem] bg-white shadow-2xl animate-in zoom-in-95"
+              className="relative w-full max-w-[1160px] max-h-[92vh] overflow-hidden rounded-[2rem] bg-[rgba(18,18,26,0.92)] shadow-2xl animate-in zoom-in-95"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 bg-white px-8 py-6">
+              <div className="flex items-center justify-between border-b border-white/10 bg-[rgba(18,18,26,0.92)] px-8 py-6">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Campaign Builder</p>
-                  <h3 id="post-modal-title" className="mt-1 font-extrabold text-slate-900 text-2xl">{editingItem ? 'Edit Marketing Post' : 'New Marketing Post'}</h3>
+                  <h3 id="post-modal-title" className="mt-1 font-extrabold text-white text-2xl">{editingItem ? 'Edit Marketing Post' : 'New Marketing Post'}</h3>
                 </div>
-                <button type="button" aria-label="Close post modal" onClick={closePostModal} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50"><XCircle size={22} /></button>
+                <button type="button" aria-label="Close post modal" onClick={closePostModal} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] text-zinc-500 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-white/10 hover:text-slate-300 hover:bg-white/5"><XCircle size={22} /></button>
               </div>
               <form noValidate className="max-h-[calc(92vh-88px)] overflow-y-auto px-8 py-8" onSubmit={submitPostForm}>
                 <div className="grid gap-8 xl:grid-cols-[1.4fr_1fr]">
                   <div className="space-y-6">
-                    <section className="space-y-5 rounded-[1.75rem] border border-slate-100 bg-slate-50/80 p-6">
+                    <section className="space-y-5 rounded-[1.75rem] border border-white/10 bg-white/5/80 p-6">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Campaign Copy</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Write the post customers will see</h4>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">Campaign Copy</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Write the post customers will see</h4>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="post-title" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><FileText size={12} /> Post Title</label>
-                        <input id="post-title" name="title" value={postForm.title} onChange={(event) => updatePostForm('title', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" placeholder="Summer Mega Sale!" />
+                        <label htmlFor="post-title" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><FileText size={12} /> Post Title</label>
+                        <input id="post-title" name="title" value={postForm.title} onChange={(event) => updatePostForm('title', event.target.value)} autoComplete="off" className={INPUT_CLASS} placeholder="Summer Mega Sale!" />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="post-content" className="text-xs font-bold text-slate-500 uppercase">Content</label>
-                        <textarea id="post-content" name="content" value={postForm.content} onChange={(event) => updatePostForm('content', event.target.value)} rows="5" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" placeholder="Get 10% off all supplements this summer..." />
+                        <label htmlFor="post-content" className="text-xs font-bold text-zinc-500 uppercase">Content</label>
+                        <textarea id="post-content" name="content" value={postForm.content} onChange={(event) => updatePostForm('content', event.target.value)} autoComplete="off" rows="5" className={TEXTAREA_CLASS} placeholder="Get 10% off all supplements this summer…" />
                       </div>
                     </section>
 
-                    <section className="space-y-5 rounded-[1.75rem] border border-slate-100 bg-white p-6">
+                    <section className="space-y-5 rounded-[1.75rem] border border-white/10 bg-[rgba(18,18,26,0.92)] p-6">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Banner Image</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Upload the campaign banner</h4>
-                        <p className="mt-2 text-sm text-slate-500">Admins should upload a banner file here. The system stores the public URL internally after upload.</p>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">Banner Image</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Upload the campaign banner</h4>
+                        <p className="mt-2 text-sm text-zinc-500">Admins should upload a banner file here. The system stores the public URL internally after upload.</p>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><ImageIcon size={12} /> Banner Asset</label>
-                        <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+                        <label className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><ImageIcon size={12} /> Banner Asset</label>
+                        <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
                           <div className="flex flex-wrap items-center gap-3">
-                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-gym-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-gym-700">
+                            <label className="gc-button-primary inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold">
                               <Upload size={16} />
                               {effectivePostBannerPreview ? 'Replace banner' : 'Upload banner'}
                               <input
@@ -1297,22 +1327,22 @@ const AdminPromotionsPage = () => {
                               <button
                                 type="button"
                                 onClick={removePostBanner}
-                                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-slate-400 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-rose-500/20 hover:bg-rose-500/15 hover:text-rose-300"
                               >
                                 <Trash2 size={16} />
                                 Remove
                               </button>
                             ) : null}
-                            <span className="text-xs text-slate-500">JPG, PNG, or WEBP. Max 5 MB.</span>
+                            <span className="text-xs text-zinc-500">JPG, PNG, or WEBP. Max 5 MB.</span>
                           </div>
                           {isUploadingPostBanner ? (
-                            <p className="mt-3 text-sm font-medium text-gym-700">Uploading banner...</p>
+                            <p className="mt-3 text-sm font-medium text-amber-300" aria-live="polite">Uploading banner…</p>
                           ) : null}
                         </div>
                       </div>
-                      <div className="overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-100">
+                      <div className="overflow-hidden rounded-[1.4rem] border border-white/10 bg-white/10">
                         {effectivePostBannerPreview ? (
-                          <img src={effectivePostBannerPreview} alt="Banner preview" className="h-52 w-full object-cover" />
+                          <img src={effectivePostBannerPreview} alt="Banner preview" className="h-52 w-full object-cover" width="832" height="208" loading="lazy" />
                         ) : (
                           <div className="flex h-52 items-center justify-center text-sm text-slate-400">
                             Banner preview appears here after you upload an image.
@@ -1323,27 +1353,30 @@ const AdminPromotionsPage = () => {
                   </div>
 
                   <aside className="space-y-6 xl:sticky xl:top-0 xl:self-start">
-                    <section className="space-y-5 rounded-[1.75rem] border border-gym-100 bg-gym-50 p-6">
+                    <section className="space-y-5 rounded-[1.75rem] border border-amber-500/20 bg-amber-500/10 p-6">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-gym-700">Link To Coupon</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Pick one coupon that is not already posted</h4>
-                        <p className="mt-2 text-sm text-slate-500">Already-linked coupons are hidden here to keep the campaign list clean, even if you have many coupons.</p>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Link To Coupon</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Pick one coupon that is not already posted</h4>
+                        <p className="mt-2 text-sm text-zinc-500">Already-linked coupons are hidden here to keep the campaign list clean, even if you have many coupons.</p>
                       </div>
                       <div className="space-y-3">
-                        <label htmlFor="post-coupon-search" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon search</label>
-                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 focus-within:border-gym-500">
+                        <label htmlFor="post-coupon-search" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon search</label>
+                        <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-3 transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-within:border-amber-500/30 focus-within:bg-white/[0.07] focus-within:ring-2 focus-within:ring-amber-500/15">
                           <Search size={16} className="text-slate-400" />
                           <input
                             id="post-coupon-search"
-                            type="text"
+                            name="postCouponSearch"
+                            type="search"
                             value={postCouponSearch}
                             onChange={(event) => {
                               setPostCouponSearch(event.target.value)
                               setIsPostCouponPickerOpen(true)
                             }}
                             onFocus={() => setIsPostCouponPickerOpen(true)}
-                            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                            placeholder="Search by code, target, or benefit..."
+                            autoComplete="off"
+                            spellCheck={false}
+                            className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
+                            placeholder="Search by code, target, or benefit…"
                           />
                         </div>
                       </div>
@@ -1351,26 +1384,26 @@ const AdminPromotionsPage = () => {
                         <button
                           type="button"
                           onClick={() => setIsPostCouponPickerOpen((prev) => !prev)}
-                          className={`flex w-full items-center justify-between rounded-[1.25rem] border px-4 py-4 text-left transition-all ${selectedPostCoupon ? 'border-gym-200 bg-white shadow-sm' : 'border-slate-200 bg-white'}`}
+                          className={`flex w-full items-center justify-between rounded-[1.25rem] border px-4 py-4 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] ${selectedPostCoupon ? 'border-gym-500/20 bg-[rgba(18,18,26,0.92)] shadow-sm' : 'border-white/10 bg-[rgba(18,18,26,0.92)]'}`}
                         >
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Selected coupon</p>
                             {selectedPostCoupon ? (
                               <>
-                                <p className="mt-1 font-mono text-base font-bold text-slate-900">{selectedPostCoupon.PromoCode}</p>
-                                <p className="mt-1 text-sm text-slate-500">{formatCouponBenefit(selectedPostCoupon).replace(/^(ORDER|MEMBERSHIP):\s*/, '')}</p>
+                                <p className="mt-1 font-mono text-base font-bold text-white">{selectedPostCoupon.PromoCode}</p>
+                                <p className="mt-1 text-sm text-zinc-500">{formatCouponBenefit(selectedPostCoupon).replace(/^(ORDER|MEMBERSHIP):\s*/, '')}</p>
                               </>
                             ) : (
-                              <p className="mt-1 text-sm font-semibold text-slate-500">Choose a coupon from the filtered list</p>
+                              <p className="mt-1 text-sm font-semibold text-zinc-500">Choose a coupon from the filtered list</p>
                             )}
                           </div>
                           <ChevronDown size={18} className={`text-slate-400 transition-transform ${isPostCouponPickerOpen ? 'rotate-180' : ''}`} />
                         </button>
                         {isPostCouponPickerOpen ? (
-                          <div className="absolute z-20 mt-3 w-full overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white shadow-2xl">
+                          <div className="absolute z-20 mt-3 w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-[rgba(18,18,26,0.92)] shadow-2xl">
                             <div className="max-h-72 overflow-y-auto p-2">
                               {availablePostCoupons.length === 0 ? (
-                                <div className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                                <div className="rounded-xl bg-white/5 px-4 py-6 text-center text-sm text-zinc-500">
                                   No unposted coupons match this search.
                                 </div>
                               ) : availablePostCoupons.map((coupon) => (
@@ -1378,24 +1411,24 @@ const AdminPromotionsPage = () => {
                                   key={coupon.PromotionID}
                                   type="button"
                                   onClick={() => handlePostCouponSelect(coupon)}
-                                  className={`flex w-full items-start justify-between gap-3 rounded-xl px-4 py-3 text-left transition-all ${String(postForm.promotionId) === String(coupon.PromotionID) ? 'bg-gym-50 text-gym-900' : 'hover:bg-slate-50'}`}
+                                  className={`flex w-full items-start justify-between gap-3 rounded-xl px-4 py-3 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] ${String(postForm.promotionId) === String(coupon.PromotionID) ? 'bg-amber-500/10 text-amber-100' : 'hover:bg-white/5'}`}
                                 >
                                   <div className="min-w-0">
-                                    <p className="font-mono text-sm font-bold text-slate-900">{coupon.PromoCode}</p>
-                                    <p className="mt-1 text-xs text-slate-500">{formatCouponBenefit(coupon)}</p>
-                                    <p className="mt-1 text-[11px] text-slate-400">Coupon window: {new Date(coupon.ValidFrom).toLocaleDateString()} - {new Date(coupon.ValidTo).toLocaleDateString()}</p>
+                                    <p className="font-mono text-sm font-bold text-white">{coupon.PromoCode}</p>
+                                    <p className="mt-1 text-xs text-zinc-500">{formatCouponBenefit(coupon)}</p>
+                                    <p className="mt-1 text-[11px] text-slate-400">Coupon window: {formatDateRange(coupon.ValidFrom, coupon.ValidTo)}</p>
                                   </div>
-                                  {String(postForm.promotionId) === String(coupon.PromotionID) ? <Check size={16} className="mt-1 shrink-0 text-gym-600" /> : null}
+                                  {String(postForm.promotionId) === String(coupon.PromotionID) ? <Check size={16} className="mt-1 shrink-0 text-amber-300" /> : null}
                                 </button>
                               ))}
                             </div>
                           </div>
                         ) : null}
                       </div>
-                      <div className="rounded-[1.4rem] border border-white/60 bg-white/80 p-4 text-sm text-slate-600">
+                      <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
                         {selectedPostCoupon ? (
                           <>
-                            <p className="font-bold text-slate-900">Auto-filled from coupon</p>
+                            <p className="font-bold text-white">Auto-filled from coupon</p>
                             <p className="mt-1">Start and end dates below are synced to the selected coupon validity window so the campaign does not outlive the coupon.</p>
                           </>
                         ) : (
@@ -1404,36 +1437,36 @@ const AdminPromotionsPage = () => {
                       </div>
                     </section>
 
-                    <section className="space-y-5 rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6">
+                    <section className="space-y-5 rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Schedule & Status</p>
-                        <h4 className="mt-1 text-lg font-bold text-slate-900">Confirm when the post goes live</h4>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">Schedule & Status</p>
+                        <h4 className="mt-1 text-lg font-bold text-white">Confirm when the post goes live</h4>
                       </div>
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
                         <div className="space-y-1">
-                          <label htmlFor="post-start-at" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Start At</label>
-                          <input id="post-start-at" name="startAt" type="date" value={postForm.startAt} onChange={(event) => updatePostForm('startAt', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                          <label htmlFor="post-start-at" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Start At</label>
+                          <input id="post-start-at" name="startAt" type="date" value={postForm.startAt} onChange={(event) => updatePostForm('startAt', event.target.value)} className={INPUT_CLASS} />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="post-end-at" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> End At</label>
-                          <input id="post-end-at" name="endAt" type="date" value={postForm.endAt} onChange={(event) => updatePostForm('endAt', event.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-gym-500 outline-none transition-all" />
+                          <label htmlFor="post-end-at" className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> End At</label>
+                          <input id="post-end-at" name="endAt" type="date" value={postForm.endAt} onChange={(event) => updatePostForm('endAt', event.target.value)} className={INPUT_CLASS} />
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => updatePostForm('isActive', !postForm.isActive)}
-                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-all ${postForm.isActive ? 'border-gym-200 bg-gym-50' : 'border-slate-200 bg-white'}`}
+                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] ${postForm.isActive ? 'border-gym-500/20 bg-gym-500/10' : 'border-white/10 bg-[rgba(18,18,26,0.92)]'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${postForm.isActive ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${postForm.isActive ? 'bg-gym-600 text-white' : 'bg-white/10 text-zinc-500'}`}>
                             <ShieldCheck size={18} />
                           </span>
                           <div>
-                            <p className="text-sm font-bold text-slate-900">Set as active</p>
-                            <p className="text-xs text-slate-500">{postForm.isActive ? 'Customers will see this campaign immediately when the dates are valid.' : 'Keep this post drafted until you are ready to publish it.'}</p>
+                            <p className="text-sm font-bold text-white">Set as active</p>
+                            <p className="text-xs text-zinc-500">{postForm.isActive ? 'Customers will see this campaign immediately when the dates are valid.' : 'Keep this post drafted until you are ready to publish it.'}</p>
                           </div>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${postForm.isActive ? 'bg-gym-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${postForm.isActive ? 'bg-gym-600 text-white' : 'bg-white/10 text-zinc-500'}`}>
                           {postForm.isActive ? 'Active' : 'Draft'}
                         </span>
                       </button>
@@ -1441,28 +1474,28 @@ const AdminPromotionsPage = () => {
                         type="button"
                         onClick={() => updatePostForm('isImportant', !postForm.isImportant)}
                         aria-pressed={postForm.isImportant}
-                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-all ${postForm.isImportant ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                        className={`flex w-full items-center justify-between gap-4 rounded-[1.25rem] border px-4 py-4 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] ${postForm.isImportant ? 'border-amber-500/20 bg-amber-500/10' : 'border-white/10 bg-[rgba(18,18,26,0.92)]'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${postForm.isImportant ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${postForm.isImportant ? 'bg-amber-500 text-white' : 'bg-white/10 text-zinc-500'}`}>
                             <ShieldCheck size={18} />
                           </span>
                           <div>
-                            <p className="text-sm font-bold text-slate-900">Mark as important broadcast</p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-sm font-bold text-white">Mark as important broadcast</p>
+                            <p className="text-xs text-zinc-500">
                               {postForm.isImportant
                                 ? 'This post will notify every active customer when it is published while still appearing on the Promotions page.'
                                 : 'Leave this off for normal marketing posts that should stay visible only on the Promotions page.'}
                             </p>
                           </div>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${postForm.isImportant ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${postForm.isImportant ? 'bg-amber-500 text-white' : 'bg-white/10 text-zinc-500'}`}>
                           {postForm.isImportant ? 'Broadcast all customers' : 'Page only'}
                         </span>
                       </button>
-                      <div className="rounded-[1.4rem] border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
+                      <div className="rounded-[1.4rem] border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
                         <p className="font-bold">Notification discipline</p>
-                        <p className="mt-1 text-xs text-amber-800">
+                        <p className="mt-1 text-xs text-amber-300">
                           Important posts should be reserved for urgent or high-value campaigns. Standard posts stay in the Promotions page without sending a notification blast.
                         </p>
                       </div>
@@ -1470,16 +1503,16 @@ const AdminPromotionsPage = () => {
                   </aside>
                 </div>
                 {postFormError ? (
-                  <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300" aria-live="polite">
                     {postFormError}
                   </div>
                 ) : null}
-                <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-100 pt-6">
-                  <button type="button" onClick={closePostModal} className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50">
+                <div className="mt-8 flex items-center justify-end gap-3 border-t border-white/10 pt-6">
+                  <button type="button" onClick={closePostModal} className="gc-button-secondary px-5 py-3 text-sm font-bold">
                     Cancel
                   </button>
-                  <button type="submit" disabled={createPostMutation.isPending || updatePostMutation.isPending} className="min-w-[220px] rounded-full bg-gym-600 px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-gym-200 transition-all hover:bg-gym-700 hover:shadow-xl active:scale-[0.98]">
-                    {editingItem ? 'Update Post' : 'Publish Post'}
+                  <button type="submit" disabled={isPostMutationPending} className="gc-button-primary min-w-[220px] px-6 py-3 text-sm font-extrabold shadow-lg shadow-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60">
+                    {isPostMutationPending ? 'Saving…' : editingItem ? 'Update Post' : 'Publish Post'}
                   </button>
                 </div>
               </form>
@@ -1502,3 +1535,9 @@ const AdminPromotionsPage = () => {
 }
 
 export default AdminPromotionsPage
+
+
+
+
+
+

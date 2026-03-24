@@ -3,15 +3,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CreditCard, Dumbbell, ShieldCheck, Sparkles, Ticket, Check } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
+import StatusBadge from '../../components/ui/StatusBadge'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
 import { promotionApi } from '../../features/promotion/api/promotionApi'
+import { formatCurrency } from '../../utils/formatters'
 
 const planTypeMeta = {
   DAY_PASS: {
     label: 'Day Pass',
     headline: 'Quick access for a single training day',
     colors: {
+      accentGlow: 'bg-amber-500/20',
       border: 'border-white/10 group-hover:border-amber-500/30',
       activeBorder: 'border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.15)] ring-1 ring-amber-500',
       bg: 'bg-white/5 group-hover:bg-amber-500/[0.04]',
@@ -33,6 +36,7 @@ const planTypeMeta = {
     label: 'Gym Only',
     headline: 'Standard membership for consistent self-training',
     colors: {
+      accentGlow: 'bg-sky-500/20',
       border: 'border-white/10 group-hover:border-sky-500/30',
       activeBorder: 'border-sky-500/50 shadow-[0_0_30px_rgba(14,165,233,0.15)] ring-1 ring-sky-500',
       bg: 'bg-white/5 group-hover:bg-sky-500/[0.04]',
@@ -54,6 +58,7 @@ const planTypeMeta = {
     label: 'Gym + Coach',
     headline: 'Premium plan with personal training booking access',
     colors: {
+      accentGlow: 'bg-emerald-500/20',
       border: 'border-white/10 group-hover:border-emerald-500/30',
       activeBorder: 'border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500',
       bg: 'bg-white/5 group-hover:bg-emerald-500/[0.04]',
@@ -139,6 +144,10 @@ function buildActiveWarningMessage(mode, currentMembership, selectedPlan) {
   }
 
   return `You already have an ACTIVE membership (${currentName}). If you continue, your current membership will end today and ${selectedName} starts today (upgrade flow).`
+}
+
+function formatMembershipPrice(value) {
+  return formatCurrency(value, 'VND', 'en-US')
 }
 
 function CustomerMembershipPage() {
@@ -370,7 +379,7 @@ function CustomerMembershipPage() {
     const bonusMonths = Number(claim.BonusDurationMonths || 0)
     const parts = []
     if (discountPercent > 0) parts.push(`${discountPercent}% off`)
-    else if (discountAmount > 0) parts.push(`${discountAmount.toLocaleString('en-US')} VND off`)
+    else if (discountAmount > 0) parts.push(`${formatMembershipPrice(discountAmount)} off`)
     if (bonusMonths > 0) parts.push(`+${bonusMonths} month${bonusMonths > 1 ? 's' : ''}`)
     return parts.join(' + ') || 'No benefit'
   }
@@ -441,7 +450,7 @@ function CustomerMembershipPage() {
           <article className="relative overflow-hidden rounded-[1.25rem] border border-amber-500/20 bg-amber-500/5 p-5 shadow-ambient">
             <div className="relative flex items-center justify-between gap-4 border-b border-amber-500/10 pb-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600/70">Queued Next Plan</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600/70">Queued next membership</p>
                 <p className="mt-1 text-base font-bold text-amber-400">{queuedMembership.plan?.name || 'Membership'}</p>
               </div>
               <span className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-400">
@@ -455,7 +464,7 @@ function CustomerMembershipPage() {
                 <span><span className="text-amber-500">Ends:</span> {queuedMembership.endDate || '-'}</span>
               </div>
               <p className="text-[11px] font-medium leading-relaxed text-amber-400/80">
-                Your payment was recorded. This plan will kick in automatically when your active membership sequence concludes.
+                Your payment was recorded. This plan will appear as active automatically when your active membership sequence concludes.
               </p>
             </div>
           </article>
@@ -467,8 +476,16 @@ function CustomerMembershipPage() {
   return (
     <WorkspaceScaffold
       title="Membership Space"
-      subtitle="Select a plan, manage your access, and keep your fitness journey active."
+      subtitle="Select a plan, manage current access, preview membership-target coupons, and move into the correct PayOS checkout mode."
       links={customerNav}
+      headerMeta={(
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge tone={hasActiveMembership ? 'success' : 'neutral'}>
+            {hasActiveMembership ? 'Active membership detected' : 'No active membership'}
+          </StatusBadge>
+          {hasQueuedMembership ? <StatusBadge tone="warning">Queued plan already exists</StatusBadge> : null}
+        </div>
+      )}
     >
       {showSuccessMessage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
@@ -532,7 +549,7 @@ function CustomerMembershipPage() {
                     setSelectionTouched(true)
                     resetCouponSelection()
                   }}
-                  className={`group relative flex min-h-[460px] flex-col overflow-hidden rounded-[2rem] border p-6 text-left transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500 ${!categoryPlans.length ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'} ${
+                  className={`group relative flex min-h-[460px] flex-col overflow-hidden rounded-[2rem] border p-6 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500 ${!categoryPlans.length ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'} ${
                     selected
                       ? `${meta.colors.activeBorder} ${meta.colors.activeBg} scale-[1.02] shadow-ambient`
                       : `${meta.colors.border} ${meta.colors.bg} scale-100 hover:scale-[1.01] hover:shadow-ambient`
@@ -540,7 +557,7 @@ function CustomerMembershipPage() {
                 >
                   {/* Card Background Glow */}
                   {selected && (
-                    <div className={`absolute -right-20 -top-20 h-40 w-40 rounded-full blur-[80px] bg-${meta.colors.accent}-500/20`} />
+                    <div className={`absolute -right-20 -top-20 h-40 w-40 rounded-full blur-[80px] ${meta.colors.accentGlow}`} />
                   )}
 
                   {/* Header Area */}
@@ -557,14 +574,14 @@ function CustomerMembershipPage() {
                   {/* Dropdown Selection Area */}
                   <div className="relative mt-auto pt-6">
                     <label
-                      htmlFor={`duration-${key}`}
+                      htmlFor={`membership-duration-${key}`}
                       className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-slate-500"
                     >
                       Duration Option
                     </label>
                     <div onClick={(e) => e.stopPropagation()} className="relative">
                       <select
-                        id={`duration-${key}`}
+                        id={`membership-duration-${key}`}
                         disabled={!categoryPlans.length}
                         className="gc-input w-full appearance-none pr-10 text-sm font-semibold !text-slate-100 placeholder-slate-500"
                         value={activePlan?.planId ?? ''}
@@ -579,7 +596,7 @@ function CustomerMembershipPage() {
                         {!categoryPlans.length && <option value="">Currently Unavailable</option>}
                         {categoryPlans.map((plan) => (
                           <option key={plan.planId} value={plan.planId} className="bg-[#12121a] text-slate-100">
-                            {formatDurationLabel(plan.durationDays)} — {Number(plan.price || 0).toLocaleString('en-US')} VND
+                            {formatDurationLabel(plan.durationDays)} - {formatMembershipPrice(plan.price)}
                           </option>
                         ))}
                       </select>
@@ -589,7 +606,7 @@ function CustomerMembershipPage() {
                     </div>
 
                     {activePlan ? (
-                      <div className={`mt-4 overflow-hidden rounded-xl border border-white/5 bg-black/20 backdrop-blur-sm transition-all ${selected ? 'ring-1 ring-white/10' : ''}`}>
+                      <div className={`mt-4 overflow-hidden rounded-xl border border-white/5 bg-black/20 backdrop-blur-sm transition-[border-color,box-shadow,background-color] ${selected ? 'ring-1 ring-white/10' : ''}`}>
                         <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3">
                           <span className="truncate pr-4 text-[13px] font-bold text-slate-200">{activePlan.name}</span>
                           {selected ? (
@@ -602,7 +619,7 @@ function CustomerMembershipPage() {
                           <div className="bg-[#101017] p-4 group-hover:bg-[#12121a] transition-colors">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Cost</p>
                             <p className={`mt-1 font-bold tracking-tight ${meta.colors.text}`}>
-                              {Number(activePlan.price || 0).toLocaleString('en-US')}₫
+                              {formatMembershipPrice(activePlan.price)}
                             </p>
                           </div>
                           <div className="bg-[#101017] p-4 group-hover:bg-[#12121a] transition-colors">
@@ -666,7 +683,7 @@ function CustomerMembershipPage() {
                 {selectedPlan ? (
                   <div className="mt-2 text-sm">
                     <p className="font-bold text-slate-200">{selectedPlan.name}</p>
-                    <p className="mt-0.5 text-gym-400 font-bold">{Number(selectedPlan.price || 0).toLocaleString('en-US')} VND</p>
+                    <p className="mt-0.5 text-gym-400 font-bold">{formatMembershipPrice(selectedPlan.price)}</p>
                   </div>
                 ) : (
                   <p className="mt-2 text-[13px] font-medium text-slate-500">No plan selected. Tap a plan on the left.</p>
@@ -683,7 +700,7 @@ function CustomerMembershipPage() {
               {/* Promo Code selector */}
               <div className="space-y-2">
                 <label htmlFor="promo-code" className="block text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                  Wallet Coupons
+                  Apply membership coupon
                 </label>
                 <div className="relative">
                   <select
@@ -693,7 +710,7 @@ function CustomerMembershipPage() {
                     onChange={(e) => handlePromoCodeChange(e.target.value)}
                     className="gc-input w-full appearance-none pr-10 text-[13px] font-semibold !text-slate-100 disabled:opacity-50"
                   >
-                    <option value="" className="bg-[#12121a]">Optimize without coupon</option>
+                    <option value="" className="bg-[#12121a]">Continue without coupon</option>
                     {membershipCoupons.map((claim) => (
                       <option key={claim.ClaimID} value={claim.PromoCode} className="bg-[#12121a]">
                         {claim.PromoCode} • {formatClaimBenefit(claim)}
@@ -714,12 +731,12 @@ function CustomerMembershipPage() {
                 
                 {couponPreview && selectedPromoCode && (
                   <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs">
-                    <p className="font-medium text-emerald-400">Verified Discount: {Number(couponPreview.estimatedDiscount || 0).toLocaleString('en-US')}₫</p>
+                    <p className="font-medium text-emerald-400">Verified Discount: {formatMembershipPrice(couponPreview.estimatedDiscount)}</p>
                     {Number(couponPreview.bonusDurationMonths || 0) > 0 && (
                       <p className="mt-1 font-medium text-emerald-300">Bonus: +{Number(couponPreview.bonusDurationMonths)} month(s) extra</p>
                     )}
                     <hr className="my-2 border-emerald-500/20" />
-                    <p className="font-bold text-slate-100">Final Total: {Number(couponPreview.estimatedFinalAmount || selectedPlan?.price || 0).toLocaleString('en-US')}₫</p>
+                    <p className="font-bold text-slate-100">Final Total: {formatMembershipPrice(couponPreview.estimatedFinalAmount || selectedPlan?.price || 0)}</p>
                   </div>
                 )}
                 {couponPreviewError && (
@@ -738,11 +755,11 @@ function CustomerMembershipPage() {
                   className="gc-button-primary w-full shadow-amber-500/20 disabled:scale-100 disabled:opacity-50 disabled:shadow-none"
                 >
                   {checkoutMutation.isPending ? (
-                    'Initializing Environment...'
+                    'Redirecting to PayOS...'
                   ) : (
                     <span className="flex items-center gap-2">
                       <CalendarClock size={16} className={!selectedPlan || queueLimitReached ? 'opacity-50' : 'opacity-100'} />
-                      <span className="text-sm font-bold tracking-wide">{checkoutActionLabel} Via PayOS</span>
+                      <span className="text-sm font-bold tracking-wide">{checkoutActionLabel} with PayOS</span>
                     </span>
                   )}
                 </button>
@@ -751,7 +768,7 @@ function CustomerMembershipPage() {
                   <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
                     <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" />
                     <p className="text-[11px] font-medium leading-relaxed text-amber-400">
-                      Your schedule is fully booked. You already hold maximum concurrent plans (1 Active + 1 Queued). Use what you have before unlocking more power.
+                      Your schedule is fully booked. You already hold the maximum of 2 memberships in progress (1 Active + 1 Queued). Use what you have before unlocking more power.
                     </p>
                   </div>
                 )}
@@ -807,3 +824,7 @@ function CustomerMembershipPage() {
 }
 
 export default CustomerMembershipPage
+
+
+
+

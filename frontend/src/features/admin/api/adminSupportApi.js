@@ -10,3 +10,5 @@ export const adminSupportApi = {
     return apiClient.get(`/v1/admin/support/customers/${customerId}`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

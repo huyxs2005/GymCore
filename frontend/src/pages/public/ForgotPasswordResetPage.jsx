@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import AuthPageShell from '../../components/auth/AuthPageShell'
+import FormField from '../../components/ui/FormField'
 import { authApi } from '../../features/auth/api/authApi'
 
 function ForgotPasswordResetPage() {
   const location = useLocation()
   const navigate = useNavigate()
-
   const email = location?.state?.email || ''
   const otp = location?.state?.otp || ''
 
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -19,86 +19,67 @@ function ForgotPasswordResetPage() {
 
   async function handleResetPassword(event) {
     event.preventDefault()
-    if (!canReset) {
-      return
-    }
+    if (!canReset) return
+
     try {
       setIsSubmitting(true)
       setErrorMessage('')
-      setMessage('')
-
       await authApi.resetForgotPassword({
         email,
         otp,
         newPassword,
         confirmPassword,
       })
-
-      setMessage('Password reset successful. Please login with your new password.')
-
-      // Small UX win: go back to login after success.
       navigate('/auth/login', { replace: true })
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || 'Password reset failed.')
+      setErrorMessage(error?.response?.data?.message || 'Password reset failed. Check the form and try again.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <h1 className="text-2xl font-bold text-slate-900">Reset password</h1>
-      <p className="mt-2 text-sm text-slate-600">Enter your new password.</p>
-
+    <AuthPageShell
+      kicker="Reset Password"
+      title="Reset password"
+      description="This page should only be reached after the OTP has been verified on the previous screen."
+      asideItems={[
+        'OTP is validated before this screen opens.',
+        'Reset uses the verified email and OTP pair from the previous step.',
+      ]}
+    >
       {!canReset ? (
-        <div className="mt-6 space-y-3 gc-card">
-          <p className="text-sm text-slate-700">
-            Please verify your OTP first.
-          </p>
-          <Link
-            to="/auth/forgot-password"
-            className="inline-flex items-center justify-center rounded-lg bg-gym-500 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700"
-          >
+        <div className="space-y-4 rounded-[20px] border border-amber-400/20 bg-amber-400/10 p-5 text-sm leading-7 text-amber-100">
+          <p>Please verify your OTP first before opening the reset password step.</p>
+          <Link to="/auth/forgot-password" className="gc-button-primary inline-flex">
             Back to forgot password
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleResetPassword} className="mt-6 space-y-4 gc-card">
-          <p className="text-sm text-slate-600">Resetting password for {email}</p>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">New password</span>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              className="gc-input"
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Confirm password</span>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className="gc-input"
-              required
-            />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isSubmitting ? 'Resetting...' : 'Reset password'}
+        <form onSubmit={handleResetPassword} className="space-y-5">
+          <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-slate-300">
+            Resetting password for <span className="font-semibold text-white">{email}</span>.
+          </div>
+
+          <FormField id="reset-new-password" label="New password" hint="Use the same password policy as registration." required>
+            <input id="reset-new-password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="gc-input" required />
+          </FormField>
+
+          <FormField id="reset-confirm-password" label="Confirm password" required>
+            <input id="reset-confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="gc-input" required />
+          </FormField>
+
+          {errorMessage ? <div role="alert" className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
+
+          <button type="submit" disabled={isSubmitting} className="gc-button-primary w-full">
+            {isSubmitting ? 'Resetting...' : 'Reset Password'}
           </button>
         </form>
       )}
-    </div>
+    </AuthPageShell>
   )
 }
 
 export default ForgotPasswordResetPage
+
 

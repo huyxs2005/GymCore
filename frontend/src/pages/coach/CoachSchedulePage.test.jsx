@@ -143,3 +143,5 @@ describe('CoachSchedulePage', () => {
     expect(screen.getByText(/1 slot\(s\) selected for Monday/i)).toBeInTheDocument()
   })
 })
+
+

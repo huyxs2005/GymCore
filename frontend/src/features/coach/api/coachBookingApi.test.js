@@ -101,3 +101,5 @@ describe('coachBookingApi', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/v1/admin/coaches/21/students')
   })
 })
+
+

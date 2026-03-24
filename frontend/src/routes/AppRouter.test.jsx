@@ -49,6 +49,10 @@ vi.mock('../pages/customer/CustomerKnowledgePage', () => ({
   default: () => <div>Customer Knowledge Hub</div>,
 }))
 
+vi.mock('../pages/customer/CustomerOrderHistoryPage', () => ({
+  default: () => <div>Order History</div>,
+}))
+
 vi.mock('../pages/customer/CustomerProgressHubPage', () => ({
   default: () => <div>Customer Progress Hub</div>,
 }))
@@ -334,3 +338,5 @@ describe('AppRouter role guards', () => {
     expect(await screen.findByText(/Customer Progress Hub/i)).toBeInTheDocument()
   })
 })
+
+

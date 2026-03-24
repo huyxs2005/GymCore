@@ -14,6 +14,10 @@ const STATUS_FILTERS = [
   { value: 'archived', label: 'Archived only' },
 ]
 
+const INPUT_CLASS = 'gc-input'
+const TEXTAREA_CLASS = 'gc-textarea'
+const FILTER_CLASS = 'gc-select min-h-0 rounded-2xl bg-[rgba(18,18,26,0.92)] px-4 py-3'
+
 function buildInitialFoodForm(categories = []) {
   const defaultCategoryId = categories[0]?.foodCategoryId ?? ''
   return {
@@ -207,15 +211,15 @@ function AdminFoodsPage() {
       links={adminNav}
     >
       <section className="gc-card-compact space-y-5">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <h2 className="gc-section-kicker">Foods</h2>
-            <p className="mt-1 text-sm text-slate-500">Search, edit, archive, and restore food entries used for customer education and AI recommendations.</p>
+            <p className="mt-1 text-sm text-zinc-500">Search, edit, archive, and restore food entries used for customer education and AI recommendations.</p>
           </div>
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gym-700"
+            className="gc-button-primary inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold"
           >
             <PlusCircle size={18} />
             New food
@@ -223,20 +227,25 @@ function AdminFoodsPage() {
         </header>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-within:border-amber-500/30 focus-within:bg-white/[0.07] focus-within:ring-2 focus-within:ring-amber-500/15">
             <Search size={16} className="text-slate-400" />
+            <span className="sr-only">Search foods</span>
             <input
-              type="text"
+              type="search"
+              name="admin-food-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
               placeholder="Search name or category..."
-              className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
             />
           </label>
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+            name="admin-food-status-filter"
+            className={FILTER_CLASS}
           >
             {STATUS_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -247,7 +256,8 @@ function AdminFoodsPage() {
           <select
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+            name="admin-food-category-filter"
+            className={FILTER_CLASS}
           >
             <option value="ALL">All categories</option>
             {categories
@@ -256,21 +266,33 @@ function AdminFoodsPage() {
                 <option key={category.foodCategoryId} value={String(category.foodCategoryId)}>
                   {category.name}
                 </option>
-              ))}
+            ))}
           </select>
         </div>
 
-        {foodsQuery.isLoading ? <p className="text-sm text-slate-500">Loading foods...</p> : null}
+        {foodsQuery.isLoading ? (
+          <p className="text-sm text-zinc-500" aria-live="polite">
+            Loading foods…
+          </p>
+        ) : null}
         {foodsQuery.isError ? <p className="text-sm text-rose-600">Could not load foods.</p> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredFoods.map((food) => {
             const isActive = Boolean(food.active)
             return (
-              <article key={food.foodId} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+              <article key={food.foodId} className="overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] shadow-sm">
+                <div className="relative aspect-[4/3] overflow-hidden bg-white/10">
                   {food.imageUrl ? (
-                    <img src={food.imageUrl} alt={food.name} referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                    <img
+                      src={food.imageUrl}
+                      alt={food.name}
+                      referrerPolicy="no-referrer"
+                      width="480"
+                      height="360"
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-slate-400">
                       <Apple size={28} />
@@ -278,7 +300,7 @@ function AdminFoodsPage() {
                   )}
                   <span
                     className={`absolute left-4 top-4 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${
-                      isActive ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white'
+                      isActive ? 'bg-emerald-600 text-white' : 'bg-[rgba(18,18,26,0.92)] text-white'
                     }`}
                   >
                     {isActive ? 'Active' : 'Archived'}
@@ -287,11 +309,11 @@ function AdminFoodsPage() {
 
                 <div className="space-y-4 p-4">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">{food.name}</h3>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">{food.description || 'No description yet.'}</p>
+                    <h3 className="text-base font-bold text-white">{food.name}</h3>
+                    <p className="mt-1 line-clamp-2 text-sm text-slate-400">{food.description || 'No description yet.'}</p>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-700">
+                  <div className="grid grid-cols-4 gap-2 rounded-2xl bg-white/5 p-3 text-xs text-slate-300">
                     <div>
                       <p className="font-semibold">Cal</p>
                       <p>{food.calories ?? '-'}</p>
@@ -312,7 +334,7 @@ function AdminFoodsPage() {
 
                   <div className="flex flex-wrap gap-2">
                     {(food.categories || []).map((category) => (
-                      <span key={`${food.foodId}-${category.foodCategoryId}`} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      <span key={`${food.foodId}-${category.foodCategoryId}`} className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-300">
                         {category.name}
                       </span>
                     ))}
@@ -322,7 +344,7 @@ function AdminFoodsPage() {
                     <button
                       type="button"
                       onClick={() => openEdit(food)}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="gc-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
                     >
                       <Edit3 size={16} />
                       Edit
@@ -331,7 +353,7 @@ function AdminFoodsPage() {
                       <button
                         type="button"
                         onClick={() => confirmArchive(food)}
-                        className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                        className="inline-flex items-center gap-2 rounded-full border border-rose-500/25 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-300 transition-[border-color,background-color,transform] duration-200 ease-out hover:border-rose-400/35 hover:bg-rose-500/15 active:scale-[0.98]"
                       >
                         <Trash2 size={16} />
                         Archive
@@ -340,7 +362,7 @@ function AdminFoodsPage() {
                       <button
                         type="button"
                         onClick={() => confirmRestore(food)}
-                        className="inline-flex items-center gap-2 rounded-full border border-gym-200 bg-gym-50 px-4 py-2 text-sm font-semibold text-gym-700 transition hover:bg-gym-100"
+                        className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200 transition-[border-color,background-color,transform] duration-200 ease-out hover:border-amber-400/35 hover:bg-amber-500/15 active:scale-[0.98]"
                       >
                         <Undo2 size={16} />
                         Restore
@@ -365,17 +387,18 @@ function AdminFoodsPage() {
                   <div className="mx-auto flex min-h-full max-w-3xl items-start justify-center">
                     <form
                       onSubmit={submitForm}
-                      className="w-full overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl"
+                      aria-label={formState.foodId ? 'Edit food' : 'Create food'}
+                      className="w-full overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.92)] shadow-2xl"
                     >
-                      <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+                      <header className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Admin food editor</p>
-                          <h2 className="mt-2 text-xl font-bold text-slate-900">{formState.foodId ? 'Edit food' : 'Create food'}</h2>
+                          <h2 className="mt-2 text-xl font-bold text-white">{formState.foodId ? 'Edit food' : 'Create food'}</h2>
                         </div>
                         <button
                           type="button"
                           onClick={closeEditor}
-                          className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                          className="rounded-full p-2 text-zinc-500 transition hover:bg-white/10 hover:text-slate-100"
                           aria-label="Close food editor"
                         >
                           <X size={18} />
@@ -385,104 +408,135 @@ function AdminFoodsPage() {
                       <div className="grid gap-4 p-6 lg:grid-cols-[minmax(0,1fr)_280px]">
                         <div className="space-y-3">
                         <label className="block">
-                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Name *</span>
+                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Name *</span>
                           <input
                             value={formState.name}
                             onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
-                            className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                            name="foodName"
+                            type="text"
+                            autoComplete="off"
+                            className={`mt-1.5 ${INPUT_CLASS}`}
                             placeholder="Chicken Breast"
                           />
                         </label>
 
                         <label className="block">
-                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Description</span>
+                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Description</span>
                           <textarea
                             value={formState.description}
                             onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
+                            name="description"
+                            autoComplete="off"
                             rows={3}
-                            className="mt-1.5 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                            className={`mt-1.5 ${TEXTAREA_CLASS} resize-none`}
                             placeholder="Short overview..."
                           />
                         </label>
 
                         <label className="block">
-                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Recipe</span>
+                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Recipe</span>
                           <textarea
                             value={formState.recipe}
                             onChange={(event) => setFormState((prev) => ({ ...prev, recipe: event.target.value }))}
+                            name="recipe"
+                            autoComplete="off"
                             rows={6}
-                            className="mt-1.5 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                            className={`mt-1.5 ${TEXTAREA_CLASS} resize-none`}
                             placeholder="Step-by-step recipe..."
                           />
                         </label>
                         </div>
 
                         <div className="space-y-3">
-                        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Preview</p>
-                          <div className="mt-3 aspect-[4/3] overflow-hidden rounded-2xl bg-white">
+                        <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Preview</p>
+                          <div className="mt-3 aspect-[4/3] overflow-hidden rounded-2xl bg-[rgba(18,18,26,0.92)]">
                             {String(formState.imageUrl || '').trim() ? (
-                              <img src={formState.imageUrl} alt="Food" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                              <img
+                                src={formState.imageUrl}
+                                alt="Food"
+                                referrerPolicy="no-referrer"
+                                width="480"
+                                height="360"
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-slate-300">
                                 <Apple size={28} />
                               </div>
                             )}
                           </div>
-                          <p className="mt-3 text-xs text-slate-500">Images are loaded directly from the URL you provide.</p>
+                          <p className="mt-3 text-xs text-zinc-500">Images are loaded directly from the URL you provide.</p>
                         </div>
 
                         <label className="block">
-                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Image URL</span>
+                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Image URL</span>
                           <input
                             value={formState.imageUrl}
                             onChange={(event) => setFormState((prev) => ({ ...prev, imageUrl: event.target.value }))}
-                            className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                            name="imageUrl"
+                            type="url"
+                            autoComplete="off"
+                            spellCheck={false}
+                            className={`mt-1.5 ${INPUT_CLASS}`}
                             placeholder="https://..."
                           />
                         </label>
 
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block">
-                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Calories</span>
+                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Calories</span>
                             <input
                               value={formState.calories}
                               onChange={(event) => setFormState((prev) => ({ ...prev, calories: event.target.value }))}
-                              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                              name="calories"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className={`mt-1.5 ${INPUT_CLASS}`}
                               placeholder="165"
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protein</span>
+                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Protein</span>
                             <input
                               value={formState.protein}
                               onChange={(event) => setFormState((prev) => ({ ...prev, protein: event.target.value }))}
-                              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                              name="protein"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className={`mt-1.5 ${INPUT_CLASS}`}
                               placeholder="31"
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Carbs</span>
+                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Carbs</span>
                             <input
                               value={formState.carbs}
                               onChange={(event) => setFormState((prev) => ({ ...prev, carbs: event.target.value }))}
-                              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                              name="carbs"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className={`mt-1.5 ${INPUT_CLASS}`}
                               placeholder="0"
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Fat</span>
+                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Fat</span>
                             <input
                               value={formState.fat}
                               onChange={(event) => setFormState((prev) => ({ ...prev, fat: event.target.value }))}
-                              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                              name="fat"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className={`mt-1.5 ${INPUT_CLASS}`}
                               placeholder="3.6"
                             />
                           </label>
                         </div>
 
-                        <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                          <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                        <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-3">
+                          <span className="flex items-center gap-2 text-sm font-semibold text-slate-300">
                             <ShieldCheck size={16} className="text-gym-600" /> Active
                           </span>
                           <input
@@ -495,8 +549,8 @@ function AdminFoodsPage() {
                         </div>
                       </div>
 
-                      <div className="border-t border-slate-100 px-6 py-5">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Categories *</p>
+                      <div className="border-t border-white/10 px-6 py-5">
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Categories *</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {formCategories.map((category) => {
                             const selected = (formState.categoryIds || []).some((id) => String(id) === String(category.foodCategoryId))
@@ -506,7 +560,7 @@ function AdminFoodsPage() {
                                 type="button"
                                 onClick={() => toggleCategoryId(category.foodCategoryId)}
                                 className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                                  selected ? 'bg-gym-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                  selected ? 'bg-gym-600 text-white' : 'border border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-300 hover:bg-white/5'
                                 }`}
                               >
                                 {category.name}
@@ -515,22 +569,26 @@ function AdminFoodsPage() {
                           })}
                         </div>
 
-                        {formError ? <p className="mt-3 text-sm font-semibold text-rose-700">{formError}</p> : null}
+                        {formError ? (
+                          <p className="mt-3 text-sm font-semibold text-rose-300" aria-live="polite">
+                            {formError}
+                          </p>
+                        ) : null}
 
                         <div className="mt-5 flex flex-wrap justify-end gap-3">
                           <button
                             type="button"
                             onClick={closeEditor}
-                            className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            className="gc-button-secondary px-5 py-2.5 text-sm font-semibold"
                           >
                             Cancel
                           </button>
                           <button
                             type="submit"
                             disabled={upsertMutation.isPending}
-                            className="rounded-full bg-gym-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="gc-button-primary px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {upsertMutation.isPending ? 'Saving...' : 'Save food'}
+                            {upsertMutation.isPending ? 'Saving…' : 'Save food'}
                           </button>
                         </div>
                       </div>
@@ -568,4 +626,10 @@ function AdminFoodsPage() {
 }
 
 export default AdminFoodsPage
+
+
+
+
+
+
 

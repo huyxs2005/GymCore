@@ -17,3 +17,5 @@ export const adminGoalApi = {
     return apiClient.patch(`/v1/admin/goals/${goalId}/restore`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

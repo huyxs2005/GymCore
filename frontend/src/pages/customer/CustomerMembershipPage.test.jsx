@@ -308,3 +308,5 @@ describe('CustomerMembershipPage', () => {
     expect(screen.getByRole('button', { name: /Renew with PayOS/i })).toBeDisabled()
   })
 })
+
+

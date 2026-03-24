@@ -17,3 +17,5 @@ describe('LandingPage', () => {
     expect(screen.getByText(/Step into a gym environment built for strength/i)).toBeInTheDocument()
   })
 })
+
+

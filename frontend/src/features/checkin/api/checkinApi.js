@@ -17,3 +17,5 @@ export const checkinApi = {
     return apiClient.get('/v1/health/coach-notes').then((response) => response.data)
   },
 }
+
+

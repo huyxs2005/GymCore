@@ -1,18 +1,27 @@
 import { Link } from 'react-router-dom'
+import AuthPageShell from '../components/auth/AuthPageShell'
 
 function NotFoundPage() {
   return (
-    <section className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 text-center">
-      <h1 className="text-4xl font-bold text-slate-900">404</h1>
-      <p className="mt-2 text-sm text-slate-600">The page you are looking for does not exist.</p>
-      <Link
-        to="/"
-        className="mt-6 rounded-lg bg-gym-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
-      >
-        Back to home
-      </Link>
-    </section>
+    <AuthPageShell
+      kicker="404"
+      title="The page you are looking for does not exist."
+      description="This route is outside the current workspace map. The page may have moved, the URL may be wrong, or the current role might not expose that path."
+      asideItems={[
+        'Role guards redirect unauthorized users to the home route.',
+        'Use the workspace navigation to stay inside supported routes.',
+      ]}
+    >
+      <div className="space-y-5 text-sm leading-7 text-slate-300">
+        <p>Return to the main entry point and continue from the correct workspace route.</p>
+        <Link to="/" className="gc-button-primary inline-flex">
+          Back to home
+        </Link>
+      </div>
+    </AuthPageShell>
   )
 }
 
 export default NotFoundPage
+
+

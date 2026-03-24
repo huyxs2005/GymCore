@@ -119,16 +119,16 @@ function AvatarCropDialog({ file, open, onClose, onConfirm, maxBytes = 5 * 1024 
         if (event.target === event.currentTarget) onClose?.()
       }}
     >
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-[rgba(18,18,26,0.92)] shadow-xl">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Adjust profile photo</h2>
-            <p className="mt-1 text-sm text-slate-600">Drag to reposition. Use the slider to zoom.</p>
+            <h2 className="text-base font-bold text-white">Adjust profile photo</h2>
+            <p className="mt-1 text-sm text-slate-400">Drag to reposition. Use the slider to zoom.</p>
           </div>
           <button
             type="button"
             onClick={() => onClose?.()}
-            className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-white/10"
             aria-label="Close"
           >
             <X size={18} />
@@ -152,7 +152,7 @@ function AvatarCropDialog({ file, open, onClose, onConfirm, maxBytes = 5 * 1024 
 
         <div className="space-y-3 px-5 py-4">
           <label className="block">
-            <span className="text-sm font-semibold text-slate-700">Zoom</span>
+            <span className="text-sm font-semibold text-slate-300">Zoom</span>
             <input
               type="range"
               min={1}
@@ -164,13 +164,13 @@ function AvatarCropDialog({ file, open, onClose, onConfirm, maxBytes = 5 * 1024 
             />
           </label>
 
-          {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
 
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => onClose?.()}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
               disabled={isSaving}
             >
               Cancel
@@ -191,4 +191,9 @@ function AvatarCropDialog({ file, open, onClose, onConfirm, maxBytes = 5 * 1024 
 }
 
 export default AvatarCropDialog
+
+
+
+
+
 

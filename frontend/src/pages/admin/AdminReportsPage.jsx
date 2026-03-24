@@ -121,7 +121,7 @@ function AdminReportsPage() {
               type="button"
               onClick={handleExport}
               disabled={revenueQuery.isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:bg-white/5 disabled:text-slate-400"
+              className="gc-button-secondary"
             >
               <FileSpreadsheet size={18} />
               Export Excel
@@ -155,7 +155,7 @@ function AdminReportsPage() {
                       }`}
                     >
                       <span className={`mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-2xl ${
-                        activeMode === mode.value ? 'bg-white/5 text-gym-700' : 'bg-white/10 text-slate-400'
+                        activeMode === mode.value ? 'bg-white/5 text-gym-300' : 'bg-white/10 text-slate-400'
                       }`}>
                         <Icon size={18} />
                       </span>
@@ -185,7 +185,7 @@ function AdminReportsPage() {
                         key={option.value}
                         type="button"
                         onClick={() => applyQuickPreset(option.value)}
-                        className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+                      className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${
                           appliedFilter.preset === option.value
                             ? 'bg-gym-600 text-white shadow-sm'
                             : 'border border-white/10 bg-white/5 text-slate-300 hover:border-gym-500/50 hover:text-gym-400'
@@ -210,24 +210,26 @@ function AdminReportsPage() {
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                     <input
                       type="date"
+                      name="custom-range-from"
                       aria-label="Custom range from"
                       value={customRange.from}
                       onChange={(event) => setCustomRange((current) => ({ ...current, from: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-gym-300"
+                      className="gc-input"
                     />
                     <input
                       type="date"
+                      name="custom-range-to"
                       aria-label="Custom range to"
                       value={customRange.to}
                       onChange={(event) => setCustomRange((current) => ({ ...current, to: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-gym-300"
+                      className="gc-input"
                     />
                     <button
                       type="button"
                       onClick={applyCustomRange}
                       aria-label="Apply custom range"
                       disabled={!customRange.from || !customRange.to}
-                      className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className="gc-button-primary"
                     >
                       Apply range
                     </button>
@@ -237,7 +239,7 @@ function AdminReportsPage() {
             </div>
           </div>
 
-          <div className="rounded-[32px] bg-slate-900 px-6 py-5 text-white shadow-sm">
+          <div className="rounded-[32px] bg-[rgba(18,18,26,0.92)] px-6 py-5 text-white shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">Applied filter</p>
@@ -254,9 +256,9 @@ function AdminReportsPage() {
         </section>
 
         {revenueQuery.error ? (
-          <section className="gc-card-compact border border-rose-200 bg-rose-50/80">
-            <h3 className="text-lg font-bold text-rose-900">Revenue data could not be loaded</h3>
-            <p className="mt-2 text-sm text-rose-700">
+          <section className="gc-card-compact border border-rose-500/20 bg-rose-500/10/80">
+            <h3 className="text-lg font-bold text-rose-200">Revenue data could not be loaded</h3>
+            <p className="mt-2 text-sm text-rose-300">
               {revenueQuery.error?.response?.data?.message || 'Refresh the page or retry once the backend is available.'}
             </p>
           </section>
@@ -275,14 +277,14 @@ function AdminReportsPage() {
             label="Total revenue"
             value={tiles.selectedRangeRevenue}
             subtitle="Selected applied range"
-            tone="bg-gym-500/20 text-gym-700"
+            tone="bg-gym-500/20 text-gym-300"
             icon={<TrendingUp size={18} />}
           />
           <MetricCard
             label="Membership revenue"
             value={split.memberships}
             subtitle="Membership checkout flow"
-            tone="bg-blue-500/20 text-blue-300"
+            tone="bg-sky-500/20 text-blue-300"
             icon={<CalendarDays size={18} />}
           />
           <MetricCard
@@ -374,7 +376,7 @@ function AdminReportsPage() {
                 label="Memberships"
                 value={split.memberships}
                 percentage={membershipShare}
-                accent="bg-blue-500"
+                accent="bg-sky-500"
                 track="bg-blue-100"
               />
               <RevenueMixRow
@@ -382,7 +384,7 @@ function AdminReportsPage() {
                 value={split.products}
                 percentage={productShare}
                 accent="bg-emerald-500"
-                track="bg-emerald-100"
+                track="bg-emerald-500/15"
               />
             </section>
 
@@ -505,13 +507,13 @@ function DailyLedgerRow({ point, maxTotal }) {
       <div className="space-y-3">
         <div className="h-3 overflow-hidden rounded-full bg-white/10">
           <div className="flex h-full" style={{ width: `${Math.min(intensity, 100)}%` }}>
-            <span className="h-full bg-blue-500" style={{ width: `${membershipShare}%` }} />
+            <span className="h-full bg-sky-500" style={{ width: `${membershipShare}%` }} />
             <span className="h-full bg-emerald-500" style={{ width: `${productShare}%` }} />
           </div>
         </div>
         <div className="flex flex-wrap gap-4 text-xs text-slate-400">
           <span className="inline-flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
             Memberships {formatCurrency(point.membershipRevenue)}
           </span>
           <span className="inline-flex items-center gap-2">
@@ -605,9 +607,17 @@ function buildFallbackExportName(range, appliedFilter) {
   return `GymCore_Revenue_${describePendingFilter(appliedFilter).replace(/\s+/g, '_')}.xlsx`
 }
 
+function getPreferredLocale() {
+  if (typeof navigator !== 'undefined') {
+    const first = Array.isArray(navigator.languages) ? navigator.languages[0] : navigator.language
+    if (first) return first
+  }
+  return 'en-US'
+}
+
 function formatCompactDate(dateValue) {
   const parsed = new Date(`${dateValue}T00:00:00`)
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(getPreferredLocale(), {
     month: 'short',
     day: 'numeric',
   }).format(parsed)
@@ -615,7 +625,7 @@ function formatCompactDate(dateValue) {
 
 function formatLongDate(dateValue) {
   const parsed = new Date(`${dateValue}T00:00:00`)
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(getPreferredLocale(), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -623,7 +633,13 @@ function formatLongDate(dateValue) {
 }
 
 function formatCurrency(value) {
-  return `${Number(value || 0).toLocaleString()} VND`
+  return `${new Intl.NumberFormat(getPreferredLocale(), {
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0))} VND`
 }
 
 export default AdminReportsPage
+
+
+
+

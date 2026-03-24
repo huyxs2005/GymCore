@@ -44,3 +44,5 @@ export const adminPromotionApi = {
       .then((response) => response.data)
   },
 }
+
+

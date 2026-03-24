@@ -11,6 +11,7 @@ import { orderApi } from '../../features/product/api/orderApi'
 import { productApi } from '../../features/product/api/productApi'
 import { triggerAddToCartAnimation } from '../../features/product/utils/cartAnimation'
 import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
+import { formatCurrency } from '../../utils/formatters'
 
 function CustomerShopPage() {
   const queryClient = useQueryClient()
@@ -132,27 +133,27 @@ function CustomerShopPage() {
     >
       {showSuccessMessage ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="animate-in fade-in zoom-in rounded-3xl bg-white p-8 text-center shadow-2xl duration-300">
+          <div className="animate-in fade-in zoom-in rounded-3xl bg-[rgba(18,18,26,0.92)] p-8 text-center shadow-2xl duration-300">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <Star size={32} className="fill-emerald-600" />
             </div>
-            <h2 className="mb-2 text-2xl font-bold text-slate-900">Order Successful!</h2>
-            <p className="text-slate-600">Your payment was confirmed. Check your email or order history for the order ID, then bring it to the gym front desk for pickup.</p>
+            <h2 className="mb-2 text-2xl font-bold text-white">Order Successful!</h2>
+            <p className="text-slate-400">Your payment was confirmed. Check your email or order history for the order ID, then bring it to the gym front desk for pickup.</p>
           </div>
         </div>
       ) : null}
 
       <section className="gc-card-compact space-y-5">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <h2 className="gc-section-kicker">Catalog</h2>
-            <p className="mt-1 text-sm text-slate-500">Search products here. Open a product page for the full gallery, usage instructions, and reviews.</p>
+            <p className="mt-1 text-sm text-zinc-500">Search products here. Open a product page for the full gallery, usage instructions, and reviews.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Link to="/customer/orders" className="inline-flex items-center rounded-full border border-gym-200 bg-gym-50 px-4 py-2 text-sm font-semibold text-gym-700 transition hover:bg-gym-100">
+            <Link to="/customer/orders" className="inline-flex items-center rounded-full border border-gym-500/20 bg-gym-500/10 px-4 py-2 text-sm font-semibold text-gym-300 transition hover:bg-gym-500/15">
               View buying history
             </Link>
-            <Link to="/customer/cart" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+            <Link to="/customer/cart" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/5">
               <ShoppingCart size={16} />
               View cart ({cartItemCount})
             </Link>
@@ -160,17 +161,20 @@ function CustomerShopPage() {
         </header>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-[border-color,background-color,box-shadow] focus-within:border-gym-500/40 focus-within:bg-white/10 focus-within:ring-2 focus-within:ring-gym-500/20">
             <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Search</span>
             <input
-              type="text"
+              type="search"
+              name="shopSearch"
+              autoComplete="off"
+              spellCheck={false}
               value={productSearch}
               onChange={(event) => setProductSearch(event.target.value)}
-              placeholder="Protein, creatine, pre-workout..."
-              className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              placeholder="Protein, creatine, pre-workout…"
+              className="w-full bg-transparent text-sm text-white placeholder:text-slate-400"
             />
           </label>
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+          <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-3 text-sm font-semibold text-slate-300">
             {cartItemCount} item(s) in cart
           </div>
         </div>
@@ -179,7 +183,7 @@ function CustomerShopPage() {
           <button
             type="button"
             onClick={() => setSelectedCategoryId('ALL')}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedCategoryId === 'ALL' ? 'bg-gym-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedCategoryId === 'ALL' ? 'bg-gym-600 text-white' : 'border border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-300 hover:bg-white/5'}`}
           >
             All
           </button>
@@ -188,26 +192,29 @@ function CustomerShopPage() {
               key={category.productCategoryId}
               type="button"
               onClick={() => setSelectedCategoryId(String(category.productCategoryId))}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${String(selectedCategoryId) === String(category.productCategoryId) ? 'bg-gym-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${String(selectedCategoryId) === String(category.productCategoryId) ? 'bg-gym-600 text-white' : 'border border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-300 hover:bg-white/5'}`}
             >
               {category.name}
             </button>
           ))}
         </div>
 
-        {productsQuery.isLoading ? <p className="text-sm text-slate-500">Loading products...</p> : null}
+        {productsQuery.isLoading ? <p aria-live="polite" className="text-sm text-zinc-500">Loading products…</p> : null}
         {productsQuery.isError ? <p className="text-sm text-rose-600">Could not load products.</p> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProducts.map((product) => {
             const desiredQuantity = getDesiredQuantity(product.productId)
             return (
-              <article key={product.productId} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <article key={product.productId} className="overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                 <Link to={`/customer/shop/${product.productId}`} className="block">
-                  <div className="aspect-[4/3] overflow-hidden bg-slate-100">
+                  <div className="aspect-[4/3] overflow-hidden bg-white/10">
                     <img
                       src={getDynamicProductImage(product.name)}
                       alt={product.name}
+                      width="640"
+                      height="480"
+                      loading="lazy"
                       className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]"
                     />
                   </div>
@@ -216,15 +223,15 @@ function CustomerShopPage() {
                   <div className="space-y-2">
                     <div className="flex flex-wrap gap-2">
                       {(product.categories || []).map((category) => (
-                        <span key={`${product.productId}-${category.productCategoryId}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+                        <span key={`${product.productId}-${category.productCategoryId}`} className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                           {category.name}
                         </span>
                       ))}
                     </div>
-                    <Link to={`/customer/shop/${product.productId}`} className="block text-lg font-bold text-slate-900 hover:text-gym-700">
+                    <Link to={`/customer/shop/${product.productId}`} className="block text-lg font-bold text-white hover:text-gym-300">
                       {product.name}
                     </Link>
-                    <p className="text-sm text-slate-600">
+                    <p className="text-sm text-slate-400">
                       {product.shortDescription || product.description || 'Product details available on the product page.'}
                     </p>
                     <ProductRating rating={Number(product.averageRating || 0)} count={Number(product.reviewCount || 0)} />
@@ -233,20 +240,20 @@ function CustomerShopPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Price</p>
-                      <p className="mt-1 text-xl font-bold text-slate-900">{Number(product.price || 0).toLocaleString('en-US')} VND</p>
+                      <p className="mt-1 text-xl font-bold text-white">{formatCurrency(product.price)}</p>
                     </div>
-                    <Link to={`/customer/shop/${product.productId}`} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                    <Link to={`/customer/shop/${product.productId}`} className="rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/5">
                       View details
                     </Link>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">
-                      <button type="button" onClick={() => changeDesiredQuantity(product.productId, -1)} className="rounded-full px-1 text-slate-500 hover:text-slate-900">
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-2 py-1 text-xs">
+                      <button type="button" onClick={() => changeDesiredQuantity(product.productId, -1)} className="rounded-full px-1 text-zinc-500 hover:text-white">
                         -
                       </button>
-                      <span className="min-w-[1.5rem] text-center font-semibold text-slate-800">{desiredQuantity}</span>
-                      <button type="button" onClick={() => changeDesiredQuantity(product.productId, 1)} className="rounded-full px-1 text-slate-500 hover:text-slate-900">
+                      <span className="min-w-[1.5rem] text-center font-semibold text-slate-100">{desiredQuantity}</span>
+                      <button type="button" onClick={() => changeDesiredQuantity(product.productId, 1)} className="rounded-full px-1 text-zinc-500 hover:text-white">
                         +
                       </button>
                     </div>
@@ -261,7 +268,7 @@ function CustomerShopPage() {
                       <button
                         type="button"
                         onClick={(event) => handleBuyNow(product, { quantity: desiredQuantity, sourceElement: event.currentTarget })}
-                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
                       >
                         Buy now
                       </button>
@@ -274,7 +281,7 @@ function CustomerShopPage() {
         </div>
 
         {!productsQuery.isLoading && filteredProducts.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
+          <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 px-5 py-8 text-center text-sm text-zinc-500">
             No products match the current filters.
           </div>
         ) : null}
@@ -299,9 +306,14 @@ function ProductRating({ rating, count, size = 'md' }) {
           return <StarOff key={index} size={iconSize} className="text-slate-300" />
         })}
       </div>
-      <span className="text-[11px] font-medium text-slate-600">{value.toFixed(1)} {typeof count === 'number' ? `(${count})` : ''}</span>
+      <span className="text-[11px] font-medium text-slate-400">{value.toFixed(1)} {typeof count === 'number' ? `(${count})` : ''}</span>
     </div>
   )
 }
 
 export default CustomerShopPage
+
+
+
+
+

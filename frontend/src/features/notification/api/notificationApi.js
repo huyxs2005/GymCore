@@ -26,3 +26,5 @@ export const notificationApi = {
     return apiClient.patch('/v1/notifications/read-all').then((response) => response.data)
   },
 }
+
+

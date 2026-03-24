@@ -103,3 +103,5 @@ describe('RegisterPage - Resend OTP Cooldown', () => {
     expect(resendBtn).toHaveTextContent(/^Resend OTP$/i)
   })
 })
+
+

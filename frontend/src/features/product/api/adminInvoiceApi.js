@@ -14,3 +14,5 @@ export const adminInvoiceApi = {
     return apiClient.patch(`/v1/admin/invoices/${invoiceId}/resend-email`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

@@ -217,3 +217,5 @@ describe('AdminProductsPage', () => {
     expect(adminProductApi.createProduct).not.toHaveBeenCalled()
   })
 })
+
+

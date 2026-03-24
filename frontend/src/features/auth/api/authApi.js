@@ -47,3 +47,5 @@ export const authApi = {
     return apiClient.post('/v1/auth/logout').then((response) => response.data)
   },
 }
+
+

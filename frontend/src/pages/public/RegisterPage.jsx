@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import AuthPageShell from '../../components/auth/AuthPageShell'
+import FormField from '../../components/ui/FormField'
 import { authApi } from '../../features/auth/api/authApi'
 
 function RegisterPage() {
@@ -19,9 +21,7 @@ function RegisterPage() {
   const [isResending, setIsResending] = useState(false)
 
   useEffect(() => {
-    if (cooldownSeconds <= 0) {
-      return undefined
-    }
+    if (cooldownSeconds <= 0) return undefined
     const timer = setTimeout(() => setCooldownSeconds((prev) => Math.max(0, prev - 1)), 1000)
     return () => clearTimeout(timer)
   }, [cooldownSeconds])
@@ -39,14 +39,13 @@ function RegisterPage() {
       setIsSubmitting(true)
       setErrorMessage('')
       setMessage('')
-
       const response = await authApi.register(registerForm)
       const data = response?.data || {}
       setStep('verify')
       setCooldownSeconds(Number(data.resendCooldownSeconds || 5))
       setMessage('OTP sent to your email. Enter it to complete registration.')
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || 'Registration failed.')
+      setErrorMessage(error?.response?.data?.message || 'Registration failed. Check the form and try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -58,30 +57,26 @@ function RegisterPage() {
       setIsSubmitting(true)
       setErrorMessage('')
       setMessage('')
-
       await authApi.verifyRegisterOtp({
         email: registerForm.email,
         otp,
       })
-      setMessage('Account verified successfully. You can now login.')
+      setMessage('Account verified successfully. You can now sign in.')
       setStep('done')
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || 'OTP verification failed.')
+      setErrorMessage(error?.response?.data?.message || 'OTP verification failed. Check the code and try again.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   async function handleResendOtp() {
-    if (cooldownSeconds > 0 || isResending) {
-      return
-    }
+    if (cooldownSeconds > 0 || isResending) return
     try {
       setIsResending(true)
       setErrorMessage('')
       setMessage('')
 
-      // Start the 5s countdown immediately (even if the network is slow).
       const startedAtMs = Date.now()
       setCooldownSeconds(5)
 
@@ -100,129 +95,86 @@ function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <h1 className="text-2xl font-bold text-slate-900">Create account</h1>
-      <p className="mt-2 text-sm text-slate-600">Register with email/password, then verify OTP from Gmail.</p>
-
+    <AuthPageShell
+      kicker="Create Account"
+      title="Start with a verified account, then move into the gym workflow."
+      description="Registration uses the documented OTP flow: create account details first, verify by email second."
+      asideItems={[
+        'OTP expires after 2 minutes.',
+        'Resend cooldown is 5 seconds.',
+        'Resending invalidates the previous OTP.',
+      ]}
+      footer={(
+        <p className="text-sm text-slate-500">
+          Already have an account?{' '}
+          <Link to="/auth/login" className="font-semibold text-gym-300 hover:text-white">
+            Sign in
+          </Link>
+        </p>
+      )}
+    >
       {step === 'register' ? (
-        <form
-          onSubmit={handleStartRegistration}
-          className="mt-6 space-y-4 gc-card"
-        >
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Full name</span>
-            <input
-              name="fullName"
-              value={registerForm.fullName}
-              onChange={handleRegisterChange}
-              className="gc-input"
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Email</span>
-            <input
-              type="email"
-              name="email"
-              value={registerForm.email}
-              onChange={handleRegisterChange}
-              className="gc-input"
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Phone</span>
-            <input
-              name="phone"
-              value={registerForm.phone}
-              onChange={handleRegisterChange}
-              className="gc-input"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Password</span>
-            <input
-              type="password"
-              name="password"
-              value={registerForm.password}
-              onChange={handleRegisterChange}
-              className="gc-input"
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">Confirm password</span>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={registerForm.confirmPassword}
-              onChange={handleRegisterChange}
-              className="gc-input"
-              required
-            />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
+        <form onSubmit={handleStartRegistration} className="space-y-5">
+          <FormField id="register-full-name" label="Full name" required>
+            <input id="register-full-name" name="fullName" autoComplete="name" value={registerForm.fullName} onChange={handleRegisterChange} className="gc-input" required />
+          </FormField>
+
+          <FormField id="register-email" label="Email address" required>
+            <input id="register-email" type="email" name="email" autoComplete="email" inputMode="email" spellCheck={false} value={registerForm.email} onChange={handleRegisterChange} className="gc-input" placeholder="name@example.com" required />
+          </FormField>
+
+          <FormField id="register-phone" label="Phone" hint="Phone uniqueness is normalized by the system.">
+            <input id="register-phone" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={registerForm.phone} onChange={handleRegisterChange} className="gc-input" placeholder="0901234567" />
+          </FormField>
+
+          <FormField id="register-password" label="Password" hint="Minimum 8 chars with uppercase, number, and special character." required>
+            <input id="register-password" aria-label="Password" type="password" name="password" autoComplete="new-password" value={registerForm.password} onChange={handleRegisterChange} className="gc-input" required />
+          </FormField>
+
+          <FormField id="register-confirm-password" label="Confirm password" required>
+            <input id="register-confirm-password" type="password" name="confirmPassword" autoComplete="new-password" value={registerForm.confirmPassword} onChange={handleRegisterChange} className="gc-input" required />
+          </FormField>
+
+          {errorMessage ? <div role="alert" className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
+          {message ? <div aria-live="polite" className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm leading-6 text-emerald-100">{message}</div> : null}
+
+          <button type="submit" disabled={isSubmitting} className="gc-button-primary w-full">
             {isSubmitting ? 'Sending OTP...' : 'Register'}
           </button>
         </form>
       ) : null}
 
       {step === 'verify' ? (
-        <form
-          onSubmit={handleVerifyOtp}
-          className="mt-6 space-y-4 gc-card"
-        >
-          <p className="text-sm text-slate-600">Enter the 6-digit OTP sent to {registerForm.email}.</p>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-700">OTP</span>
-            <input
-              value={otp}
-              onChange={(event) => setOtp(event.target.value)}
-              className="gc-input"
-              maxLength={6}
-              required
-            />
-          </label>
-          {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
+        <form onSubmit={handleVerifyOtp} className="space-y-5">
+          <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-slate-300">
+            Enter the 6-digit OTP sent to <span className="font-semibold text-white">{registerForm.email}</span>.
+          </div>
+
+          <FormField id="register-otp" label="OTP code" required>
+            <input id="register-otp" name="otp" inputMode="numeric" autoComplete="one-time-code" spellCheck={false} value={otp} onChange={(event) => setOtp(event.target.value)} className="gc-input" maxLength={6} placeholder="123456" required />
+          </FormField>
+
+          {errorMessage ? <div role="alert" className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
+          {message ? <div aria-live="polite" className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm leading-6 text-emerald-100">{message}</div> : null}
+
+          <button type="submit" disabled={isSubmitting} className="gc-button-primary w-full">
             {isSubmitting ? 'Verifying...' : 'Verify OTP'}
           </button>
-          <button
-            type="button"
-            onClick={handleResendOtp}
-            disabled={cooldownSeconds > 0 || isResending}
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <button type="button" onClick={handleResendOtp} disabled={cooldownSeconds > 0 || isResending} className="gc-button-secondary w-full">
             {cooldownSeconds > 0 ? `Resend OTP (${cooldownSeconds}s)` : 'Resend OTP'}
           </button>
         </form>
       ) : null}
 
       {step === 'done' ? (
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Registration complete. Please login with your email and password.
+        <div className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/10 px-5 py-4 text-sm leading-7 text-emerald-100">
+          Registration is complete. Move to login and continue with your verified account.
         </div>
       ) : null}
-
-      <p className="mt-4 text-sm text-slate-600">
-        Already have an account?{' '}
-        <Link to="/auth/login" className="font-semibold text-gym-700 hover:underline">
-          Login
-        </Link>
-      </p>
-    </div>
+    </AuthPageShell>
   )
 }
 
 export default RegisterPage
+
+

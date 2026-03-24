@@ -35,3 +35,5 @@ describe('notificationApi', () => {
     expect(apiClient.patch).toHaveBeenCalledWith('/v1/notifications/read-all')
   })
 })
+
+

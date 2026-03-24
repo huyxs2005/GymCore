@@ -69,16 +69,16 @@ function QrCodeDialog({ open, onClose }) {
         if (event.target === event.currentTarget) onClose?.()
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.94)] p-5 shadow-[0_28px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Your Check-in QR</h2>
-            <p className="mt-1 text-sm text-slate-600">Show this code to the receptionist for check-in.</p>
+            <h2 className="text-lg font-bold text-white">Your Check-in QR</h2>
+            <p className="mt-1 text-sm text-zinc-400">Show this code to the receptionist for check-in.</p>
           </div>
           <button
             type="button"
             onClick={() => onClose?.()}
-            className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100"
+            className="rounded-lg p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white"
             aria-label="Close"
           >
             <X size={18} />
@@ -86,17 +86,17 @@ function QrCodeDialog({ open, onClose }) {
         </div>
 
         <div className="mt-4 grid place-items-center">
-          {isLoading ? <p className="text-sm text-slate-600">Loading...</p> : null}
-          {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+          {isLoading ? <p className="text-sm text-zinc-400">Loading...</p> : null}
+          {error ? <p className="text-sm text-rose-400">{error}</p> : null}
           {!isLoading && !error && qrUrl ? (
-            <img src={qrUrl} alt="QR code" className="h-64 w-64 rounded-xl border border-slate-200 bg-white" />
+            <img src={qrUrl} alt="QR code" className="h-64 w-64 rounded-xl border border-white/10 bg-white p-2" />
           ) : null}
         </div>
         <div className="mt-4 flex justify-end">
           <button
             type="button"
             onClick={() => onClose?.()}
-            className="rounded-lg bg-gym-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
+            className="gc-button-primary min-h-10 px-4 py-2 text-sm"
           >
             Done
           </button>
@@ -112,3 +112,5 @@ function QrCodeDialog({ open, onClose }) {
 }
 
 export default QrCodeDialog
+
+

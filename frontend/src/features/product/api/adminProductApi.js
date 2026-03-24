@@ -32,3 +32,5 @@ export const adminProductApi = {
     return apiClient.get('/v1/admin/products/reviews').then((response) => response.data?.data ?? response.data)
   },
 }
+
+

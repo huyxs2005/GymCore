@@ -8,6 +8,10 @@ import { coachApi } from '../../features/coach/api/coachApi'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
 import { membershipApi } from '../../features/membership/api/membershipApi'
 
+function formatIntlDate(date, options) {
+  return new Intl.DateTimeFormat(undefined, options).format(date)
+}
+
 const DAYS = [
   { id: 1, label: 'Monday', shortLabel: 'Mon' },
   { id: 2, label: 'Tuesday', shortLabel: 'Tue' },
@@ -78,7 +82,7 @@ function shiftMonth(monthCursor, delta) {
 function formatHumanDate(value) {
   const parsed = parseDateValue(value)
   if (!parsed) return 'Select date'
-  return parsed.toLocaleDateString(undefined, {
+  return formatIntlDate(parsed, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -91,7 +95,7 @@ function formatDateTimeLabel(value) {
   if (Number.isNaN(parsed.getTime())) {
     return String(value)
   }
-  return parsed.toLocaleString(undefined, {
+  return formatIntlDate(parsed, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -514,28 +518,28 @@ function CustomerCoachBookingPage() {
     const normalized = String(status || '').toUpperCase()
     if (normalized === 'SCHEDULED') {
       return {
-        badge: 'bg-emerald-500/15 text-emerald-700',
-        card: 'border-emerald-200 bg-emerald-50/60',
+        badge: 'bg-emerald-500/15 text-emerald-300',
+        card: 'border-emerald-500/20 bg-emerald-500/10/60',
         dot: 'bg-emerald-500',
       }
     }
     if (normalized === 'COMPLETED') {
       return {
-        badge: 'bg-sky-500/15 text-sky-700',
-        card: 'border-sky-200 bg-sky-50/60',
+        badge: 'bg-sky-500/15 text-sky-300',
+        card: 'border-sky-500/20 bg-sky-500/10/60',
         dot: 'bg-sky-500',
       }
     }
     if (normalized === 'CANCELLED') {
       return {
-        badge: 'bg-red-500/15 text-red-700',
-        card: 'border-red-200 bg-red-50/50',
-        dot: 'bg-red-500',
+        badge: 'bg-rose-500/15 text-rose-300',
+        card: 'border-rose-500/20 bg-rose-500/10/50',
+        dot: 'bg-rose-500',
       }
     }
     return {
-      badge: 'bg-slate-100 text-slate-700',
-      card: 'border-slate-200 bg-white',
+      badge: 'bg-white/10 text-slate-200',
+      card: 'border-white/10 bg-[rgba(18,18,26,0.92)]',
       dot: 'bg-slate-400',
     }
   }
@@ -924,7 +928,7 @@ function CustomerCoachBookingPage() {
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.18),_transparent_40%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-6 text-white shadow-xl">
+        <section className="overflow-hidden rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.18),_transparent_40%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-6 text-white shadow-xl">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">PT Dashboard</p>
@@ -933,7 +937,7 @@ function CustomerCoachBookingPage() {
               }</h3>
               {activePhase ? (
                 <p className="text-sm leading-relaxed text-slate-200">
-                  Primary coach <strong className="text-white">{activePhase.coachName}</strong> • {activePhase.startDate} to {activePhase.endDate}
+                  Primary coach <strong className="text-white">{activePhase.coachName}</strong> | {activePhase.startDate} to {activePhase.endDate}
                 </p>
               ) : (
                 <p className="text-sm leading-relaxed text-slate-200">
@@ -993,7 +997,7 @@ function CustomerCoachBookingPage() {
                     {latestProgress.weightKg ? `${latestProgress.weightKg} kg` : 'No progress update recorded yet.'}
                   </p>
                   <p className="mt-1 text-xs text-slate-300">
-                    {latestProgress.heightCm ? `${latestProgress.heightCm} cm` : 'Height pending'} • {latestProgress.bmi ? `BMI ${latestProgress.bmi}` : 'BMI pending'}
+                    {latestProgress.heightCm ? `${latestProgress.heightCm} cm` : 'Height pending'} | {latestProgress.bmi ? `BMI ${latestProgress.bmi}` : 'BMI pending'}
                   </p>
                   <p className="mt-2 text-xs text-slate-300">{formatDateTimeLabel(latestProgress.recordedAt)}</p>
                 </div>
@@ -1023,12 +1027,12 @@ function CustomerCoachBookingPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-white">{getDayMeta(session.dayOfWeek)?.label || session.sessionDate}</p>
-                          <p className="mt-1 text-xs text-slate-300">{session.sessionDate} • {formatSlotLabel(session.timeSlotId)}</p>
+                          <p className="mt-1 text-xs text-slate-300">{session.sessionDate} | {formatSlotLabel(session.timeSlotId)}</p>
                         </div>
                         <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200">{session.status}</span>
                       </div>
                       {session.replacementOffer?.status === 'PENDING_CUSTOMER' && (
-                        <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-4">
+                        <div className="mt-4 rounded-2xl border border-amber-500/30/30 bg-amber-400/10 p-4">
                           <p className="text-sm font-bold text-amber-100">Replacement coach offer</p>
                           <p className="mt-1 text-sm text-amber-50">
                             {session.replacementOffer.replacementCoachName} can cover this exception session for {session.replacementOffer.originalCoachName}.
@@ -1049,7 +1053,7 @@ function CustomerCoachBookingPage() {
                               type="button"
                               onClick={() => handleReplacementDecision(session.ptSessionId, 'DECLINE')}
                               disabled={loading}
-                              className="rounded-full border border-amber-100/30 bg-transparent px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-white/10 disabled:opacity-50"
+                              className="rounded-full border border-amber-500/20/30 bg-transparent px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-white/10 disabled:opacity-50"
                             >
                               Decline replacement
                             </button>
@@ -1066,7 +1070,7 @@ function CustomerCoachBookingPage() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       {dashboardTemplateSlots.map((slot) => (
                         <span key={`template-slot-${slot.dayOfWeek}-${slot.timeSlotId}`} className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-100">
-                          {getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`} • {formatSlotLabel(slot.timeSlotId)}
+                          {getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`} | {formatSlotLabel(slot.timeSlotId)}
                         </span>
                       ))}
                     </div>
@@ -1099,18 +1103,18 @@ function CustomerCoachBookingPage() {
           )}
         </section>
 
-        <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="gc-panel overflow-hidden p-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Match Coaches</button>
-              <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
-              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback Coach</button>
+              <button onClick={() => setActiveTab('match')} className={`rounded-2xl border px-4 py-2 font-semibold transition ${activeTab === 'match' ? 'border-amber-300/30 bg-gym-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/15 hover:bg-white/[0.07]'}`}>Match Coaches</button>
+              <button onClick={() => setActiveTab('schedule')} className={`rounded-2xl border px-4 py-2 font-semibold transition ${activeTab === 'schedule' ? 'border-amber-300/30 bg-gym-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/15 hover:bg-white/[0.07]'}`}>My PT Schedule</button>
+              <button onClick={() => setActiveTab('feedback')} className={`rounded-2xl border px-4 py-2 font-semibold transition ${activeTab === 'feedback' ? 'border-amber-300/30 bg-gym-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/15 hover:bg-white/[0.07]'}`}>Feedback Coach</button>
             </div>
             <div className="grid gap-3 md:grid-cols-3 xl:min-w-[52rem]">
               {plannerStatusSummary.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div key={item.id} className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),rgba(26,26,36,0.72)] px-4 py-3 backdrop-blur-md">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
-                  <p className="mt-2 text-lg font-bold text-slate-900">{item.value}</p>
+                  <p className="mt-2 text-lg font-bold text-slate-50">{item.value}</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
                 </div>
               ))}
@@ -1119,7 +1123,7 @@ function CustomerCoachBookingPage() {
         </section>
 
         {(error || message) && (
-          <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+          <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${error ? 'bg-rose-500/10 text-rose-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
             <span>{error || message}</span>
             <button onClick={() => { setError(''); setMessage('') }} className="font-bold">x</button>
           </div>
@@ -1128,16 +1132,16 @@ function CustomerCoachBookingPage() {
         {activeTab === 'match' && (
           <div className="space-y-6">
             <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-              <div className="bg-white border border-slate-200 rounded-[30px] p-5 space-y-4 shadow-sm">
+              <div className="bg-[rgba(18,18,26,0.92)] border border-white/10 rounded-[30px] p-5 space-y-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="mb-2 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-gym-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-gym-700">1. Plan</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">2. Preview</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">3. Request</span>
+                      <span className="rounded-full bg-gym-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-gym-300">1. Plan</span>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">2. Preview</span>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">3. Request</span>
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
-                    <p className="text-sm text-slate-600">Set your recurring PT schedule first, then preview coach matches with the same rules used by live booking.</p>
+                    <h3 className="text-lg font-bold text-slate-50">1) Set Desired PT Schedule</h3>
+                    <p className="text-sm text-slate-400">Set your recurring PT schedule first, then preview coach matches with the same rules used by live booking.</p>
                   </div>
                   <button
                     onClick={openPlannerModal}
@@ -1147,21 +1151,21 @@ function CustomerCoachBookingPage() {
                   </button>
                 </div>
 
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 space-y-2">
-                  <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                    <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
-                    <span>Repeat end date: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
-                    <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
-                    <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
+                <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),rgba(26,26,36,0.72)] p-4 space-y-2 backdrop-blur-md">
+                  <div className="flex flex-wrap gap-5 text-xs text-slate-400">
+                    <span>Earliest possible start: <strong className="text-slate-100">{minimumBookingStartValue}</strong></span>
+                    <span>Repeat end date: <strong className="text-slate-100">{form.endDate || '-'}</strong></span>
+                    <span>Selected recurring slots: <strong className="text-slate-100">{weeklySlots.length}</strong></span>
+                    <span>Selected weekdays: <strong className="text-slate-100">{selectedSlotsByDay.size}</strong></span>
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-slate-400">
                     The booking preview follows the live PT rule: coaches can take up to 1 week to approve, and approved schedules begin on the next eligible Monday.
                   </p>
                   {weeklySlots.length === 0 && (
                     <p className="text-sm text-slate-500">No recurring slots selected yet.</p>
                   )}
                   {weeklySlots.length > 0 && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <WeekdayDropdown
@@ -1179,7 +1183,7 @@ function CustomerCoachBookingPage() {
                           />
                         </div>
                         {selectedWeeklySummaryGroup ? (
-                          <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          <div className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
                             {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
                           </div>
                         ) : null}
@@ -1187,7 +1191,7 @@ function CustomerCoachBookingPage() {
                       {selectedWeeklySummaryGroup ? (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                           {selectedWeeklySummaryGroup.slots.map((item) => (
-                            <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                            <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200">
                               {formatSlotLabel(item.timeSlotId)}
                             </span>
                           ))}
@@ -1197,31 +1201,31 @@ function CustomerCoachBookingPage() {
                   )}
                 </div>
 
-                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
-                  {loading ? 'Loading...' : '2) Preview Matches'}
+                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-[rgba(18,18,26,0.92)] text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
+                  {loading ? 'Loading…' : '2) Preview Matches'}
                 </button>
               </div>
 
       <aside className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,_rgba(26,26,36,0.94),_rgba(18,18,26,0.84))] p-5 shadow-ambient-sm backdrop-blur-md">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Booking guide</p>
-                <h4 className="mt-3 text-xl font-bold text-slate-900">What happens next</h4>
+                <h4 className="mt-3 text-xl font-bold text-slate-50">What happens next</h4>
                 <div className="mt-4 space-y-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Step 1</p>
-                    <p className="mt-1 text-sm text-slate-600">Open the planner, pick weekdays, and set the recurring slots you want the coach to cover each week.</p>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-sm font-semibold text-slate-50">Step 1</p>
+                    <p className="mt-1 text-sm text-slate-400">Open the planner, pick weekdays, and set the recurring slots you want the coach to cover each week.</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Step 2</p>
-                    <p className="mt-1 text-sm text-slate-600">Preview coach matches to see which coaches fully or partially fit the exact recurring template you saved.</p>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-sm font-semibold text-slate-50">Step 2</p>
+                    <p className="mt-1 text-sm text-slate-400">Preview coach matches to see which coaches fully or partially fit the exact recurring template you saved.</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Step 3</p>
-                    <p className="mt-1 text-sm text-slate-600">Review a coach calendar match, remove any unresolved conflicts, and then send the booking request.</p>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-sm font-semibold text-slate-50">Step 3</p>
+                    <p className="mt-1 text-sm text-slate-400">Review a coach calendar match, remove any unresolved conflicts, and then send the booking request.</p>
                   </div>
                 </div>
-                <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4">
-                  <p className="text-sm font-semibold text-amber-900">Current blocker check</p>
-                  <p className="mt-2 text-sm text-amber-800">{membershipGate.eligible ? ptBookingGateSummary.detail : membershipGate.reason}</p>
+                <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                  <p className="text-sm font-semibold text-amber-200">Current blocker check</p>
+                  <p className="mt-2 text-sm text-amber-300">{membershipGate.eligible ? ptBookingGateSummary.detail : membershipGate.reason}</p>
                 </div>
               </aside>
             </div>
@@ -1229,21 +1233,21 @@ function CustomerCoachBookingPage() {
             {hasPreviewedMatches && (
               <div className="space-y-4">
                 <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
-                  <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
-                  <p className="text-sm text-emerald-700">These coaches can cover every requested recurring slot through your selected booking end date.</p>
+                  <h4 className="text-lg font-bold text-emerald-300">Fully Match</h4>
+                  <p className="text-sm text-emerald-300">These coaches can cover every requested recurring slot through your selected booking end date.</p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
+                    {matches.fullMatches.length === 0 && <p className="text-sm text-slate-400">No fully matched coach yet.</p>}
                     {matches.fullMatches.map((coach) => (
                       <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
                     ))}
                   </div>
                 </div>
 
-                <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
-                  <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
-                  <p className="text-sm text-red-700">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
+                <div className="bg-rose-500/10 border border-red-500/25 rounded-2xl p-4">
+                  <h4 className="text-lg font-bold text-rose-200">Partial Match</h4>
+                  <p className="text-sm text-rose-300">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
+                    {matches.partialMatches.length === 0 && <p className="text-sm text-slate-400">No partial matched coach yet.</p>}
                     {matches.partialMatches.map((coach) => (
                       <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
                     ))}
@@ -1256,17 +1260,17 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'schedule' && (
           <div className="space-y-6">
-            <h3 className="text-xl font-bold text-slate-900">My PT Schedule</h3>
+            <h3 className="text-xl font-bold text-slate-50">My PT Schedule</h3>
 
             {scheduleData.pendingRequests.length > 0 && (
-              <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <h4 className="font-bold text-amber-800 mb-2">Pending Requests</h4>
+              <section className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
+                <h4 className="font-bold text-amber-300 mb-2">Pending Requests</h4>
                 <div className="space-y-2">
                   {scheduleData.pendingRequests.map((r) => (
-                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-amber-200 px-3 py-2 text-sm">
-                      <div className="font-semibold text-slate-800">{r.coachName}</div>
-                      <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
-                      <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
+                    <div key={r.ptRequestId} className="bg-[rgba(18,18,26,0.92)] rounded-xl border border-amber-500/20 px-3 py-2 text-sm">
+                      <div className="font-semibold text-slate-100">{r.coachName}</div>
+                      <div className="text-slate-400">Window: {r.startDate} to {r.endDate}</div>
+                      <div className="text-xs text-amber-300">If approved, this recurring PT plan starts from the next eligible Monday.</div>
                     </div>
                   ))}
                 </div>
@@ -1274,13 +1278,13 @@ function CustomerCoachBookingPage() {
             )}
 
             {scheduleData.deniedRequests.length > 0 && (
-              <section className="bg-red-50 border border-red-200 rounded-2xl p-4">
-                <h4 className="font-bold text-red-800 mb-2">Denied Requests</h4>
+              <section className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4">
+                <h4 className="font-bold text-rose-200 mb-2">Denied Requests</h4>
                 <div className="space-y-2">
                   {scheduleData.deniedRequests.map((r) => (
-                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-red-200 px-3 py-2 text-sm">
-                      <div className="font-semibold text-slate-800">{r.coachName}: {r.startDate} to {r.endDate}</div>
-                      <div className="text-red-700">Reason: {r.denyReason || 'No reason provided'}</div>
+                    <div key={r.ptRequestId} className="bg-[rgba(18,18,26,0.92)] rounded-xl border border-rose-500/20 px-3 py-2 text-sm">
+                      <div className="font-semibold text-slate-100">{r.coachName}: {r.startDate} to {r.endDate}</div>
+                      <div className="text-rose-300">Reason: {r.denyReason || 'No reason provided'}</div>
                     </div>
                   ))}
                 </div>
@@ -1288,39 +1292,39 @@ function CustomerCoachBookingPage() {
             )}
 
             {!loading && scheduleData.items.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-12 text-center text-sm text-slate-500">
+              <div className="rounded-2xl border-2 border-dashed border-white/10 bg-white/5 p-12 text-center text-sm text-slate-500">
                 No PT sessions yet.
               </div>
             ) : (
               <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Monthly view</p>
-                      <h4 className="text-lg font-bold text-slate-900">Your coaching calendar</h4>
+                      <h4 className="text-lg font-bold text-slate-50">Your coaching calendar</h4>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-400 transition hover:border-gym-500/30 hover:bg-gym-500/10 hover:text-gym-300"
                       >
                         Prev
                       </button>
-                      <div className="min-w-32 text-center text-sm font-bold text-slate-800">
-                        {parseDateValue(scheduleMonthCursor)?.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                      <div className="min-w-32 text-center text-sm font-bold text-slate-100">
+                        {parseDateValue(scheduleMonthCursor) ? formatIntlDate(parseDateValue(scheduleMonthCursor), { month: 'long', year: 'numeric' }) : ''}
                       </div>
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-400 transition hover:border-gym-500/30 hover:bg-gym-500/10 hover:text-gym-300"
                       >
                         Next
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-3">
                     <div className="grid grid-cols-7 gap-1">
                       {DAYS.map((day) => (
                         <div key={`schedule-header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1339,21 +1343,21 @@ function CustomerCoachBookingPage() {
                             aria-label={hasSessions ? `${day.value}, ${daySessions.length} coaching slot${daySessions.length > 1 ? 's' : ''}` : day.value}
                             className={`min-h-24 rounded-2xl border p-2 text-left transition ${
                               isSelected
-                                ? 'border-gym-600 bg-gym-50 shadow-sm'
+                                ? 'border-gym-600 bg-gym-500/10 shadow-sm'
                                 : hasSessions
-                                  ? 'border-emerald-200 bg-emerald-50/70 hover:border-gym-400 hover:bg-gym-50'
+                                  ? 'border-emerald-500/20 bg-emerald-500/10/70 hover:border-gym-400 hover:bg-gym-500/10'
                                   : day.isCurrentMonth
-                                    ? 'border-slate-200 bg-white text-slate-700'
-                                    : 'border-slate-100 bg-slate-100 text-slate-300'
+                                    ? 'border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-200'
+                                    : 'border-white/10 bg-white/10 text-slate-300'
                             } ${hasSessions ? 'cursor-pointer' : 'cursor-default'}`}
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <span className={`text-sm font-semibold ${day.isCurrentMonth ? 'text-slate-800' : 'text-slate-300'}`}>{day.dayNumber}</span>
+                              <span className={`text-sm font-semibold ${day.isCurrentMonth ? 'text-slate-100' : 'text-slate-300'}`}>{day.dayNumber}</span>
                               {hasSessions && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.14)]" />}
                             </div>
                             {hasSessions && (
                               <div className="mt-6">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-[rgba(18,18,26,0.9)] px-2 py-1 text-[11px] font-semibold text-emerald-300">
                                   <span>{daySessions.length}</span>
                                   <span>{daySessions.length === 1 ? 'slot' : 'slots'}</span>
                                 </div>
@@ -1366,9 +1370,9 @@ function CustomerCoachBookingPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Selected date</p>
-                  <h4 className="mt-2 text-lg font-bold text-slate-900">
+                  <h4 className="mt-2 text-lg font-bold text-slate-50">
                     {selectedScheduleDate ? formatHumanDate(selectedScheduleDate) : 'Pick a green-marked day'}
                   </h4>
                   <p className="mt-1 text-sm text-slate-500">
@@ -1377,7 +1381,7 @@ function CustomerCoachBookingPage() {
 
                   <div className="mt-4 space-y-3">
                     {selectedScheduleItems.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-500">
                         No coaching sessions selected for this day.
                       </div>
                     )}
@@ -1387,8 +1391,8 @@ function CustomerCoachBookingPage() {
                         <div key={s.ptSessionId} className={`rounded-2xl border p-4 space-y-3 ${appearance.card}`}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <h5 className="font-bold text-slate-900">{s.coachName}</h5>
-                              <p className="text-sm text-slate-600">
+                              <h5 className="font-bold text-slate-50">{s.coachName}</h5>
+                              <p className="text-sm text-slate-400">
                                 Slot {s.slotIndex} | {String(s.startTime || '').slice(0, 5)} - {String(s.endTime || '').slice(0, 5)}
                               </p>
                             </div>
@@ -1397,19 +1401,19 @@ function CustomerCoachBookingPage() {
                               {s.status}
                             </span>
                           </div>
-                          {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-700">Reschedule pending coach approval</div>}
-                          {s.reschedule?.status === 'DENIED' && <div className="text-xs text-red-700">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
+                          {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-300">Reschedule pending coach approval</div>}
+                          {s.reschedule?.status === 'DENIED' && <div className="text-xs text-rose-300">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
                           {String(s.status || '').toUpperCase() === 'CANCELLED' && s.cancelReason && (
-                            <div className="text-xs text-red-700">Cancellation reason: {s.cancelReason}</div>
+                            <div className="text-xs text-rose-300">Cancellation reason: {s.cancelReason}</div>
                           )}
                           {s.replacementOffer?.status === 'PENDING_CUSTOMER' && (
-                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                              <p className="text-sm font-bold text-amber-900">Replacement coach offer</p>
-                              <p className="mt-1 text-sm text-amber-800">
+                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                              <p className="text-sm font-bold text-amber-200">Replacement coach offer</p>
+                              <p className="mt-1 text-sm text-amber-300">
                                 {s.replacementOffer.replacementCoachName} can cover this session for {s.replacementOffer.originalCoachName}.
                               </p>
                               {s.replacementOffer.note ? (
-                                <p className="mt-2 text-xs text-amber-700">Note: {s.replacementOffer.note}</p>
+                                <p className="mt-2 text-xs text-amber-300">Note: {s.replacementOffer.note}</p>
                               ) : null}
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
@@ -1424,7 +1428,7 @@ function CustomerCoachBookingPage() {
                                   type="button"
                                   onClick={() => handleReplacementDecision(s.ptSessionId, 'DECLINE')}
                                   disabled={loading}
-                                  className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                                  className="rounded-full border border-amber-500/30 bg-[rgba(18,18,26,0.92)] px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-100 disabled:opacity-50"
                                 >
                                   Decline replacement
                                 </button>
@@ -1433,11 +1437,11 @@ function CustomerCoachBookingPage() {
                           )}
                           {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
                             <div className="flex gap-2">
-                              <button onClick={() => openCancelModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
+                              <button onClick={() => openCancelModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20">Cancel</button>
                               <button
                                 onClick={() => openRescheduleModal(s)}
                                 disabled={s.replacementOffer?.status === 'PENDING_CUSTOMER'}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-500/10 text-sky-300 border border-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 Reschedule
                               </button>
@@ -1455,12 +1459,12 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'feedback' && (
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-slate-900">Feedback Coach</h3>
+            <h3 className="text-xl font-bold text-slate-50">Feedback Coach</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {completedSessions.map((s) => (
-                <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4">
-                  <div className="font-semibold text-slate-900">{s.coachName}</div>
-                  <div className="text-sm text-slate-600">{s.sessionDate} | Slot {s.slotIndex}</div>
+                <div key={s.ptSessionId} className="bg-[rgba(18,18,26,0.92)] border border-white/10 rounded-2xl p-4">
+                  <div className="font-semibold text-slate-50">{s.coachName}</div>
+                  <div className="text-sm text-slate-400">{s.sessionDate} | Slot {s.slotIndex}</div>
                   <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gym-600 text-white">Rate this session</button>
                 </div>
               ))}
@@ -1472,12 +1476,12 @@ function CustomerCoachBookingPage() {
 
       {plannerModal.open && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-visible rounded-2xl bg-white p-3 md:p-4">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-visible rounded-2xl bg-[rgba(18,18,26,0.92)] p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h4>
+              <h4 className="text-lg font-bold text-slate-50">Set Desired PT Schedule</h4>
               <button
                 onClick={closePlannerModal}
-                className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
+                className="px-3 py-1.5 text-xs rounded-lg border border-white/15 text-slate-400"
               >
                 Close
               </button>
@@ -1485,26 +1489,26 @@ function CustomerCoachBookingPage() {
 
             <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
               <div className="relative z-10 grid gap-3 xl:grid-cols-[0.72fr_0.92fr_1fr]">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-3 py-2.5">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approval rule</p>
-                  <div className="mt-1.5 text-sm font-semibold text-slate-900">{minimumBookingStartValue}</div>
+                  <div className="mt-1.5 text-sm font-semibold text-slate-50">{minimumBookingStartValue}</div>
                   <div className="mt-1 text-[11px] leading-relaxed text-slate-500">Earliest eligible start date when the coach uses the full 1-week approval window.</div>
                 </div>
                 </div>
-                <div className="relative rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                <div className="relative rounded-2xl border border-white/10 bg-white/5 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat end date for booking</p>
                   <button
                     type="button"
                     aria-label="Repeat end date for booking"
                     onClick={() => openDatePicker('endDate')}
-                    className="mt-2 flex w-full items-center justify-between rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-left transition hover:border-gym-400 hover:bg-gym-50"
+                    className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/15 bg-[rgba(18,18,26,0.92)] px-3 py-2.5 text-left transition hover:border-gym-400 hover:bg-gym-500/10"
                   >
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">{formatHumanDate(form.endDate)}</div>
+                      <div className="text-sm font-semibold text-slate-50">{formatHumanDate(form.endDate)}</div>
                       <div className="text-[11px] text-slate-500">Choose when the recurring booking should stop</div>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">Edit</span>
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[11px] font-semibold text-slate-500">Edit</span>
                   </button>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
                     Once approved, the recurring PT plan starts from the next eligible Monday and continues until this end date.
@@ -1523,16 +1527,16 @@ function CustomerCoachBookingPage() {
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planner guide</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-400">
                     Choose weekdays and recurring time slots first. The match preview and the final booking request both use this exact schedule template.
                   </p>
                 </div>
               </div>
 
               <div className="grid min-h-0 grid-cols-1 gap-3 lg:grid-cols-[1.7fr_0.9fr]">
-                <div className="min-h-0 rounded-xl border border-slate-200 p-3">
+                <div className="min-h-0 rounded-xl border border-white/10 p-3">
                   <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                     {DAYS.map((day) => (
                       <button
@@ -1541,8 +1545,8 @@ function CustomerCoachBookingPage() {
                         onClick={() => selectPlannerDay(day.id)}
                         className={`rounded-2xl border px-3 py-3 text-left transition ${
                           plannerModal.focusDay === day.id
-                            ? 'border-gym-600 bg-gym-50 text-gym-900 shadow-sm'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-gym-300 hover:bg-slate-50'
+                            ? 'border-gym-600 bg-gym-500/10 text-gym-100 shadow-sm'
+                            : 'border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-200 hover:border-gym-500/30 hover:bg-white/5'
                         }`}
                       >
                         <div className="text-sm font-bold">{day.label}</div>
@@ -1554,14 +1558,14 @@ function CustomerCoachBookingPage() {
                   </div>
                 </div>
 
-                <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 p-3">
+                <div className="flex min-h-0 flex-col rounded-xl border border-white/10 p-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Selected weekday</p>
-                    <p className="text-sm font-bold text-slate-900">{getDayMeta(plannerModal.focusDay)?.label || '-'}</p>
+                    <p className="text-sm font-bold text-slate-50">{getDayMeta(plannerModal.focusDay)?.label || '-'}</p>
                   </div>
 
                   <div className="mt-3 min-h-0 flex-1 space-y-2">
-                    <p className="text-xs font-semibold text-slate-600">Pick recurring slots</p>
+                    <p className="text-xs font-semibold text-slate-400">Pick recurring slots</p>
                     <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
                       {timeSlots.map((slot) => {
                         const selected = isWeeklySlotSelected(plannerModal.focusDay, slot.timeSlotId)
@@ -1572,7 +1576,7 @@ function CustomerCoachBookingPage() {
                             className={`w-full text-left px-3 py-2 rounded-lg border text-xs ${
                               selected
                                 ? 'bg-gym-600 text-white border-gym-600'
-                                : 'bg-white text-slate-700 border-slate-200 hover:border-gym-400'
+                                : 'bg-[rgba(18,18,26,0.92)] text-slate-200 border-white/10 hover:border-gym-400'
                             }`}
                           >
                             <div className="font-semibold">Slot {slot.slotIndex}</div>
@@ -1585,16 +1589,16 @@ function CustomerCoachBookingPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-600">Selected recurring slots</p>
+                    <p className="text-xs font-semibold text-slate-400">Selected recurring slots</p>
                     <p className="mt-1 text-[11px] text-slate-500">Remove any slot directly from the list below.</p>
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={closePlannerModal}
-                      className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700"
+                      className="px-4 py-2 rounded-xl border border-white/15 text-sm font-semibold text-slate-200"
                     >
                       Cancel
                     </button>
@@ -1610,7 +1614,7 @@ function CustomerCoachBookingPage() {
                 {weeklySlots.length === 0 ? (
                   <p className="mt-3 text-sm text-slate-500">No slots selected.</p>
                 ) : (
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                       <div className="min-w-0">
                         <WeekdayDropdown
@@ -1639,7 +1643,7 @@ function CustomerCoachBookingPage() {
                           <button
                             key={`picked-${item.dayOfWeek}-${item.timeSlotId}`}
                             onClick={() => removeRequestedWeeklySlot(item.dayOfWeek, item.timeSlotId)}
-                            className="inline-flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                            className="inline-flex w-full items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:border-red-300 hover:bg-rose-500/15 hover:text-rose-300"
                             title="Remove slot"
                           >
                             <span className="min-w-0 flex-1 truncate">{formatSlotLabel(item.timeSlotId)}</span>
@@ -1658,22 +1662,22 @@ function CustomerCoachBookingPage() {
 
       {coachReviewModal.open && coachReviewModal.coach && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl bg-white rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-3xl bg-[rgba(18,18,26,0.92)] rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h4 className="text-lg font-bold text-slate-900">Coach Match Review</h4>
-                <p className="text-sm text-slate-600">{coachReviewModal.coach.fullName}  |  {coachReviewModal.coach.email}</p>
+                <h4 className="text-lg font-bold text-slate-50">Coach Match Review</h4>
+                <p className="text-sm text-slate-400">{coachReviewModal.coach.fullName}  |  {coachReviewModal.coach.email}</p>
               </div>
               <button
                 onClick={() => setCoachReviewModal({ open: false, coach: null })}
-                className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
+                className="px-3 py-1.5 text-xs rounded-lg border border-white/15 text-slate-400"
               >
                 Close
               </button>
             </div>
 
-            <div className="text-xs text-slate-600">
-              <span className="font-semibold text-slate-800">{coachReviewModal.coach.matchedSlots}/{coachReviewModal.coach.requestedSlots}</span> requested weekly slots are available.
+            <div className="text-xs text-slate-400">
+              <span className="font-semibold text-slate-100">{coachReviewModal.coach.matchedSlots}/{coachReviewModal.coach.requestedSlots}</span> requested weekly slots are available.
             </div>
 
             <div className="space-y-2">
@@ -1681,31 +1685,31 @@ function CustomerCoachBookingPage() {
               {coachReviewRows.map((row) => (
                 <div
                   key={`review-${row.dayOfWeek}-${row.timeSlotId}`}
-                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${row.unavailable ? 'border-red-500/30 bg-red-500/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
+                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${row.unavailable ? 'border-red-500/30 bg-rose-500/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
                 >
                   <div>
-                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : 'text-emerald-800'}`}>
+                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-rose-200' : 'text-emerald-300'}`}>
                       {row.dayLabel} | {formatSlotLabel(row.timeSlotId)}
                     </div>
-                    <div className={`text-xs ${row.unavailable ? 'text-red-700' : 'text-emerald-700'}`}>
+                    <div className={`text-xs ${row.unavailable ? 'text-rose-300' : 'text-emerald-300'}`}>
                       {row.unavailable ? getUnavailableReason(row.reason) : 'Matched'}
                     </div>
                   </div>
                   {row.unavailable ? (
                     <button
                       onClick={() => removeRequestedWeeklySlot(row.dayOfWeek, row.timeSlotId)}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-700 bg-white"
+                      className="px-3 py-1.5 text-xs rounded-lg border border-rose-500/20 text-rose-300 bg-[rgba(18,18,26,0.92)]"
                     >
                       Remove
                     </button>
                   ) : (
-                    <span className="text-xs font-semibold text-emerald-700">OK</span>
+                    <span className="text-xs font-semibold text-emerald-300">OK</span>
                   )}
                 </div>
               ))}
             </div>
 
-            <div className={`rounded-lg px-3 py-2 text-sm ${unresolvedReviewCount > 0 ? 'bg-red-500/10 text-red-700' : 'bg-emerald-500/10 text-emerald-700'}`}>
+            <div className={`rounded-lg px-3 py-2 text-sm ${unresolvedReviewCount > 0 ? 'bg-rose-500/10 text-rose-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
               {unresolvedReviewCount > 0
                 ? `${unresolvedReviewCount} unmatched slot(s) must be removed before requesting this coach.`
                 : 'All selected slots match this coach.'}
@@ -1714,7 +1718,7 @@ function CustomerCoachBookingPage() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setCoachReviewModal({ open: false, coach: null })}
-                className="px-4 py-2 rounded-xl border border-slate-300"
+                className="px-4 py-2 rounded-xl border border-white/15"
               >
                 Cancel
               </button>
@@ -1732,38 +1736,38 @@ function CustomerCoachBookingPage() {
 
       {rescheduleModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Reschedule PT session</p>
-              <h4 className="text-2xl font-bold text-slate-900">Update this session now</h4>
-              <p className="text-sm leading-relaxed text-slate-600">
+              <h4 className="text-2xl font-bold text-slate-50">Update this session now</h4>
+              <p className="text-sm leading-relaxed text-slate-400">
                 This will move the PT session immediately if the new slot still respects the cutoff and coach availability rules.
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">{rescheduleModal.session?.coachName || 'Assigned coach'}</p>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),rgba(26,26,36,0.72)] p-4">
+              <p className="text-sm font-semibold text-slate-50">{rescheduleModal.session?.coachName || 'Assigned coach'}</p>
               <p className="mt-1 text-xs text-slate-500">
                 Current session: {rescheduleModal.session?.sessionDate || '-'} | {formatSlotLabel(rescheduleModal.session?.timeSlotId)}
               </p>
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-semibold text-slate-700">
+              <label className="text-sm font-semibold text-slate-200">
                 New date
                 <input
                   type="date"
                   value={rescheduleModal.sessionDate}
                   onChange={(e) => setRescheduleModal((prev) => ({ ...prev, sessionDate: e.target.value }))}
-                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                  className="mt-1.5 w-full rounded-2xl border border-white/15 px-3 py-2.5 text-sm font-normal text-slate-200"
                 />
               </label>
-              <label className="text-sm font-semibold text-slate-700">
+              <label className="text-sm font-semibold text-slate-200">
                 New time slot
                 <select
                   value={rescheduleModal.timeSlotId}
                   onChange={(e) => setRescheduleModal((prev) => ({ ...prev, timeSlotId: e.target.value }))}
-                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                  className="mt-1.5 w-full rounded-2xl border border-white/15 px-3 py-2.5 text-sm font-normal text-slate-200"
                 >
                   <option value="">Select slot</option>
                   {timeSlots.map((slot) => (
@@ -1775,12 +1779,12 @@ function CustomerCoachBookingPage() {
               </label>
             </div>
 
-            <label className="mt-4 block text-sm font-semibold text-slate-700">
+            <label className="mt-4 block text-sm font-semibold text-slate-200">
               Reason (optional)
               <textarea
                 value={rescheduleModal.reason}
                 onChange={(e) => setRescheduleModal((prev) => ({ ...prev, reason: e.target.value }))}
-                className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                className="mt-1.5 w-full rounded-2xl border border-white/15 px-3 py-2.5 text-sm font-normal text-slate-200"
                 rows={3}
                 placeholder="Tell the coach why you need to move this session."
               />
@@ -1790,7 +1794,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeRescheduleModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
               >
                 Keep current session
               </button>
@@ -1809,33 +1813,33 @@ function CustomerCoachBookingPage() {
 
       {seriesModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-3xl bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gym-600">Recurring PT change</p>
-                <h4 className="text-2xl font-bold text-slate-900">Change recurring plan</h4>
-                <p className="text-sm leading-relaxed text-slate-600">
+                <h4 className="text-2xl font-bold text-slate-50">Change recurring plan</h4>
+                <p className="text-sm leading-relaxed text-slate-400">
                   Pick the future date when the new weekly template starts, then adjust the recurring slots that should continue through the active PT phase.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeSeriesModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
               >
                 Close
               </button>
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
-              <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <label className="block text-sm font-semibold text-slate-700">
+              <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+                <label className="block text-sm font-semibold text-slate-200">
                   Apply new template from
                   <input
                     type="date"
                     value={seriesModal.cutoverDate}
                     onChange={(event) => setSeriesModal((prev) => ({ ...prev, cutoverDate: event.target.value }))}
-                    className="mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-700"
+                    className="mt-1.5 w-full rounded-2xl border border-white/15 bg-[rgba(18,18,26,0.92)] px-3 py-2.5 text-sm font-normal text-slate-200"
                   />
                 </label>
 
@@ -1847,8 +1851,8 @@ function CustomerCoachBookingPage() {
                       onClick={() => setSeriesModal((prev) => ({ ...prev, focusDay: day.id }))}
                       className={`rounded-2xl border px-3 py-3 text-left transition ${
                         seriesModal.focusDay === day.id
-                          ? 'border-gym-600 bg-gym-50 text-gym-900 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-gym-300 hover:bg-white'
+                          ? 'border-gym-600 bg-gym-500/10 text-gym-100 shadow-sm'
+                          : 'border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-200 hover:border-gym-500/30 hover:bg-[rgba(18,18,26,0.92)]'
                       }`}
                     >
                       <div className="text-sm font-bold">{day.label}</div>
@@ -1860,10 +1864,10 @@ function CustomerCoachBookingPage() {
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="space-y-4 rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected weekday</p>
-                  <p className="mt-1 text-sm font-bold text-slate-900">{getDayMeta(seriesModal.focusDay)?.label || '-'}</p>
+                  <p className="mt-1 text-sm font-bold text-slate-50">{getDayMeta(seriesModal.focusDay)?.label || '-'}</p>
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -1877,7 +1881,7 @@ function CustomerCoachBookingPage() {
                         className={`rounded-2xl border px-4 py-3 text-left transition ${
                           selected
                             ? 'border-gym-600 bg-gym-600 text-white shadow-sm'
-                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-gym-300 hover:bg-gym-50'
+                            : 'border-white/10 bg-white/5 text-slate-200 hover:border-gym-500/30 hover:bg-gym-500/10'
                         }`}
                       >
                         <div className="text-sm font-bold">Slot {slot.slotIndex}</div>
@@ -1889,7 +1893,7 @@ function CustomerCoachBookingPage() {
                   })}
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New recurring template</p>
                   {groupedSeriesSlots.length === 0 ? (
                     <p className="mt-2 text-sm text-slate-500">No recurring slots selected yet.</p>
@@ -1897,8 +1901,8 @@ function CustomerCoachBookingPage() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       {groupedSeriesSlots.flatMap((day) =>
                         day.slots.map((slot) => (
-                          <span key={`series-preview-${day.id}-${slot.timeSlotId}`} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
-                            {day.label} • {formatSlotLabel(slot.timeSlotId)}
+                          <span key={`series-preview-${day.id}-${slot.timeSlotId}`} className="rounded-full border border-white/10 bg-[rgba(18,18,26,0.92)] px-3 py-1.5 text-xs font-semibold text-slate-200">
+                            {day.label} | {formatSlotLabel(slot.timeSlotId)}
                           </span>
                         )),
                       )}
@@ -1912,7 +1916,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeSeriesModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
               >
                 Keep current template
               </button>
@@ -1931,16 +1935,16 @@ function CustomerCoachBookingPage() {
 
       {feedbackModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white p-5">
-            <h4 className="text-lg font-bold text-slate-900">Rate Session</h4>
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-[rgba(18,18,26,0.92)] p-5">
+            <h4 className="text-lg font-bold text-slate-50">Rate Session</h4>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button key={star} onClick={() => setFeedbackModal((prev) => ({ ...prev, rating: star }))} className={`text-2xl ${star <= feedbackModal.rating ? 'text-amber-500' : 'text-slate-300'}`}>★</button>
               ))}
             </div>
-            <textarea value={feedbackModal.comment} onChange={(e) => setFeedbackModal((prev) => ({ ...prev, comment: e.target.value }))} rows={4} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="Optional comment" />
+            <textarea value={feedbackModal.comment} onChange={(e) => setFeedbackModal((prev) => ({ ...prev, comment: e.target.value }))} rows={4} className="w-full border border-white/15 rounded-xl px-3 py-2" placeholder="Optional comment" />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setFeedbackModal({ open: false, session: null, rating: 0, comment: '' })} className="px-4 py-2 rounded-xl border border-slate-300">Close</button>
+              <button onClick={() => setFeedbackModal({ open: false, session: null, rating: 0, comment: '' })} className="px-4 py-2 rounded-xl border border-white/15">Close</button>
               <button onClick={submitFeedback} className="px-4 py-2 rounded-xl bg-gym-600 text-white">Submit</button>
             </div>
           </div>
@@ -1949,28 +1953,28 @@ function CustomerCoachBookingPage() {
 
       {cancelModal.open && cancelModal.session && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Cancel PT session</p>
-              <h4 className="text-2xl font-bold text-slate-900">Cancel this coaching session?</h4>
-              <p className="text-sm leading-relaxed text-slate-600">
+              <h4 className="text-2xl font-bold text-slate-50">Cancel this coaching session?</h4>
+              <p className="text-sm leading-relaxed text-slate-400">
                 This will notify the coach and mark the session as cancelled for both sides.
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">{cancelModal.session.coachName || 'Assigned coach'}</p>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-sm font-semibold text-slate-50">{cancelModal.session.coachName || 'Assigned coach'}</p>
               <p className="mt-1 text-xs text-slate-500">
                 {cancelModal.session.sessionDate || '-'} | {formatSlotLabel(cancelModal.session.timeSlotId)}
               </p>
             </div>
 
-            <label className="mt-4 block text-sm font-semibold text-slate-700">
+            <label className="mt-4 block text-sm font-semibold text-slate-200">
               Reason for cancellation
               <textarea
                 value={cancelModal.reason}
                 onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
-                className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                className="mt-1.5 w-full rounded-2xl border border-white/15 px-3 py-2.5 text-sm font-normal text-slate-200"
                 rows={3}
                 placeholder="Tell the coach why you need to cancel this session."
               />
@@ -1980,7 +1984,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeCancelModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
               >
                 Keep session
               </button>
@@ -1999,31 +2003,31 @@ function CustomerCoachBookingPage() {
 
       {ptBookingBlockedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
             <button
               type="button"
               aria-label="Close PT booking popup"
               onClick={() => setPtBookingBlockedModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
             >
               <X size={20} />
             </button>
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">PT booking unavailable</p>
-              <h4 className="text-2xl font-bold text-slate-900">You already have a PT booking in progress.</h4>
-              <p className="text-sm leading-relaxed text-slate-600">
+              <h4 className="text-2xl font-bold text-slate-50">You already have a PT booking in progress.</h4>
+              <p className="text-sm leading-relaxed text-slate-400">
                 {ptBookingGate.reason || 'You cannot start another PT booking while a request is pending or your current PT schedule is still active.'}
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current PT status</p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{ptBookingGateSummary.title}</p>
+                  <p className="text-sm font-semibold text-slate-50">{ptBookingGateSummary.title}</p>
                   <p className="mt-1 text-xs text-slate-500">{ptBookingGateSummary.detail}</p>
                 </div>
-                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-300">
                   {ptBookingGateSummary.badge}
                 </span>
               </div>
@@ -2036,7 +2040,7 @@ function CustomerCoachBookingPage() {
                   setPtBookingBlockedModal(false)
                   setActiveTab('schedule')
                 }}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
               >
                 Open My PT Schedule
               </button>
@@ -2047,33 +2051,33 @@ function CustomerCoachBookingPage() {
 
       {membershipBlockedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
             <button
               type="button"
               aria-label="Close membership popup"
               onClick={() => setMembershipBlockedModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
             >
               <X size={20} />
             </button>
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Membership required</p>
-              <h4 className="text-2xl font-bold text-slate-900">Coach booking is locked for your current membership.</h4>
-              <p className="text-sm leading-relaxed text-slate-600">
+              <h4 className="text-2xl font-bold text-slate-50">Coach booking is locked for your current membership.</h4>
+              <p className="text-sm leading-relaxed text-slate-400">
                 {membershipGate.reason || 'You need an active Gym + Coach membership before using the schedule planner or previewing coach matches.'}
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mt-5 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),rgba(26,26,36,0.72)] p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current membership</p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{currentMembershipPlan?.name || 'No active Gym + Coach membership'}</p>
+                  <p className="text-sm font-semibold text-slate-50">{currentMembershipPlan?.name || 'No active Gym + Coach membership'}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Status: <span className="font-semibold text-slate-700">{membershipGate.membership?.status || 'NONE'}</span>
+                    Status: <span className="font-semibold text-slate-200">{membershipGate.membership?.status || 'NONE'}</span>
                   </p>
                 </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${membershipGate.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${membershipGate.eligible ? 'border-emerald-500/20 bg-emerald-500/15 text-emerald-300' : 'border-rose-500/20 bg-rose-500/10 text-rose-300'}`}>
                   {membershipGate.eligible ? 'Eligible' : 'Not eligible'}
                 </span>
               </div>
@@ -2083,7 +2087,7 @@ function CustomerCoachBookingPage() {
               <Link
                 to="/customer/current-membership"
                 onClick={() => setMembershipBlockedModal(false)}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
               >
                 View my membership
               </Link>
@@ -2109,22 +2113,22 @@ function CoachCard({ coach, onReview }) {
   const isFullMatch = String(coach.matchType || '').toUpperCase() === 'FULL'
 
   return (
-    <article className={`rounded-xl border p-4 space-y-2 ${isFullMatch ? 'border-emerald-200 bg-white' : 'border-red-200 bg-red-50/35'}`}>
+    <article className={`rounded-[1.35rem] border p-4 space-y-3 backdrop-blur-md ${isFullMatch ? 'border-emerald-500/20 bg-[linear-gradient(180deg,rgba(52,211,153,0.08),rgba(26,26,36,0.92))]' : 'border-rose-500/20 bg-[linear-gradient(180deg,rgba(251,113,133,0.08),rgba(26,26,36,0.92))]'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h5 className="font-bold text-slate-900">{coach.fullName}</h5>
+          <h5 className="font-bold text-slate-50">{coach.fullName}</h5>
           <p className="text-xs text-slate-500">{coach.email}</p>
         </div>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-700' : 'bg-red-500/15 text-red-700'}`}>
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
           {coach.matchedSlots}/{coach.requestedSlots} slots
         </span>
       </div>
-      <p className="text-sm text-slate-600">{coach.bio || 'No bio'}</p>
-      <div className="text-xs text-slate-600">
+      <p className="text-sm text-slate-400">{coach.bio || 'No bio'}</p>
+      <div className="text-xs text-slate-400">
         {bookedCount > 0 && <div>{bookedCount} slot(s) already booked in selected range.</div>}
         {weeklyUnavailableCount > 0 && <div>{weeklyUnavailableCount} slot(s) not in coach weekly availability.</div>}
       </div>
-      <button onClick={() => onReview(coach)} className="w-full mt-2 px-3 py-2 rounded-lg bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700">
+      <button onClick={() => onReview(coach)} className="gc-button-secondary mt-2 w-full">
         Review Calendar Match
       </button>
     </article>
@@ -2134,13 +2138,13 @@ function CoachCard({ coach, onReview }) {
 function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShiftMonth, onSelect, onClose, days }) {
   const monthDate = parseDateValue(monthCursor)
   const monthTitle = monthDate
-    ? monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    ? formatIntlDate(monthDate, { month: 'long', year: 'numeric' })
     : ''
   const selectedLabel = formatHumanDate(selectedValue)
 
   return (
-    <div className="absolute left-1/2 top-2 z-30 w-[min(26rem,calc(100vw-3rem))] -translate-x-1/2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-      <div className="bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.14),_transparent_55%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] px-4 py-4 text-white">
+    <div className="absolute left-1/2 top-2 z-30 w-[min(26rem,calc(100vw-3rem))] -translate-x-1/2 overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.94)] shadow-2xl backdrop-blur-xl">
+      <div className="bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_55%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.94))] px-4 py-4 text-white">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-bold">{title}</p>
@@ -2149,7 +2153,7 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/20"
+            className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white transition hover:border-white/30 hover:bg-white/15"
           >
             Close
           </button>
@@ -2165,24 +2169,24 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
           <button
             type="button"
             onClick={() => onShiftMonth(-1)}
-            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+            className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-3 py-2 text-xs font-semibold text-slate-400 transition hover:border-gym-500/30 hover:bg-gym-500/10 hover:text-gym-300"
           >
             Prev
           </button>
           <div className="text-center">
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Month</div>
-            <div className="text-sm font-bold text-slate-800">{monthTitle}</div>
+            <div className="text-sm font-bold text-slate-100">{monthTitle}</div>
           </div>
           <button
             type="button"
             onClick={() => onShiftMonth(1)}
-            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+            className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-3 py-2 text-xs font-semibold text-slate-400 transition hover:border-gym-500/30 hover:bg-gym-500/10 hover:text-gym-300"
           >
             Next
           </button>
         </div>
 
-        <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mt-4 rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),rgba(26,26,36,0.72)] p-3 backdrop-blur-md">
           <div className="grid grid-cols-7 gap-1">
             {DAYS.map((day) => (
               <div key={`header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -2202,8 +2206,8 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
                     isSelected
                       ? 'border-gym-600 bg-gym-600 text-white shadow-sm shadow-gym-600/30'
                       : day.isCurrentMonth
-                        ? 'border-slate-200 bg-white text-slate-700 hover:border-gym-300 hover:bg-gym-50'
-                        : 'border-slate-100 bg-slate-100 text-slate-300'
+                        ? 'border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-200 hover:border-gym-500/30 hover:bg-gym-500/10'
+                        : 'border-white/10 bg-white/[0.04] text-slate-300'
                   } ${isDisabled ? 'cursor-not-allowed opacity-35' : ''}`}
                 >
                   {day.dayNumber}
@@ -2222,4 +2226,9 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
 }
 
 export default CustomerCoachBookingPage
+
+
+
+
+
 

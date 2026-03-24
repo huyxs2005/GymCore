@@ -41,13 +41,13 @@ function WeekdayDropdown({ id, label, value, options, onChange, summaryText = ''
         onClick={() => setOpen((current) => !current)}
         className={`mt-1.5 flex w-full min-w-52 items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
           open
-            ? 'border-gym-500 bg-gym-50 ring-2 ring-gym-200'
-            : 'border-slate-200 bg-white hover:border-gym-300 hover:bg-slate-50'
+            ? 'border-gym-500 bg-gym-500/10 ring-2 ring-gym-200'
+            : 'border-white/10 bg-[rgba(18,18,26,0.92)] hover:border-gym-500/30 hover:bg-white/5'
         }`}
       >
         <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-slate-900">{selectedOption?.label || 'Select weekday'}</div>
-          <div className="mt-0.5 truncate text-xs text-slate-500">{selectedOption?.meta || summaryText || 'Choose a weekday summary to review.'}</div>
+          <div className="truncate text-sm font-bold text-white">{selectedOption?.label || 'Select weekday'}</div>
+          <div className="mt-0.5 truncate text-xs text-zinc-500">{selectedOption?.meta || summaryText || 'Choose a weekday summary to review.'}</div>
         </div>
         <ChevronDown
           size={18}
@@ -60,11 +60,11 @@ function WeekdayDropdown({ id, label, value, options, onChange, summaryText = ''
           id={listboxId}
           role="listbox"
           aria-labelledby={labelId}
-          className="absolute left-0 top-[calc(100%+0.65rem)] z-30 w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10"
+          className="absolute left-0 top-[calc(100%+0.65rem)] z-30 w-full overflow-hidden rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] shadow-2xl shadow-slate-900/10"
         >
-          <div className="border-b border-slate-100 bg-gradient-to-r from-gym-50 via-white to-slate-50 px-4 py-3">
+          <div className="border-b border-white/10 bg-gradient-to-r from-gym-50 via-white to-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-            <p className="mt-1 text-sm text-slate-600">Switch between weekdays without expanding the full slot wall.</p>
+            <p className="mt-1 text-sm text-slate-400">Switch between weekdays without expanding the full slot wall.</p>
           </div>
           <div className="max-h-72 overflow-y-auto p-2">
             {options.map((option) => {
@@ -79,18 +79,18 @@ function WeekdayDropdown({ id, label, value, options, onChange, summaryText = ''
                   className={`flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left transition ${
                     active
                       ? 'bg-gym-600 text-white shadow-sm'
-                      : 'text-slate-700 hover:bg-slate-50'
+                      : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">{option.label}</div>
-                    <div className={`mt-0.5 truncate text-xs ${active ? 'text-gym-50/90' : 'text-slate-500'}`}>
+                    <div className={`mt-0.5 truncate text-xs ${active ? 'text-gym-50/90' : 'text-zinc-500'}`}>
                       {option.meta}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {option.badge ? (
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-400'}`}>
                         {option.badge}
                       </span>
                     ) : null}
@@ -107,3 +107,7 @@ function WeekdayDropdown({ id, label, value, options, onChange, summaryText = ''
 }
 
 export default WeekdayDropdown
+
+
+
+

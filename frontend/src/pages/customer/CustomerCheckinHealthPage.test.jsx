@@ -212,3 +212,5 @@ describe('CustomerCheckinHealthPage', () => {
     expect(screen.getAllByText('--').length).toBeGreaterThan(0)
   })
 })
+
+

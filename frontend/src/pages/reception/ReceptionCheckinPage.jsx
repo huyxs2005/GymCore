@@ -283,8 +283,8 @@ function ReceptionCheckinPage() {
     >
       <section className="space-y-5">
         <article className="gc-card">
-          <h2 className="text-lg font-semibold text-slate-900">QR Check-in (Camera)</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <h2 className="text-lg font-semibold text-white">QR Check-in (Camera)</h2>
+          <p className="mt-1 text-sm text-slate-400">
             Open camera, point at customer QR, and check-in happens automatically.
           </p>
 
@@ -301,7 +301,7 @@ function ReceptionCheckinPage() {
               <button
                 type="button"
                 onClick={stopCamera}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className="rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10"
               >
                 Stop camera
               </button>
@@ -309,7 +309,7 @@ function ReceptionCheckinPage() {
           </div>
 
           <div className="mt-4">
-            <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
+            <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-xl border border-white/10 bg-slate-950">
               <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
               {!cameraReady ? (
                 <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-200">
@@ -323,12 +323,12 @@ function ReceptionCheckinPage() {
             <canvas ref={canvasRef} className="hidden" />
           </div>
 
-          {cameraError ? <p className="mt-3 text-sm text-amber-700">{cameraError}</p> : null}
+          {cameraError ? <p className="mt-3 text-sm text-amber-300">{cameraError}</p> : null}
         </article>
 
         <article className="gc-card">
-          <h2 className="text-lg font-semibold text-slate-900">Manual Check-in (Search + Select)</h2>
-          <p className="mt-1 text-sm text-slate-600">Search by customer full name or phone, then choose and check in.</p>
+          <h2 className="text-lg font-semibold text-white">Manual Check-in (Search + Select)</h2>
+          <p className="mt-1 text-sm text-slate-400">Search by customer full name or phone, then choose and check in.</p>
 
           <form onSubmit={runSearch} className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input
@@ -336,7 +336,7 @@ function ReceptionCheckinPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Type name or phone"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-white/10 px-3 py-2 text-sm"
             />
             <button
               type="submit"
@@ -349,7 +349,7 @@ function ReceptionCheckinPage() {
 
           <div className="mt-4 space-y-2">
             {customers.length === 0 ? (
-              <p className="text-sm text-slate-500">No results yet.</p>
+              <p className="text-sm text-zinc-500">No results yet.</p>
             ) : (
               customers.map((customer) => (
                 <button
@@ -358,12 +358,12 @@ function ReceptionCheckinPage() {
                   onClick={() => selectCustomer(customer)}
                   className={`w-full rounded-lg border px-3 py-3 text-left text-sm transition ${
                     selectedCustomer?.customerId === customer.customerId
-                      ? 'border-gym-500 bg-gym-50'
-                      : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      ? 'border-gym-500 bg-gym-500/10'
+                      : 'border-white/10 bg-white/5 hover:bg-white/10'
                   }`}
                 >
-                  <p className="font-semibold text-slate-900">{customer.fullName}</p>
-                  <p className="text-slate-600">
+                  <p className="font-semibold text-white">{customer.fullName}</p>
+                  <p className="text-slate-400">
                     {customer.phone || '-'} | {customer.email || '-'}
                   </p>
                 </button>
@@ -372,17 +372,17 @@ function ReceptionCheckinPage() {
           </div>
 
           {selectedCustomer ? (
-            <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-semibold text-slate-900">Selected customer</h3>
-              <p className="mt-1 text-sm text-slate-700">{selectedCustomer.fullName}</p>
+            <div className="mt-4 rounded-lg border border-white/10 bg-[rgba(18,18,26,0.92)] p-4">
+              <h3 className="text-sm font-semibold text-white">Selected customer</h3>
+              <p className="mt-1 text-sm text-slate-300">{selectedCustomer.fullName}</p>
 
               {selectedValidity ? (
                 <div className="mt-2 space-y-1 text-sm">
-                  <p className={selectedValidity.valid ? 'text-emerald-700' : 'text-rose-700'}>
+                  <p className={selectedValidity.valid ? 'text-emerald-300' : 'text-rose-300'}>
                     {selectedValidity.valid ? 'Membership valid for check-in.' : selectedValidity.reason}
                   </p>
                   {selectedValidity.membership?.customerMembershipId ? (
-                    <p className="text-slate-600">
+                    <p className="text-slate-400">
                       {selectedValidity.membership.planName} ({selectedValidity.membership.status}) |{' '}
                       {selectedValidity.membership.startDate} - {selectedValidity.membership.endDate}
                     </p>
@@ -403,28 +403,28 @@ function ReceptionCheckinPage() {
         </article>
 
         {successMessage ? (
-          <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <article className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-300">
             {successMessage}
           </article>
         ) : null}
 
         {errorMessage ? (
-          <article className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+          <article className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-300">
             {errorMessage}
           </article>
         ) : null}
 
         {scanPopup ? (
-          <div className="fixed right-5 top-5 z-[1100] w-full max-w-sm rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
-            <p className={`text-sm font-semibold ${scanPopup.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
+          <div className="fixed right-5 top-5 z-[1100] w-full max-w-sm rounded-xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-4 shadow-lg">
+            <p className={`text-sm font-semibold ${scanPopup.ok ? 'text-emerald-300' : 'text-rose-300'}`}>
               {scanPopup.ok ? 'Scan completed' : 'Scan failed'}
             </p>
-            <p className="mt-1 text-sm text-slate-700">{scanPopup.message}</p>
+            <p className="mt-1 text-sm text-slate-300">{scanPopup.message}</p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => setScanPopup(null)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className="rounded-md border border-white/10 px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10"
               >
                 Close
               </button>
@@ -443,15 +443,15 @@ function ReceptionCheckinPage() {
         ) : null}
 
         <article className="gc-card">
-          <h2 className="text-lg font-semibold text-slate-900">Recent check-ins</h2>
+          <h2 className="text-lg font-semibold text-white">Recent check-ins</h2>
           {loadingHistory ? (
-            <p className="mt-3 text-sm text-slate-500">Loading history...</p>
+            <p className="mt-3 text-sm text-zinc-500">Loading history...</p>
           ) : history.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">No check-in records yet.</p>
+            <p className="mt-3 text-sm text-zinc-500">No check-in records yet.</p>
           ) : (
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+                <thead className="bg-white/5 text-slate-400">
                   <tr>
                     <th className="px-3 py-2">Time</th>
                     <th className="px-3 py-2">Customer</th>
@@ -461,11 +461,11 @@ function ReceptionCheckinPage() {
                 </thead>
                 <tbody>
                   {history.map((item) => (
-                    <tr key={item.checkInId} className="border-t border-slate-100">
-                      <td className="px-3 py-2 text-slate-700">{formatCheckinTimeVn(item.checkInTime)}</td>
-                      <td className="px-3 py-2 text-slate-700">{item.fullName || '-'}</td>
-                      <td className="px-3 py-2 text-slate-700">{item.planName || '-'}</td>
-                      <td className="px-3 py-2 text-slate-700">{item.checkedByName || '-'}</td>
+                    <tr key={item.checkInId} className="border-t border-white/10">
+                      <td className="px-3 py-2 text-slate-300">{formatCheckinTimeVn(item.checkInTime)}</td>
+                      <td className="px-3 py-2 text-slate-300">{item.fullName || '-'}</td>
+                      <td className="px-3 py-2 text-slate-300">{item.planName || '-'}</td>
+                      <td className="px-3 py-2 text-slate-300">{item.checkedByName || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -479,3 +479,8 @@ function ReceptionCheckinPage() {
 }
 
 export default ReceptionCheckinPage
+
+
+
+
+

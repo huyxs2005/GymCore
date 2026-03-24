@@ -31,3 +31,5 @@ describe('AuthHeaderActions', () => {
     expect(screen.queryByText('Register')).toBeNull()
   })
 })
+
+

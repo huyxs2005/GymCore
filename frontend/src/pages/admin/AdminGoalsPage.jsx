@@ -13,6 +13,10 @@ const STATUS_FILTERS = [
   { value: 'archived', label: 'Archived only' },
 ]
 
+const INPUT_CLASS = 'gc-input'
+const TEXTAREA_CLASS = 'gc-textarea'
+const FILTER_CLASS = 'gc-select min-h-0 rounded-2xl bg-[rgba(18,18,26,0.92)] px-4 py-3'
+
 function buildInitialForm(workouts = [], foods = []) {
   return {
     goalId: null,
@@ -51,7 +55,7 @@ function validateGoalDraft(draft) {
 function GoalPicker({ items, selectedIds, idKey, label, onToggle }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">{label}</p>
       <div className="flex flex-wrap gap-2">
         {items.map((item) => {
           const itemId = item[idKey]
@@ -62,7 +66,7 @@ function GoalPicker({ items, selectedIds, idKey, label, onToggle }) {
               type="button"
               onClick={() => onToggle(itemId)}
               className={`rounded-full px-3 py-2 text-sm font-semibold transition ${
-                selected ? 'bg-gym-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                selected ? 'bg-amber-500 text-slate-950' : 'border border-white/10 bg-[rgba(18,18,26,0.92)] text-slate-300 hover:bg-white/5'
               } ${item.active === false ? 'opacity-60' : ''}`}
             >
               {item.name}
@@ -200,15 +204,15 @@ function AdminGoalsPage() {
       links={adminNav}
     >
       <section className="gc-card-compact space-y-5">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <h2 className="gc-section-kicker">Fitness goals</h2>
-            <p className="mt-1 text-sm text-slate-500">Control saved-goal options and the workout/food mappings behind recommendations.</p>
+            <p className="mt-1 text-sm text-zinc-500">Control saved-goal options and the workout/food mappings behind recommendations.</p>
           </div>
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gym-700"
+            className="gc-button-primary inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold"
           >
             <PlusCircle size={18} />
             New goal
@@ -216,20 +220,25 @@ function AdminGoalsPage() {
         </header>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-within:border-amber-500/30 focus-within:bg-white/[0.07] focus-within:ring-2 focus-within:ring-amber-500/15">
             <Search size={16} className="text-slate-400" />
+            <span className="sr-only">Search goals</span>
             <input
-              type="text"
+              type="search"
+              name="goalSearch"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search code, title, workouts, or foods..."
-              className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Search code, title, workouts, or foods…"
+              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
             />
           </label>
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+            name="goalStatusFilter"
+            className={FILTER_CLASS}
           >
             {STATUS_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -239,7 +248,7 @@ function AdminGoalsPage() {
           </select>
         </div>
 
-        {goalsQuery.isLoading ? <p className="text-sm text-slate-500">Loading goals...</p> : null}
+        {goalsQuery.isLoading ? <p className="text-sm text-zinc-500" aria-live="polite">Loading goals…</p> : null}
         {goalsQuery.isError ? <p className="text-sm text-rose-600">Could not load admin goals.</p> : null}
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
@@ -247,20 +256,20 @@ function AdminGoalsPage() {
             {filteredGoals.map((goal) => {
               const isActive = Boolean(goal.active)
               return (
-                <article key={goal.goalId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <article key={goal.goalId} className="rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-700">
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
                         {goal.goalCode}
                       </span>
-                      <h3 className="mt-3 text-lg font-bold text-slate-900">{goal.name}</h3>
+                      <h3 className="mt-3 text-lg font-bold text-white">{goal.name}</h3>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${isActive ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white'}`}>
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${isActive ? 'bg-emerald-600 text-white' : 'bg-[rgba(18,18,26,0.92)] text-white'}`}>
                       {isActive ? 'Active' : 'Archived'}
                     </span>
                   </div>
 
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{goal.description || 'No goal description yet.'}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">{goal.description || 'No goal description yet.'}</p>
 
                   <div className="mt-4 space-y-3">
                     <div>
@@ -268,7 +277,7 @@ function AdminGoalsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {(goal.workouts || []).length ? (
                           goal.workouts.map((item) => (
-                            <span key={`goal-${goal.goalId}-workout-${item.workoutId}`} className="rounded-full bg-gym-50 px-3 py-1 text-xs font-semibold text-gym-700">
+                            <span key={`goal-${goal.goalId}-workout-${item.workoutId}`} className="rounded-full bg-gym-500/10 px-3 py-1 text-xs font-semibold text-gym-300">
                               {item.name}
                             </span>
                           ))
@@ -283,7 +292,7 @@ function AdminGoalsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {(goal.foods || []).length ? (
                           goal.foods.map((item) => (
-                            <span key={`goal-${goal.goalId}-food-${item.foodId}`} className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                            <span key={`goal-${goal.goalId}-food-${item.foodId}`} className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
                               {item.name}
                             </span>
                           ))
@@ -298,7 +307,7 @@ function AdminGoalsPage() {
                     <button
                       type="button"
                       onClick={() => openEdit(goal)}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="gc-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
                     >
                       <Edit3 size={16} />
                       Edit
@@ -307,7 +316,7 @@ function AdminGoalsPage() {
                       <button
                         type="button"
                         onClick={() => setConfirmState({ open: true, goal, action: 'archive' })}
-                        className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                        className="inline-flex items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-300 transition hover:bg-rose-100"
                       >
                         <Trash2 size={16} />
                         Archive
@@ -316,7 +325,7 @@ function AdminGoalsPage() {
                       <button
                         type="button"
                         onClick={() => setConfirmState({ open: true, goal, action: 'restore' })}
-                        className="inline-flex items-center gap-2 rounded-full border border-gym-200 bg-gym-50 px-4 py-2 text-sm font-semibold text-gym-700 transition hover:bg-gym-100"
+                        className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200 transition-[border-color,background-color,transform] duration-200 ease-out hover:border-amber-400/35 hover:bg-amber-500/15 active:scale-[0.98]"
                       >
                         <Undo2 size={16} />
                         Restore
@@ -328,12 +337,12 @@ function AdminGoalsPage() {
             })}
           </div>
 
-          <aside className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+          <aside className="rounded-3xl border border-white/10 bg-white/5 p-5">
             <div className="flex items-center gap-2">
-              <Flag className="h-5 w-5 text-gym-600" />
-              <h3 className="text-lg font-bold text-slate-900">{editingGoal ? 'Goal editor' : 'Select a goal'}</h3>
+              <Flag className="h-5 w-5 text-amber-300" />
+              <h3 className="text-lg font-bold text-white">{editingGoal ? 'Goal editor' : 'Select a goal'}</h3>
             </div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-2 text-sm leading-6 text-slate-400">
               {editingGoal
                 ? 'Update the goal code, title, active state, and AI mappings.'
                 : 'Create a new goal or open an existing one to manage its recommendation mappings.'}
@@ -342,39 +351,46 @@ function AdminGoalsPage() {
             {editingGoal ? (
               <form onSubmit={submitForm} className="mt-5 space-y-4">
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Goal code *</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Goal code *</span>
                   <input
+                    name="goalCode"
                     value={formState.goalCode}
                     onChange={(event) => setFormState((prev) => ({ ...prev, goalCode: event.target.value }))}
-                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={`mt-1.5 ${INPUT_CLASS}`}
                     placeholder="GAIN_MUSCLE"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Goal name *</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Goal name *</span>
                   <input
+                    name="goalName"
                     value={formState.name}
                     onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
-                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
+                    autoComplete="off"
+                    className={`mt-1.5 ${INPUT_CLASS}`}
                     placeholder="Gain muscle"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Description</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Description</span>
                   <textarea
+                    name="description"
                     value={formState.description}
                     onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
+                    autoComplete="off"
                     rows={3}
-                    className="mt-1.5 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-gym-300 focus:ring-2 focus:ring-gym-100"
-                    placeholder="Explain when this goal should be selected..."
+                    className={`mt-1.5 ${TEXTAREA_CLASS} resize-none`}
+                    placeholder="Explain when this goal should be selected…"
                   />
                 </label>
 
-                <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                    <ShieldCheck size={16} className="text-gym-600" />
+                <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-3">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+                    <ShieldCheck size={16} className="text-amber-300" />
                     Active
                   </span>
                   <input
@@ -401,22 +417,22 @@ function AdminGoalsPage() {
                   onToggle={(id) => toggleSelection('foodIds', id)}
                 />
 
-                {formError ? <p className="text-sm font-semibold text-rose-700">{formError}</p> : null}
+                {formError ? <p className="text-sm font-semibold text-rose-300" aria-live="polite">{formError}</p> : null}
 
                 <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
                     onClick={closeEditor}
-                    className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    className="gc-button-secondary px-5 py-2.5 text-sm font-semibold"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={upsertMutation.isPending}
-                    className="rounded-full bg-gym-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gym-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="gc-button-primary px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {upsertMutation.isPending ? 'Saving...' : editingGoal.goalId ? 'Save changes' : 'Create goal'}
+                    {upsertMutation.isPending ? 'Saving…' : editingGoal.goalId ? 'Save changes' : 'Create goal'}
                   </button>
                 </div>
               </form>
@@ -449,3 +465,9 @@ function AdminGoalsPage() {
 }
 
 export default AdminGoalsPage
+
+
+
+
+
+

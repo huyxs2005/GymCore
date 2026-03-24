@@ -11,3 +11,5 @@ export const foodApi = {
     return apiClient.get(`/v1/foods/${foodId}`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

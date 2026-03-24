@@ -300,3 +300,5 @@ describe('ProfilePage', () => {
     expect(authApi.updateProfile).not.toHaveBeenCalled()
   })
 })
+
+

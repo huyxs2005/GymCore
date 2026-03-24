@@ -233,3 +233,5 @@ describe('AppShell cart button', () => {
     expect(screen.queryByText('2')).not.toBeInTheDocument()
   })
 })
+
+

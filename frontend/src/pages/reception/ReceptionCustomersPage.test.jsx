@@ -21,3 +21,5 @@ describe('ReceptionCustomersPage', () => {
     expect(screen.getByText('GET /api/v1/reception/customers/{customerId}/membership')).toBeInTheDocument()
   })
 })
+
+

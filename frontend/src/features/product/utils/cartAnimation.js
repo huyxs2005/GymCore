@@ -37,3 +37,5 @@ export function triggerAddToCartAnimation(sourceElement) {
     window.dispatchEvent(new Event('gymcore:cart-pulse'))
   }
 }
+
+

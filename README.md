@@ -24,7 +24,7 @@ GymCore is a full-stack gym management project:
 1. Open SSMS.
 2. Connect to your SQL Server instance using:
 - Login: `sa`
-- Password: `1`
+- Password: `5`
 3. Run database scripts in this exact order:
    1. `docs/GymCore.txt`
    2. `docs/alter.txt`
@@ -55,7 +55,7 @@ cd ..
 2. Press `Ctrl + C` to stop both backend and frontend.
 
 ## Change SQL Server Login/Password (`sa`)
-If your SQL Server account is not `sa` / `1`, update backend DB config here:
+If your SQL Server account is not `sa` / `5`, update backend DB config here:
 
 - File: `backend/src/main/resources/application.properties`
 - Keys:
@@ -66,7 +66,7 @@ If your SQL Server account is not `sa` / `1`, update backend DB config here:
 Current default values in that file are:
 - `spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=GymCore;encrypt=true;trustServerCertificate=true`
 - `spring.datasource.username=sa`
-- `spring.datasource.password=1`
+- `spring.datasource.password=5`
 
 ## For Teammates
 1. After cloning, run `npm install` in `frontend` once.

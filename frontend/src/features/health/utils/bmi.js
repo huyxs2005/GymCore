@@ -2,12 +2,10 @@ export function getBmiLevel(bmi) {
   if (bmi == null) {
     return {
       label: 'No data',
-      textClass: 'text-slate-400',
+      textClass: 'text-slate-500',
       accent: '#94A3B8',
       summary: 'Add your latest body metrics',
       guidance: 'Enter height and weight to generate your BMI trend and healthy-weight target.',
-      bgClass: 'bg-white/5',
-      borderClass: 'border-white/10',
     }
   }
 
@@ -15,11 +13,9 @@ export function getBmiLevel(bmi) {
     return {
       label: 'Underweight',
       textClass: 'text-sky-400',
-      accent: '#38BDF8',
+      accent: '#2F9AE0',
       summary: 'Needs gain',
       guidance: 'You are below the normal BMI range. A gradual weight gain plan would move you toward the healthy zone.',
-      bgClass: 'bg-sky-500/10',
-      borderClass: 'border-sky-500/20',
     }
   }
 
@@ -27,22 +23,18 @@ export function getBmiLevel(bmi) {
     return {
       label: 'Normal',
       textClass: 'text-emerald-400',
-      accent: '#34D399',
+      accent: '#42BE65',
       summary: 'Healthy',
       guidance: 'Your BMI is inside the normal range. Maintain this zone with steady training and nutrition.',
-      bgClass: 'bg-emerald-500/10',
-      borderClass: 'border-emerald-500/20',
     }
   }
 
   return {
     label: 'Overweight',
     textClass: 'text-rose-400',
-    accent: '#FB7185',
+    accent: '#FF5A4E',
     summary: 'Needs reduction',
     guidance: 'You are above the normal BMI range. Reducing body weight would move you back toward the healthy zone.',
-    bgClass: 'bg-rose-500/10',
-    borderClass: 'border-rose-500/20',
   }
 }
 
@@ -85,3 +77,5 @@ export function calculateBmiResult(heightCm, weightKg) {
     accent: level.accent,
   }
 }
+
+

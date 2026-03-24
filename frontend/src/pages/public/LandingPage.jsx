@@ -1,130 +1,60 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Check, Clock3, Copy, MapPin, Phone, ShoppingBag, X } from 'lucide-react'
+import { ArrowRight, Check, Clock3, Copy, MapPin, Phone, ShoppingBag, Sparkles } from 'lucide-react'
 import { gymPublicInfo } from '../../config/publicInfo'
 
 const storyPoints = [
   {
-    title: 'Choose the kind of training experience that fits you',
-    description:
-      'Whether you want a flexible day pass, a steady solo routine, or guided support with a coach, GymCore helps you choose clearly and start with confidence.',
+    title: 'Memberships built around how people actually train',
+    description: 'Day Pass, Gym Only, and Gym + Coach each map to a real operational rule set instead of vague package marketing.',
   },
   {
-    title: 'See what the gym offers before you commit',
-    description:
-      'Explore memberships, supplements, and training guidance first, then sign in when you are ready to buy, check in, or manage your routine.',
+    title: 'Product checkout stays online, pickup stays at the gym',
+    description: 'Customers browse, pay via PayOS, then collect products at the front desk with invoice and pickup tracking behind the scenes.',
   },
   {
-    title: 'Stay consistent with tools that support real progress',
-    description:
-      'Track your gym access, follow your membership, explore fitness guidance, and move toward a routine that feels easier to maintain long term.',
-  },
-]
-
-const membershipComparison = [
-  {
-    label: 'Day Pass',
-    title: 'Quick access for a focused training day',
-    items: [
-      { kind: 'yes', text: 'Unlimited gym check-ins for one day' },
-      { kind: 'yes', text: 'Lowest-commitment option to try the gym' },
-      { kind: 'no', text: 'No month-based membership duration' },
-      { kind: 'no', text: 'No coach-booking eligibility' },
-    ],
-  },
-  {
-    label: 'Gym Only',
-    title: 'Consistent full-gym access for self-guided training',
-    items: [
-      { kind: 'yes', text: 'Full gym access for the paid membership period' },
-      { kind: 'yes', text: 'Best for independent training routines' },
-      { kind: 'yes', text: 'Stronger fit for long-term consistency' },
-      { kind: 'no', text: 'No coach-booking eligibility' },
-    ],
-  },
-  {
-    label: 'Gym + Coach',
-    title: 'Structured support with coach-booking access',
-    items: [
-      { kind: 'yes', text: 'Full gym access for the paid membership period' },
-      { kind: 'yes', text: 'Unlocks eligibility to request recurring PT support' },
-      { kind: 'yes', text: 'Best for members who want coaching guidance' },
-      { kind: 'yes', text: 'Built for structure, accountability, and progress' },
-    ],
+    title: 'PT booking uses recurring day and slot logic',
+    description: 'Coach matching follows the same rules as the real booking flow, including partial matches, approvals, cancellations, and reschedules.',
   },
 ]
 
 const plans = [
   {
-    title: 'Gym Only',
-    price: '500,000 VND',
-    detail: '30 days - full gym access',
-  },
-  {
     title: 'Day Pass',
     price: '80,000 VND',
-    detail: '1 day - unlimited check-ins in that day',
+    detail: 'Single-day gym access with unlimited check-ins that day.',
+  },
+  {
+    title: 'Gym Only',
+    price: '500,000 VND',
+    detail: 'Self-guided membership for customers who train independently.',
   },
   {
     title: 'Gym + Coach',
     price: '5,000,000 VND',
-    detail: '180 days - gym + coach booking access',
+    detail: 'Includes coach-booking eligibility for structured support.',
   },
 ]
 
 const products = [
-  {
-    title: 'Whey Protein',
-    price: 'from 900,000 VND',
-    detail: 'Muscle recovery and daily protein support.',
-  },
-  {
-    title: 'Creatine',
-    price: 'from 350,000 VND',
-    detail: 'Strength and performance support.',
-  },
-  {
-    title: 'Mass Gainer',
-    price: 'from 850,000 VND',
-    detail: 'High-calorie formula for weight gain goals.',
-  },
-  {
-    title: 'Pre-workout',
-    price: 'from 580,000 VND',
-    detail: 'Energy and focus support before training.',
-  },
+  { title: 'Whey Protein', detail: 'Recovery and daily protein support for training blocks.' },
+  { title: 'Creatine', detail: 'Simple performance support for strength and repeat effort.' },
+  { title: 'Mass Gainer', detail: 'High-calorie option for customers focusing on weight gain.' },
+  { title: 'Pre-workout', detail: 'Energy and focus support before hard sessions.' },
 ]
 
 const faqs = [
   {
-    question: 'Do I need an account before I can explore the gym website?',
-    answer:
-      'No. You can browse memberships, supplements, promotions, and training content first. You only need to sign in when you want to purchase, check in, or manage your member activity.',
+    question: 'Do I need an account before exploring the website?',
+    answer: 'No. Guests can browse memberships, products, promotions, and workout or food content before signing in.',
   },
   {
-    question: 'Which membership should I choose?',
-    answer:
-      'Day Pass is best for a single training day, Gym Only is the standard option for independent training, and Gym + Coach is the plan that unlocks coach-booking eligibility and more structured support.',
+    question: 'Which membership unlocks coach booking?',
+    answer: 'Only Gym + Coach can unlock PT booking. Day Pass and Gym Only do not allow coach-booking eligibility.',
   },
   {
-    question: 'How does check-in work when I arrive at the gym?',
-    answer:
-      'Check-in uses your active membership status. Day Pass, Gym Only, and Gym + Coach can all be used for gym entry, but the membership must still be active and valid for that day.',
-  },
-  {
-    question: 'Can I book a coach with any membership?',
-    answer:
-      'No. Coach booking is reserved for customers with an active Gym + Coach membership. That plan is designed for members who want recurring PT support instead of self-guided training only.',
-  },
-  {
-    question: 'How do supplement orders work?',
-    answer:
-      'Products are paid online after sign-in, then collected in person at the gym. This keeps pickup fast and verified while letting you browse the shop before creating an account.',
-  },
-  {
-    question: 'Can I use promotions on the website?',
-    answer:
-      'Yes. Promotions are shown on the site and can support either membership offers or product-order discounts, depending on the campaign that is currently active.',
+    question: 'How do product orders work?',
+    answer: 'Orders are paid online, then picked up in person at the gym front desk. Delivery is intentionally out of scope.',
   },
 ]
 
@@ -133,10 +63,7 @@ function LandingPage() {
   const heroVideoRef = useRef(null)
 
   useEffect(() => {
-    if (!heroVideoRef.current) {
-      return
-    }
-
+    if (!heroVideoRef.current) return
     heroVideoRef.current.playbackRate = 0.75
   }, [])
 
@@ -151,323 +78,208 @@ function LandingPage() {
   }
 
   return (
-    <div className="bg-white text-slate-900">
-      <section className="relative overflow-hidden bg-slate-950 px-4 py-16 text-white sm:px-6 sm:py-20">
-        <div className="absolute inset-0 overflow-hidden">
-          <video
-            ref={heroVideoRef}
-            className="h-full w-full object-cover blur-[3px] brightness-[0.42]"
-            autoPlay
-            muted
-            loop
-            playsInline
-            aria-hidden="true"
-          >
-            <source src="/media/landing-hero.mp4" type="video/mp4" />
-          </video>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(245,158,11,0.18),transparent_32%),radial-gradient(circle_at_88%_12%,rgba(22,163,74,0.12),transparent_24%),linear-gradient(135deg,rgba(9,9,15,0.82)_0%,rgba(17,24,39,0.78)_48%,rgba(15,23,42,0.86)_100%)]" />
-        </div>
-        <div className="relative mx-auto max-w-7xl">
-          <div className="flex min-h-[560px] items-end py-6 sm:min-h-[620px]">
-            <div className="w-full max-w-6xl py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-gym-100">Atmospheric Fitness Workspace</p>
-              <h1 className="mt-5 max-w-4xl text-4xl font-black leading-[0.98] sm:text-5xl lg:text-7xl">
-                Your fitness journey starts here.
-              </h1>
-              <p className="mt-6 max-w-3xl text-base leading-8 text-slate-200 sm:text-lg">
-                High-energy training spaces, expert coaching support, and a smoother member experience from first visit to long-term routine.
-              </p>
-              <div className="mt-10 grid w-full max-w-none gap-12 border-t border-white/15 pt-7 text-base leading-8 text-slate-200 sm:grid-cols-3 lg:grid-cols-[1.08fr_0.98fr_1.12fr] lg:text-lg lg:leading-9">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gym-100">Train</p>
-                  <p className="mt-3 max-w-none">
-                    Step into a gym environment built for strength, consistency, and everyday progress instead of one-off motivation.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gym-100">Recover</p>
-                  <p className="mt-3 max-w-none">
-                    Get support from coaches, structured member tools, and supplements that fit real training goals and routines.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gym-100">Belong</p>
-                  <p className="mt-3 max-w-none">
-                    Join a space that feels active, disciplined, and welcoming from your first visit to your long-term fitness journey.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-slate-200 bg-white py-6">
-        <div className="mx-auto grid max-w-7xl gap-0 px-4 sm:grid-cols-3 sm:px-6">
-          <article className="border-b border-slate-200 py-4 sm:border-b-0 sm:border-r sm:pr-6">
-            <div className="inline-flex items-center gap-2 text-gym-700">
-              <Clock3 size={16} />
-              <span className="text-sm font-semibold">Opening Hours</span>
-            </div>
-            <p className="mt-2 text-base font-semibold text-slate-900">{gymPublicInfo.openingHours}</p>
-          </article>
-          <article className="border-b border-slate-200 py-4 sm:border-b-0 sm:border-r sm:px-6">
-            <div className="flex items-center justify-between gap-3">
-              <div className="inline-flex items-center gap-2 text-gym-700">
-                <Phone size={16} />
-                <span className="text-sm font-semibold">Hotline</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyHotline}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
-                title="Copy hotline number"
-                aria-label="Copy hotline number"
-              >
-                {hotlineCopied ? <Check size={14} /> : <Copy size={14} />}
-              </button>
-            </div>
-            <p className="mt-2 text-base font-semibold text-slate-900">
-              {gymPublicInfo.hotline}
-            </p>
-          </article>
-          <article className="py-4 sm:pl-6">
-            <div className="inline-flex items-center gap-2 text-gym-700">
-              <MapPin size={16} />
-              <span className="text-sm font-semibold">Address</span>
-            </div>
-            <a
-              className="mt-2 inline-flex text-base font-semibold leading-6 text-slate-900 transition duration-200 hover:!text-emerald-400"
-              href={gymPublicInfo.mapsUrl}
-              target="_blank"
-              rel="noreferrer"
+    <div className="space-y-20 pb-24 lg:space-y-24">
+      <section className="gc-shell-boundary pt-8 sm:pt-10 lg:pt-12">
+        <div className="gc-panel relative overflow-hidden px-6 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12">
+          <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-gym-500/10 blur-[120px]" />
+          <div className="pointer-events-none absolute -bottom-20 right-0 h-64 w-64 rounded-full bg-gym-500/10 blur-[120px]" />
+          <div className="absolute inset-0 overflow-hidden">
+            <video
+              ref={heroVideoRef}
+              className="h-full w-full object-cover opacity-20 blur-[2px]"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-hidden="true"
             >
-              {gymPublicInfo.address}
-            </a>
-          </article>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-[1600px] px-4 py-16 sm:px-6">
-        <div className="grid gap-14 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-stretch xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-          <div className="grid min-h-full py-2 lg:grid-rows-[1fr_auto]">
-            <div className="flex flex-col justify-center">
-              <p className="text-base font-semibold uppercase tracking-[0.28em] text-gym-700 lg:text-lg">Why GymCore</p>
-              <div className="mt-4 max-w-2xl">
-                <h2 className="text-4xl font-bold leading-[1.08] lg:text-5xl">
-                  GymCore helps you start strong, train consistently, and choose the support that fits your goals.
-                </h2>
-              </div>
-            </div>
-            <div className="mt-8 space-y-6 lg:mt-0">
-              {storyPoints.map((item) => (
-                <div key={item.title} className="border-l-2 border-gym-500 pl-5">
-                  <h3 className="text-xl font-semibold leading-8 text-slate-50 lg:text-2xl">
-                    {item.title}
-                  </h3>
-                  <p className="mt-3 text-base leading-8 text-slate-200 lg:text-lg lg:leading-9">
-                    {item.description}
-                  </p>
-                </div>
-              ))}
-            </div>
+              <source src="/media/landing-hero.mp4" type="video/mp4" />
+            </video>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.16),transparent_24%),radial-gradient(circle_at_82%_18%,rgba(245,158,11,0.1),transparent_18%),linear-gradient(135deg,rgba(18,18,26,0.88),rgba(10,10,15,0.72)_48%,rgba(10,10,15,0.94))]" />
           </div>
 
-          <div className="grid min-h-full gap-6 lg:grid-rows-[1fr_auto]">
-            <article className="group relative overflow-hidden">
-              <img
-                src="/media/landing/gym-room.jpg"
-                alt="Gym room interior"
-                className="block h-full w-full object-cover transition duration-500 group-hover:scale-[1.01]"
-              />
-              <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white drop-shadow-[0_8px_24px_rgba(15,23,42,0.75)]">Gym Room</p>
-                <p className="mt-2 max-w-xl text-xl font-semibold text-white drop-shadow-[0_8px_24px_rgba(15,23,42,0.75)] sm:text-2xl">
-                  Built for everyday training, not just first impressions.
+          <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_360px] lg:items-end">
+            <div className="space-y-8">
+              <div className="inline-flex items-center gap-3 rounded-full border border-amber-400/15 bg-amber-500/10 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-amber-300 shadow-[0_0_24px_rgba(245,158,11,0.12)]">
+                <span className="h-2 w-2 rounded-full bg-gym-400 animate-pulse" aria-hidden="true" />
+                Minimalist Dark System
+              </div>
+              <div className="space-y-5">
+                <h1 className="gc-page-title max-w-4xl">
+                  Your fitness journey starts here.
+                </h1>
+                <p className="gc-page-copy max-w-3xl text-base sm:text-lg">
+                  Step into a gym environment built for strength, structure, and a full operational flow from membership to PT booking, product pickup, and progress follow-up.
                 </p>
               </div>
-            </article>
 
-            <div className="grid gap-6 sm:grid-cols-[0.8fr_1.2fr]">
-              <article className="group relative overflow-hidden">
-                <img
-                  src="/media/landing/qr-checkin.jpg"
-                  alt="QR check-in"
-                  className="block h-full w-full object-cover transition duration-500 group-hover:scale-[1.01]"
-                />
-                <div className="absolute inset-x-0 bottom-0 p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-white drop-shadow-[0_8px_24px_rgba(15,23,42,0.75)]">QR Access</p>
-                  <p className="mt-2 max-w-xs text-base font-semibold leading-7 text-white drop-shadow-[0_8px_24px_rgba(15,23,42,0.75)]">
-                    Fast check-in with a clean member entry flow.
-                  </p>
-                </div>
-              </article>
+              <div className="flex flex-wrap gap-3">
+                <Link to="/auth/register" className="gc-button-primary">
+                  Start with an account
+                  <ArrowRight size={16} />
+                </Link>
+                <Link to="/auth/login" className="gc-button-secondary">
+                  Enter the workspace
+                </Link>
+              </div>
 
-              <article className="group relative overflow-hidden">
-                <img
-                  src="/media/landing/coach-discuss.jpg"
-                  alt="Coach discussing goals with customer"
-                  className="block h-full w-full object-cover transition duration-500 group-hover:scale-[1.01]"
-                />
-                <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-white drop-shadow-[0_8px_24px_rgba(15,23,42,0.75)]">Coach Discuss</p>
-                  <p className="mt-2 max-w-sm text-base font-semibold leading-7 text-white drop-shadow-[0_8px_24px_rgba(15,23,42,0.75)]">
-                    Coaching support that feels personal, practical, and goal-driven.
-                  </p>
-                </div>
-              </article>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="membership" className="border-t border-white/10 py-16">
-        <div className="mx-auto grid max-w-[1600px] gap-12 px-4 sm:px-6 lg:grid-cols-[1fr_1fr] xl:grid-cols-[0.98fr_1.02fr]">
-          <div className="flex flex-col">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-gym-700">Membership</p>
-            <h2 className="mt-4 text-3xl font-bold">Choose access based on how you actually train</h2>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-slate-200">
-              Day Pass is the easiest way to start. Gym Only is built for independent training, while Gym + Coach opens the personal-training request flow for members who want structured support.
-            </p>
-            <div className="mt-8 space-y-5">
-              {plans.map((plan) => (
-                <div key={plan.title} className="border-b border-slate-200 pb-5 last:border-b-0 last:pb-0">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <h3 className="text-xl font-semibold text-slate-900">{plan.title}</h3>
-                    <p className="text-lg font-bold text-gym-700">{plan.price}</p>
-                  </div>
-                  <p className="mt-2 text-base text-slate-300">{plan.detail}</p>
-                </div>
-              ))}
-            </div>
-            <p className="mt-8 text-sm font-semibold text-gym-700">
-              Gym + Coach membership required for PT booking
-            </p>
-            <div className="mt-10">
-              <Link
-                to="/customer/membership"
-                className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-gym-600 via-gym-400 to-gym-600 bg-[length:200%_auto] px-8 py-4 text-[15px] font-black uppercase tracking-[0.12em] text-white shadow-[0_8px_32px_-8px_rgba(14,167,115,0.6)] transition-all duration-500 hover:-translate-y-1 hover:bg-[100%_center] hover:shadow-[0_12px_40px_-8px_rgba(14,167,115,0.8)]"
-              >
-                <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity duration-300 group-hover:opacity-100"></div>
-                <span className="relative z-10 flex items-center gap-2.5 drop-shadow-md">
-                  <ShoppingBag size={18} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-rotate-12 group-hover:scale-110" />
-                  <span>Buy now</span>
-                  <ArrowRight size={18} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-1" />
-                </span>
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid gap-8 lg:grid-rows-[auto_1fr]">
-            <div className="group relative overflow-hidden">
-              <img
-                src="/media/landing/membership-consultation.png"
-                alt="Gym membership consultation"
-                className="block h-[360px] w-full object-cover transition duration-500 group-hover:scale-[1.01]"
-              />
-            </div>
-
-            <div>
-              <div className="grid gap-8 sm:grid-cols-3 sm:gap-8 xl:gap-10">
-                {membershipComparison.map((step) => (
-                  <div key={step.label} className="flex h-full flex-col space-y-3">
-                    <p className="text-base font-black tracking-[0.12em] text-gym-700">{step.label}</p>
-                    <h3 className="min-h-[160px] text-[2rem] font-semibold leading-[1.2] text-slate-50">
-                      {step.title}
-                    </h3>
-                    <div className="space-y-3 pt-1">
-                      {step.items.map((item) => (
-                        <div key={`${step.label}-${item.text}`} className="flex items-start gap-3">
-                          <span
-                            className={`mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                              item.kind === 'yes'
-                                ? 'bg-emerald-500/18 text-emerald-400'
-                                : 'bg-rose-500/18 text-rose-400'
-                            }`}
-                          >
-                            {item.kind === 'yes' ? <Check size={14} strokeWidth={3} /> : <X size={14} strokeWidth={3} />}
-                          </span>
-                          <p className="text-base leading-8 text-slate-200">{item.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                {storyPoints.map((item) => (
+                  <article key={item.title} className="gc-panel-soft h-full px-4 py-5">
+                    <p className="text-sm font-bold uppercase tracking-[0.14em] text-amber-200">{item.title}</p>
+                    <p className="mt-3 text-sm leading-7 text-zinc-400">{item.description}</p>
+                  </article>
                 ))}
               </div>
             </div>
+
+            <aside className="space-y-4">
+              <div className="gc-panel-soft p-5">
+                <p className="gc-page-kicker">Live At A Glance</p>
+                <div className="mt-4 space-y-4 text-sm leading-7 text-zinc-300">
+                  <p className="flex items-start gap-3"><Sparkles size={16} className="mt-1 text-gym-300" /><span>Membership checkout, product checkout, and coupon application follow business rules from the same backend model.</span></p>
+                  <p className="flex items-start gap-3"><Sparkles size={16} className="mt-1 text-gym-300" /><span>Reception supports QR or manual customer lookup for check-in and pickup workflows.</span></p>
+                  <p className="flex items-start gap-3"><Sparkles size={16} className="mt-1 text-gym-300" /><span>Coach booking, customer health, and notifications stay role-aware instead of acting like isolated pages.</span></p>
+                </div>
+              </div>
+
+              <div className="gc-panel-soft p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[0.68rem] font-black uppercase tracking-[0.22em] text-zinc-500">Hotline</p>
+                    <p className="mt-2 text-lg font-bold text-white">{gymPublicInfo.hotline}</p>
+                  </div>
+                  <button type="button" onClick={handleCopyHotline} className="gc-button-icon" aria-label="Copy hotline number">
+                    {hotlineCopied ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </div>
+                <div className="mt-4 space-y-3 text-sm text-zinc-400">
+                  <p className="inline-flex items-center gap-2"><Clock3 size={14} className="text-gym-400" />Open Daily: {gymPublicInfo.openingHours}</p>
+                  <a href={gymPublicInfo.mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-start gap-2 transition-[color] duration-200 hover:text-white">
+                    <MapPin size={14} className="mt-1 text-gym-400" />
+                    <span>{gymPublicInfo.address}</span>
+                  </a>
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </section>
 
-      <section id="products" className="border-t border-white/10 py-16">
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="group relative overflow-hidden">
-            <img
-              src="/media/landing/creatin.jpg"
-              alt="Creatine supplement"
-              className="block h-auto w-full transition duration-500 group-hover:scale-[1.01]"
-            />
-          </div>
-
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-gym-700">Supplement Products</p>
-            <h2 className="mt-4 text-3xl font-bold">Support training goals with essential gym supplements</h2>
-            <p className="mt-4 text-sm leading-7 text-slate-600">
-              Guests can browse supplement categories before login, then place orders after signing in. All purchases are collected at the gym so pickup stays fast, verified, and easy to manage.
+      <section className="gc-shell-boundary">
+        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="gc-page-section">
+            <p className="gc-page-kicker">Membership Logic</p>
+            <h2 className="gc-page-section-title">Choose the plan that matches the rule set you actually need.</h2>
+            <p className="gc-page-section-copy">
+              Day Pass is for one-day access, Gym Only is for independent training, and Gym + Coach is the only path that unlocks PT booking eligibility.
             </p>
-            <div className="mt-8 grid gap-x-8 gap-y-6 sm:grid-cols-2">
-              {products.map((product) => (
-                <div key={product.title} className="border-t border-slate-200 pt-4">
-                  <h3 className="text-lg font-semibold text-slate-900">{product.title}</h3>
-                  <p className="mt-2 text-base font-bold text-gym-700">{product.price}</p>
-                  <p className="mt-2 text-sm text-slate-600">{product.detail}</p>
-                </div>
+            <div className="grid gap-4">
+              {plans.map((plan) => (
+                <article key={plan.title} className="gc-panel-soft px-5 py-5">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <h3 className="font-display text-2xl font-bold text-white">{plan.title}</h3>
+                    <p className="font-mono text-base font-bold text-amber-300">{plan.price}</p>
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-zinc-400">{plan.detail}</p>
+                </article>
               ))}
             </div>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <Link
-                to="/customer/shop"
-                className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-gym-600 via-gym-400 to-gym-600 bg-[length:200%_auto] px-8 py-4 text-[15px] font-black uppercase tracking-[0.12em] text-white shadow-[0_8px_32px_-8px_rgba(14,167,115,0.6)] transition-all duration-500 hover:-translate-y-1 hover:bg-[100%_center] hover:shadow-[0_12px_40px_-8px_rgba(14,167,115,0.8)]"
-              >
-                <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity duration-300 group-hover:opacity-100"></div>
-                <span className="relative z-10 flex items-center gap-2.5 drop-shadow-md">
-                  <ShoppingBag size={18} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-rotate-12 group-hover:scale-110" />
-                  <span>Buy now</span>
-                  <ArrowRight size={18} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-1" />
-                </span>
-              </Link>
-              <p className="text-sm font-semibold text-gym-700">Pickup at gym only</p>
-            </div>
+            <Link to="/customer/membership" className="gc-button-primary inline-flex w-fit">
+              Explore memberships
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            <article className="gc-panel-soft overflow-hidden">
+              <img
+                src="/media/landing/gym-room.jpg"
+                alt="Gym room interior"
+                width="1200"
+                height="900"
+                className="aspect-[4/3] w-full object-cover"
+                fetchPriority="high"
+              />
+              <div className="p-5">
+                <p className="gc-page-kicker">Gym Floor</p>
+                <p className="mt-3 text-sm leading-7 text-zinc-400">Built for repeatable daily training, not just first impressions.</p>
+              </div>
+            </article>
+            <article className="gc-panel-soft overflow-hidden">
+              <img
+                src="/media/landing/coach-discuss.jpg"
+                alt="Coach discussing goals with customer"
+                width="1200"
+                height="900"
+                className="aspect-[4/3] w-full object-cover"
+                loading="lazy"
+              />
+              <div className="p-5">
+                <p className="gc-page-kicker">Coach Support</p>
+                <p className="mt-3 text-sm leading-7 text-zinc-400">Recurring PT support, approvals, session notes, and rating flows all live inside the same model.</p>
+              </div>
+            </article>
+            <article className="gc-panel-soft overflow-hidden sm:col-span-2">
+              <img
+                src="/media/landing/qr-checkin.jpg"
+                alt="QR check-in at the gym"
+                width="1600"
+                height="900"
+                className="aspect-[16/9] w-full object-cover"
+                loading="lazy"
+              />
+              <div className="p-5">
+                <p className="gc-page-kicker">Reception Workflow</p>
+                <p className="mt-3 text-sm leading-7 text-zinc-400">Check-in and product pickup stay front-desk friendly, with QR scanning, manual fallback search, invoice status, and membership validity checks.</p>
+              </div>
+            </article>
           </div>
         </div>
       </section>
 
-      <section className="bg-slate-50 py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr]">
-            <div className="max-w-xl">
-              <p className="text-lg font-black uppercase tracking-[0.26em] text-gym-700 sm:text-xl">FAQ</p>
-              <h2 className="mt-4 text-3xl font-bold text-slate-950 sm:text-4xl">Questions customers usually ask before they join</h2>
-              <p className="mt-4 text-base leading-8 text-slate-700">
-                If you are comparing memberships, wondering how check-in works, or deciding whether Gym + Coach is worth it, start here.
-              </p>
+      <section className="gc-shell-boundary">
+        <div className="grid gap-6 lg:grid-cols-[1fr_0.94fr]">
+          <div className="gc-page-section">
+            <p className="gc-page-kicker">Supplement Shop</p>
+            <h2 className="gc-page-section-title">Browse products online. Pay online. Pick up in person.</h2>
+            <p className="gc-page-section-copy">
+              Product sales are intentionally scoped to gym operations: cart, coupon, PayOS checkout, invoice history, and in-person pickup instead of delivery logistics.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {products.map((product) => (
+                <article key={product.title} className="gc-panel-soft px-5 py-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-display text-xl font-bold text-white">{product.title}</h3>
+                    <ShoppingBag size={18} className="text-amber-300" />
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-zinc-400">{product.detail}</p>
+                </article>
+              ))}
             </div>
+            <Link to="/customer/shop" className="gc-button-secondary inline-flex w-fit">
+              Open product shop
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+
+          <div className="gc-page-section">
+            <p className="gc-page-kicker">FAQ</p>
+            <h2 className="gc-page-section-title">Answer the common workflow questions before customers hit friction.</h2>
             <div className="space-y-4">
               {faqs.map((item) => (
-                <details
-                  key={item.question}
-                  className="group rounded-[24px] border border-slate-200 bg-white px-5 py-5 shadow-[0_20px_50px_rgba(15,23,42,0.05)] transition open:border-gym-200 open:shadow-[0_24px_60px_rgba(34,197,94,0.08)] sm:px-6"
-                >
-                  <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-                    <span className="text-lg font-semibold leading-8 text-slate-950">{item.question}</span>
-                    <span className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-500 transition group-open:bg-gym-100 group-open:text-gym-800">
-                      <span className="group-open:hidden">+</span>
-                      <span className="hidden group-open:inline">−</span>
-                    </span>
-                  </summary>
-                  <p className="mt-4 pr-12 text-base leading-8 text-slate-700">{item.answer}</p>
+                <details key={item.question} className="gc-panel-soft px-5 py-4">
+                  <summary className="cursor-pointer list-none text-base font-bold text-white">{item.question}</summary>
+                  <p className="mt-3 text-sm leading-7 text-zinc-400">{item.answer}</p>
                 </details>
               ))}
+            </div>
+            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5 shadow-[0_0_30px_rgba(245,158,11,0.06)]">
+              <p className="gc-page-kicker">Need Direct Help?</p>
+              <div className="mt-4 space-y-3 text-sm text-zinc-300">
+                <p className="inline-flex items-center gap-2"><Phone size={14} className="text-gym-400" />{gymPublicInfo.hotline}</p>
+                <p className="inline-flex items-center gap-2"><Clock3 size={14} className="text-gym-400" />{gymPublicInfo.openingHours}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -477,3 +289,5 @@ function LandingPage() {
 }
 
 export default LandingPage
+
+

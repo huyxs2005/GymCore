@@ -11,3 +11,5 @@ export const adminMembershipApi = {
     return apiClient.put(`/v1/admin/membership-plans/${planId}`, payload).then((response) => response.data)
   },
 }
+
+

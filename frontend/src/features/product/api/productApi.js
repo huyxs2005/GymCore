@@ -17,3 +17,5 @@ export const productApi = {
     return apiClient.delete(`/v1/products/${productId}/reviews`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

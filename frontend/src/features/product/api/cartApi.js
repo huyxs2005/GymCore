@@ -14,3 +14,5 @@ export const cartApi = {
     return apiClient.delete(`/v1/cart/items/${productId}`).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

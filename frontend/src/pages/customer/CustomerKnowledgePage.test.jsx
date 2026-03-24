@@ -400,3 +400,5 @@ describe('CustomerKnowledgePage', () => {
     expect(screen.getByText('Coach Linh')).toBeInTheDocument()
   })
 })
+
+

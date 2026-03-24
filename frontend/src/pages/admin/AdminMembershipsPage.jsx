@@ -4,6 +4,7 @@ import { Edit3, PlusCircle, Search } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { adminMembershipApi } from '../../features/membership/api/adminMembershipApi'
+import { formatCurrency } from '../../utils/formatters'
 
 const PLAN_TYPE_FILTERS = [
   { value: 'ALL', label: 'All plan types' },
@@ -23,6 +24,9 @@ const COACH_FILTERS = [
   { value: 'enabled', label: 'Coach booking enabled' },
   { value: 'disabled', label: 'Coach booking disabled' },
 ]
+
+const FILTER_CLASS = 'gc-select min-h-0 rounded-full bg-[rgba(18,18,26,0.92)] px-3 py-1.5 text-xs font-medium'
+const INPUT_CLASS = 'gc-input min-h-0 rounded-md px-3 py-1.5 text-xs'
 
 function normalizePlanDraft(draft) {
   const planType = (draft.planType || 'GYM_ONLY').toUpperCase()
@@ -153,7 +157,7 @@ function AdminMembershipsPage() {
     >
       <div className="space-y-4">
         <section className="space-y-4 gc-card-compact">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
             <div>
               <h2 className="gc-section-kicker">Membership Plans</h2>
               <p className="mt-0.5 text-xs text-slate-500">
@@ -161,20 +165,25 @@ function AdminMembershipsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-within:border-amber-500/30 focus-within:bg-white/[0.07] focus-within:ring-2 focus-within:ring-amber-500/15">
                 <Search size={14} className="text-slate-400" />
+                <span className="sr-only">Search plans</span>
                 <input
-                  type="text"
+                  type="search"
+                  name="membershipPlanSearch"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search plans..."
-                  className="w-32 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none sm:w-52"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Search plans…"
+                  className="w-32 bg-transparent text-xs text-slate-100 placeholder:text-slate-400 outline-none sm:w-52"
                 />
               </div>
               <select
                 value={planTypeFilter}
                 onChange={(event) => setPlanTypeFilter(event.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+                name="planTypeFilter"
+                className={FILTER_CLASS}
               >
                 {PLAN_TYPE_FILTERS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -183,7 +192,8 @@ function AdminMembershipsPage() {
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+                name="membershipStatusFilter"
+                className={FILTER_CLASS}
               >
                 {STATUS_FILTERS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -192,7 +202,8 @@ function AdminMembershipsPage() {
               <select
                 value={coachFilter}
                 onChange={(event) => setCoachFilter(event.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+                name="membershipCoachFilter"
+                className={FILTER_CLASS}
               >
                 {COACH_FILTERS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -201,7 +212,7 @@ function AdminMembershipsPage() {
               <button
                 type="button"
                 onClick={handleCreate}
-                className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-gym-700"
+                className="gc-button-primary inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold shadow-sm"
               >
                 <PlusCircle size={14} />
                 New plan
@@ -210,29 +221,29 @@ function AdminMembershipsPage() {
           </header>
 
           {plansQuery.error ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">
+            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs font-medium text-rose-300">
               {resolveApiMessage(plansQuery.error, 'Membership plans could not be loaded.')}
             </div>
           ) : null}
 
-          <div className="max-h-80 overflow-x-auto rounded-xl border border-slate-100">
-            <table className="min-w-full divide-y divide-slate-100 text-xs">
-              <thead className="bg-slate-50">
+          <div className="max-h-80 overflow-x-auto rounded-xl border border-white/10">
+            <table className="min-w-full divide-y divide-white/10 text-xs">
+              <thead className="bg-white/5">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Name</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Type</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Price</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Days</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Coach</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-600">Actions</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-400">Name</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-400">Type</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-400">Price</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-400">Days</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-400">Coach</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-400">Status</th>
+                  <th className="px-3 py-2 text-right font-semibold text-slate-400">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-white/10 bg-[rgba(18,18,26,0.92)]">
                 {plansQuery.isLoading && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-3 text-center text-slate-500">
-                      Loading plans...
+                    <td colSpan={7} className="px-3 py-3 text-center text-slate-500" aria-live="polite">
+                      Loading plans…
                     </td>
                   </tr>
                 )}
@@ -245,17 +256,17 @@ function AdminMembershipsPage() {
                 )}
                 {filteredPlans.map((plan) => (
                   <tr key={plan.planId}>
-                    <td className="px-3 py-2 text-slate-900">{plan.name}</td>
-                    <td className="px-3 py-2 text-slate-700">{plan.planType}</td>
-                    <td className="px-3 py-2 text-slate-700">{Number(plan.price || 0).toLocaleString('en-US')} VND</td>
-                    <td className="px-3 py-2 text-slate-700">{plan.durationDays}</td>
-                    <td className="px-3 py-2 text-slate-700">{plan.allowsCoachBooking ? 'Yes' : 'No'}</td>
+                    <td className="px-3 py-2 text-slate-50">{plan.name}</td>
+                    <td className="px-3 py-2 text-slate-200">{plan.planType}</td>
+                    <td className="px-3 py-2 text-slate-200">{formatCurrency(plan.price)}</td>
+                    <td className="px-3 py-2 text-slate-200">{plan.durationDays}</td>
+                    <td className="px-3 py-2 text-slate-200">{plan.allowsCoachBooking ? 'Yes' : 'No'}</td>
                     <td className="px-3 py-2">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                           plan.active
-                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
-                            : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                            ? 'bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/20'
+                            : 'bg-white/10 text-slate-400 ring-1 ring-white/10'
                         }`}
                       >
                         {plan.active ? 'Active' : 'Inactive'}
@@ -265,7 +276,7 @@ function AdminMembershipsPage() {
                       <button
                         type="button"
                         onClick={() => handleEdit(plan)}
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:border-gym-300 hover:text-gym-700"
+                        className="gc-button-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium"
                       >
                         <Edit3 size={12} />
                         Edit
@@ -281,32 +292,35 @@ function AdminMembershipsPage() {
         {editingPlan && (
           <section className="gc-card-compact">
             <form noValidate onSubmit={handleSubmit} className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-slate-50">
                 {editingPlan.planId ? 'Update membership plan' : 'Create membership plan'}
               </h3>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Plan name</label>
+                  <label className="text-xs font-medium text-slate-400">Plan name</label>
                   <input
                     type="text"
+                    name="name"
                     maxLength={100}
                     value={editingPlan.name}
                     onChange={(event) =>
                       setEditingPlan((prev) => ({ ...prev, name: event.target.value }))
                     }
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+                    autoComplete="off"
+                    className={INPUT_CLASS}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Plan type</label>
+                  <label className="text-xs font-medium text-slate-400">Plan type</label>
                   <select
                     value={editingPlan.planType}
                     onChange={(event) =>
                       setEditingPlan((prev) => normalizePlanDraft({ ...prev, planType: event.target.value }))
                     }
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+                    name="planType"
+                    className={INPUT_CLASS}
                   >
                     <option value="DAY_PASS">DAY_PASS</option>
                     <option value="GYM_ONLY">GYM_ONLY</option>
@@ -317,73 +331,77 @@ function AdminMembershipsPage() {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Price (VND)</label>
+                  <label className="text-xs font-medium text-slate-400">Price (VND)</label>
                   <input
                     type="number"
+                    name="price"
                     min={1}
                     step="1000"
                     value={editingPlan.price}
                     onChange={(event) =>
                       setEditingPlan((prev) => ({ ...prev, price: Number(event.target.value || 0) }))
                     }
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400"
+                    inputMode="numeric"
+                    className={INPUT_CLASS}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Duration (days)</label>
+                  <label className="text-xs font-medium text-slate-400">Duration (days)</label>
                   <input
                     type="number"
+                    name="durationDays"
                     min={1}
                     disabled={editingPlan.planType === 'DAY_PASS'}
                     value={editingPlan.planType === 'DAY_PASS' ? 1 : editingPlan.durationDays}
                     onChange={(event) =>
                       setEditingPlan((prev) => ({ ...prev, durationDays: Number(event.target.value || 1) }))
                     }
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-gym-400 focus:outline-none focus:ring-1 focus:ring-gym-400 disabled:bg-slate-100"
+                    inputMode="numeric"
+                    className={`${INPUT_CLASS} disabled:bg-white/10`}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Coach booking</label>
+                  <label className="text-xs font-medium text-slate-400">Coach booking</label>
                   <input
                     type="text"
                     readOnly
                     value={normalizePlanDraft(editingPlan).allowsCoachBooking ? 'Enabled' : 'Disabled'}
-                    className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700"
+                    className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200"
                   />
                 </div>
               </div>
 
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-200">
                 <input
                   type="checkbox"
                   checked={editingPlan.active}
                   onChange={(event) =>
                     setEditingPlan((prev) => ({ ...prev, active: event.target.checked }))
                   }
-                  className="h-3 w-3 rounded border-slate-300 text-gym-600 focus:ring-gym-500"
+                  className="h-3 w-3 rounded border-white/15 text-gym-600 focus:ring-gym-500"
                 />
                 Active (available for new purchases)
               </label>
 
               {errorMessage && (
-                <p className="text-xs font-medium text-red-600">{errorMessage}</p>
+                <p className="text-xs font-medium text-red-600" aria-live="polite">{errorMessage}</p>
               )}
 
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setEditingPlan(null)}
-                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="gc-button-secondary px-3 py-1 text-xs font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={upsertMutation.isPending}
-                  className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500"
+                  className="gc-button-primary inline-flex items-center gap-2 px-4 py-1.5 text-xs font-semibold shadow-sm disabled:cursor-not-allowed disabled:bg-white/50"
                 >
                   {upsertMutation.isPending
-                    ? 'Saving...'
+                    ? 'Saving…'
                     : editingPlan.planId
                       ? 'Save changes'
                       : 'Create plan'}
@@ -398,3 +416,8 @@ function AdminMembershipsPage() {
 }
 
 export default AdminMembershipsPage
+
+
+
+
+

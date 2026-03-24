@@ -20,7 +20,7 @@ function ConfirmDialog({
         confirm: 'bg-rose-500 hover:bg-rose-400 text-slate-950',
       }
     : {
-        icon: 'border border-gym-300/30 bg-gym-50 text-gym-700',
+        icon: 'border border-gym-500/30/30 bg-gym-500/10 text-gym-300',
         confirm: 'bg-gym-500 hover:brightness-110 text-slate-950 shadow-glow',
       }
 
@@ -43,15 +43,15 @@ function ConfirmDialog({
               <AlertTriangle size={20} />
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Confirm action</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-zinc-500">Confirm action</p>
               <h2 id="confirm-dialog-title" className="mt-2 font-display text-xl font-bold tracking-tight text-slate-50">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-500">{description}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-50"
+            className="rounded-full p-2 text-zinc-500 transition hover:bg-white/5 hover:text-slate-50"
             aria-label="Close confirmation dialog"
           >
             <X size={18} />
@@ -82,3 +82,8 @@ function ConfirmDialog({
 }
 
 export default ConfirmDialog
+
+
+
+
+

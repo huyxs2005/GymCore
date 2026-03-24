@@ -14,3 +14,5 @@ export const healthApi = {
     return apiClient.post('/v1/health/records', payload).then((response) => response.data)
   },
 }
+
+

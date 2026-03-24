@@ -16,23 +16,18 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { checkinApi } from '../../features/checkin/api/checkinApi'
 import { healthApi } from '../../features/health/api/healthApi'
+import { formatDate as formatDateValue, formatDateTime as formatDateTimeValue } from '../../utils/formatters'
 
 function resolveApiMessage(error, fallback) {
   return error?.response?.data?.message || fallback
 }
 
 function formatDate(value) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleDateString('en-GB')
+  return formatDateValue(value).replace(',', '')
 }
 
 function formatDateTime(value) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleString('en-GB')
+  return formatDateTimeValue(value)
 }
 
 function formatMetric(value, unit, digits = 1) {
@@ -142,7 +137,7 @@ function CustomerProgressHubPage() {
 
   if (loading) {
     return (
-      <WorkspaceScaffold title="Loading progress hub..." links={customerNav}>
+      <WorkspaceScaffold title="Loading progress hub…" links={customerNav}>
         <div className="flex h-64 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-gym-500 border-t-transparent" />
         </div>
@@ -171,7 +166,7 @@ function CustomerProgressHubPage() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   to="/customer/coach-booking"
-                  className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)] transition hover:bg-gym-500"
+                  className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-5 py-2.5 text-sm font-bold text-slate-50 shadow-[0_0_15px_rgba(245,158,11,0.3)] transition hover:bg-gym-500"
                 >
                   Open PT dashboard
                   <ArrowRight className="h-4 w-4" />
@@ -296,7 +291,7 @@ function CustomerProgressHubPage() {
             <p className="mt-2 text-[13px] leading-relaxed text-slate-400">Recorded tracking history elements.</p>
             <div className="mt-4 border-t border-white/10 pt-4">
               <p className="text-[11px] font-bold text-slate-300">
-                <span className="text-emerald-400">{formatCount(ptContext?.completedSessions)} done</span> / <span className="text-gym-500">{formatCount(ptContext?.remainingSessions)} left</span>
+                {`${formatCount(ptContext?.completedSessions)} completed / ${formatCount(ptContext?.remainingSessions)} remaining PT sessions`}
               </p>
             </div>
           </article>
@@ -317,7 +312,7 @@ function CustomerProgressHubPage() {
 
         <section className="grid gap-5 lg:grid-cols-3">
           <article className="gc-glass-panel relative overflow-hidden p-6 border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-transparent group hover:border-emerald-500/40 transition-colors">
-            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/20 blur-[50px] group-hover:bg-emerald-500/30 transition-all"></div>
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/20 blur-[50px] group-hover:bg-emerald-500/30 transition-[transform,opacity,box-shadow,background-color,border-color,color]"></div>
             <div className="relative">
               <div className="flex items-center gap-2 text-emerald-400">
                 <CheckCircle2 size={16} strokeWidth={2.5} />
@@ -338,7 +333,7 @@ function CustomerProgressHubPage() {
           </article>
 
           <article className="gc-glass-panel relative overflow-hidden p-6 border-gym-500/20 bg-gradient-to-br from-gym-500/10 to-transparent group hover:border-gym-500/40 transition-colors">
-            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gym-500/20 blur-[50px] group-hover:bg-gym-500/30 transition-all"></div>
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gym-500/20 blur-[50px] group-hover:bg-gym-500/30 transition-[transform,opacity,box-shadow,background-color,border-color,color]"></div>
             <div className="relative">
               <div className="flex items-center gap-2 text-gym-400">
                 <Dumbbell size={16} strokeWidth={2.5} />
@@ -359,7 +354,7 @@ function CustomerProgressHubPage() {
           </article>
 
           <article className="gc-glass-panel relative overflow-hidden p-6 border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-transparent group hover:border-sky-500/40 transition-colors">
-            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-sky-500/20 blur-[50px] group-hover:bg-sky-500/30 transition-all"></div>
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-sky-500/20 blur-[50px] group-hover:bg-sky-500/30 transition-[transform,opacity,box-shadow,background-color,border-color,color]"></div>
             <div className="relative">
                <div className="flex items-center gap-2 text-sky-400">
                 <NotebookPen size={16} strokeWidth={2.5} />
@@ -437,7 +432,7 @@ function CustomerProgressHubPage() {
                   ))
                 ) : (
                   <div className="rounded-[1.25rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-[13px] text-slate-500">
-                    No coach notes available yet in your history.
+                    No coach notes available yet.
                   </div>
                 )}
               </div>
@@ -457,7 +452,7 @@ function CustomerProgressHubPage() {
                       <div>
                         <p className="font-bold text-slate-200">{formatDateTime(item.recordedAt || item.updatedAt)}</p>
                         <p className="mt-1 text-[11px] font-semibold text-slate-500 uppercase tracking-widest">
-                          H: {formatMetric(item.heightCm, 'cm')} <span className="mx-1 text-slate-600">•</span> W: {formatMetric(item.weightKg, 'kg')}
+                          H: {formatMetric(item.heightCm, 'cm')} <span className="mx-1 text-slate-400">|</span> W: {formatMetric(item.weightKg, 'kg')}
                         </p>
                       </div>
                       <div className="text-right">
@@ -468,7 +463,7 @@ function CustomerProgressHubPage() {
                   ))
                 ) : (
                   <div className="rounded-[1.25rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-[13px] text-slate-500">
-                    No health history snapshot logged yet.
+                    No health history recorded yet.
                   </div>
                 )}
               </div>
@@ -512,12 +507,12 @@ function CustomerProgressHubPage() {
                   Your QR is available for scanner verification.
                 </p>
               </div>
-              <div className="relative aspect-square w-[160px] overflow-hidden rounded-2xl border border-slate-200 p-2 shadow-inner" style={{ backgroundColor: '#ffffff' }}>
+              <div className="relative aspect-square w-[160px] overflow-hidden rounded-2xl border border-white/10 p-2 shadow-inner" style={{ backgroundColor: '#ffffff' }}>
                   {qrDataUrl ? (
-                    <img src={qrDataUrl} alt="Check-in QR" className="h-full w-full object-contain" />
+                    <img src={qrDataUrl} alt="Check-in QR" width="160" height="160" className="h-full w-full object-contain" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-xs font-bold" style={{ color: '#94a3b8' }}>
-                       Generating...
+                       QR unavailable
                     </div>
                   )}
               </div>
@@ -531,7 +526,7 @@ function CustomerProgressHubPage() {
 
             <article className="gc-glass-panel p-6">
               <div className="mb-6 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-500/20 text-slate-300 border border-slate-500/20">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-500/20 bg-white/10 text-slate-300">
                   <ClipboardList size={20} strokeWidth={2.5} />
                 </div>
                 <h3 className="text-lg font-bold text-white">Recent arrivals</h3>
@@ -561,7 +556,7 @@ function CustomerProgressHubPage() {
       </div>
 
       {error && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-2xl border border-rose-500/20 bg-[#12121a] px-6 py-4 text-sm font-bold text-slate-200 shadow-2xl">
+        <div aria-live="polite" className="fixed bottom-6 right-6 z-50 rounded-2xl border border-rose-500/20 bg-[#12121a] px-6 py-4 text-sm font-bold text-slate-200 shadow-2xl">
           {error}
         </div>
       )}
@@ -570,3 +565,7 @@ function CustomerProgressHubPage() {
 }
 
 export default CustomerProgressHubPage
+
+
+
+

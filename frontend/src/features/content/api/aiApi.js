@@ -26,3 +26,5 @@ export const aiApi = {
     return apiClient.post('/v1/ai/food-personalized', payload).then((response) => response.data?.data ?? response.data)
   },
 }
+
+

@@ -4,6 +4,7 @@ import { CheckCircle2, Search, Ticket } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { receptionNav } from '../../config/navigation'
 import { adminInvoiceApi } from '../../features/product/api/adminInvoiceApi'
+import { formatCurrency, formatDateTime } from '../../utils/formatters'
 
 const PICKUP_FILTERS = [
   { value: 'all', label: 'All pickup states' },
@@ -90,10 +91,10 @@ function ReceptionPickupPage() {
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1.1fr)]">
         <section className="gc-card-compact space-y-4">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div>
               <h2 className="gc-section-kicker">Pickup Queue</h2>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-zinc-500">
                 Front-desk staff can locate paid supplement receipts and confirm product collection.
               </p>
             </div>
@@ -104,29 +105,35 @@ function ReceptionPickupPage() {
           </header>
 
           <div className="flex flex-wrap gap-2">
-            <label className="flex min-w-[260px] flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <label className="flex min-w-[260px] flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 transition-[border-color,background-color,box-shadow] focus-within:border-gym-500/40 focus-within:bg-white/10 focus-within:ring-2 focus-within:ring-gym-500/20">
               <Search size={15} className="text-slate-400" />
+              <span className="sr-only">Search pickup receipts</span>
               <input
-                type="text"
+                type="search"
+                name="receptionPickupSearch"
+                autoComplete="off"
+                spellCheck={false}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search order ID, invoice code, customer email..."
-                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                placeholder="Search order ID, invoice code, customer email…"
+                className="w-full bg-transparent text-sm text-white placeholder:text-slate-400"
               />
             </label>
             <select
+              name="pickupStateFilter"
               value={pickupFilter}
               onChange={(event) => setPickupFilter(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="gc-select"
             >
               {PICKUP_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
             <select
+              name="emailStateFilter"
               value={emailFilter}
               onChange={(event) => setEmailFilter(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="gc-select"
             >
               {EMAIL_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -135,9 +142,9 @@ function ReceptionPickupPage() {
           </div>
 
           <div className="space-y-3">
-            {invoicesQuery.isLoading ? <p className="text-sm text-slate-500">Loading pickup queue...</p> : null}
+            {invoicesQuery.isLoading ? <p aria-live="polite" className="text-sm text-zinc-500">Loading pickup queue…</p> : null}
             {!invoicesQuery.isLoading && filteredInvoices.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-zinc-500">
                 No pickup receipts match the current search.
               </div>
             ) : null}
@@ -149,18 +156,18 @@ function ReceptionPickupPage() {
                   type="button"
                   onClick={() => setSelectedInvoiceId(invoice.invoiceId)}
                   className={`w-full rounded-3xl border p-4 text-left shadow-sm transition ${
-                    isSelected ? 'border-gym-200 bg-gym-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                    isSelected ? 'border-gym-500/20 bg-gym-500/10' : 'border-white/10 bg-[rgba(18,18,26,0.92)] hover:border-white/10'
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Pickup receipt</p>
-                      <h3 className="mt-2 text-lg font-bold text-slate-900">{invoice.invoiceCode}</h3>
-                      <p className="mt-1 text-sm text-slate-600">
-                        Order #{invoice.orderId} • Payment #{invoice.paymentId}
+                      <h3 className="mt-2 text-lg font-bold text-white">{invoice.invoiceCode}</h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Order #{invoice.orderId} | Payment #{invoice.paymentId}
                       </p>
-                      <p className="mt-2 text-xs text-slate-500">
-                        {invoice.recipientName || invoice.customerAccountName || 'Unknown customer'} • {invoice.recipientEmail || invoice.customerAccountEmail || '-'}
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {invoice.recipientName || invoice.customerAccountName || 'Unknown customer'} | {invoice.recipientEmail || invoice.customerAccountEmail || '-'}
                       </p>
                     </div>
                     <div className="space-y-2 text-right">
@@ -175,22 +182,22 @@ function ReceptionPickupPage() {
         </section>
 
         <section className="gc-card-compact space-y-4">
-          <header className="border-b border-slate-100 pb-4">
+          <header className="border-b border-white/10 pb-4">
             <h2 className="gc-section-kicker">Handoff Detail</h2>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-zinc-500">
               Confirm the customer identity, verify the paid items, then mark the order as picked up.
             </p>
           </header>
 
           {!selectedInvoice && !invoiceDetailQuery.isLoading ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-zinc-500">
               Select a pickup receipt from the queue.
             </div>
           ) : null}
 
           {invoiceDetailQuery.isLoading ? (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-              Loading handoff detail...
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-8 text-sm text-zinc-500">
+              Loading handoff detail…
             </div>
           ) : null}
 
@@ -205,73 +212,73 @@ function ReceptionPickupPage() {
                 <DetailCard label="Payment method" value={selectedInvoice.paymentMethod || '-'} />
               </div>
 
-              <div className="rounded-2xl border border-gym-100 bg-gym-50 p-4">
+              <div className="rounded-2xl border border-gym-500/20 bg-gym-500/10 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-gym-700">Front-desk workflow</p>
-                    <p className="mt-2 text-sm text-gym-900">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-gym-300">Front-desk workflow</p>
+                    <p className="mt-2 text-sm text-gym-100">
                       Ask for order ID <span className="font-bold">#{selectedInvoice.orderId}</span> before handing over the products.
                     </p>
-                    <p className="mt-2 text-xs text-gym-700">
+                    <p className="mt-2 text-xs text-gym-300">
                       {selectedInvoice.pickedUpAt
                         ? `Picked up at ${formatDateTime(selectedInvoice.pickedUpAt)}`
                         : 'Not yet marked as picked up'}
                     </p>
                     {selectedInvoice.pickedUpByName ? (
-                      <p className="mt-1 text-xs text-gym-700">Handled by: {selectedInvoice.pickedUpByName}</p>
+                      <p className="mt-1 text-xs text-gym-300">Handled by: {selectedInvoice.pickedUpByName}</p>
                     ) : null}
                   </div>
                   <button
                     type="button"
                     onClick={() => confirmPickupMutation.mutate(selectedInvoice.invoiceId)}
                     disabled={Boolean(selectedInvoice.pickedUpAt) || confirmPickupMutation.isPending}
-                    className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-4 py-2 text-xs font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="inline-flex items-center gap-2 rounded-full bg-gym-600 px-4 py-2 text-xs font-semibold text-white hover:bg-gym-700 disabled:cursor-not-allowed disabled:bg-white/10"
                   >
                     <CheckCircle2 size={14} />
                     {selectedInvoice.pickedUpAt
                       ? 'Pickup confirmed'
                       : confirmPickupMutation.isPending
-                        ? 'Confirming...'
+                        ? 'Confirming…'
                         : 'Confirm pickup'}
                   </button>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-100 bg-white">
-                <div className="border-b border-slate-100 px-4 py-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items for collection</h3>
+              <div className="rounded-2xl border border-white/10 bg-[rgba(18,18,26,0.92)]">
+                <div className="border-b border-white/10 px-4 py-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Items for collection</h3>
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-white/10">
                   {selectedItems.map((item) => (
                     <div key={item.invoiceItemId} className="flex items-center justify-between gap-3 px-4 py-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">{item.productName}</p>
-                        <p className="text-[11px] text-slate-500">
-                          Qty {item.quantity} • {formatMoney(item.unitPrice, selectedInvoice.currency)} each
+                        <p className="truncate text-sm font-semibold text-white">{item.productName}</p>
+                        <p className="text-[11px] text-zinc-500">
+                          Qty {item.quantity} | {formatCurrency(item.unitPrice, selectedInvoice.currency)} each
                         </p>
                       </div>
-                      <strong className="text-sm text-slate-900">{formatMoney(item.lineTotal, selectedInvoice.currency)}</strong>
+                      <strong className="text-sm text-white">{formatCurrency(item.lineTotal, selectedInvoice.currency)}</strong>
                     </div>
                   ))}
                   {selectedItems.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-500">No invoice items found.</div>
+                    <div className="px-4 py-3 text-sm text-zinc-500">No invoice items found.</div>
                   ) : null}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-start gap-3">
-                  <span className="rounded-2xl bg-white p-2 text-slate-700 shadow-sm ring-1 ring-slate-200">
+                  <span className="rounded-2xl bg-[rgba(18,18,26,0.92)] p-2 text-slate-300 shadow-sm ring-1 ring-white/10">
                     <Ticket size={16} />
                   </span>
                   <div className="space-y-2">
-                    <p className="text-sm font-semibold text-slate-900">Receipt delivery</p>
+                    <p className="text-sm font-semibold text-white">Receipt delivery</p>
                     <EmailStatusBadge invoice={selectedInvoice} />
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-zinc-500">
                       Sent at: {selectedInvoice.emailSentAt ? formatDateTime(selectedInvoice.emailSentAt) : 'Not sent yet'}
                     </p>
                     {selectedInvoice.emailSendError ? (
-                      <p className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] text-rose-700 ring-1 ring-rose-100">
+                      <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300 ring-1 ring-rose-100">
                         {selectedInvoice.emailSendError}
                       </p>
                     ) : null}
@@ -288,8 +295,8 @@ function ReceptionPickupPage() {
 
 function SummaryPill({ label, value, tone }) {
   const toneClass = tone === 'gym'
-    ? 'bg-gym-50 text-gym-700'
-    : 'bg-amber-50 text-amber-700'
+    ? 'bg-gym-500/10 text-gym-300'
+    : 'bg-amber-500/10 text-amber-300'
   return (
     <div className={`rounded-2xl px-3 py-2 ${toneClass}`}>
       <div className="text-[10px] font-semibold uppercase tracking-[0.24em] opacity-70">{label}</div>
@@ -300,9 +307,9 @@ function SummaryPill({ label, value, tone }) {
 
 function DetailCard({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-sm font-medium text-slate-900">{value}</p>
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-2 text-sm font-medium text-white">{value}</p>
     </div>
   )
 }
@@ -311,8 +318,8 @@ function PickupStatusBadge({ pickedUpAt }) {
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${
       pickedUpAt
-        ? 'bg-gym-50 text-gym-700 ring-gym-100'
-        : 'bg-amber-50 text-amber-700 ring-amber-100'
+        ? 'bg-gym-500/10 text-gym-300 ring-gym-100'
+        : 'bg-amber-500/10 text-amber-300 ring-amber-100'
     }`}>
       {pickedUpAt ? 'Picked up' : 'Awaiting pickup'}
     </span>
@@ -322,10 +329,10 @@ function PickupStatusBadge({ pickedUpAt }) {
 function EmailStatusBadge({ invoice }) {
   const status = getEmailState(invoice)
   const className = status === 'sent'
-    ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+    ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20'
     : status === 'failed'
-      ? 'bg-rose-50 text-rose-700 ring-rose-100'
-      : 'bg-slate-100 text-slate-700 ring-slate-200'
+      ? 'bg-rose-500/10 text-rose-300 ring-rose-100'
+      : 'bg-white/10 text-slate-300 ring-white/10'
   const label = status === 'sent' ? 'Email sent' : status === 'failed' ? 'Email failed' : 'Email pending'
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${className}`}>{label}</span>
 }
@@ -336,12 +343,10 @@ function getEmailState(invoice) {
   return 'pending'
 }
 
-function formatDateTime(value) {
-  return value ? new Date(value).toLocaleString() : '-'
-}
-
-function formatMoney(amount, currency = 'VND') {
-  return `${Number(amount || 0).toLocaleString('en-US')} ${currency || 'VND'}`
-}
-
 export default ReceptionPickupPage
+
+
+
+
+
+

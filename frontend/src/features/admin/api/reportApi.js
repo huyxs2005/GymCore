@@ -14,3 +14,5 @@ export const reportApi = {
     return apiClient.post('/v1/admin/reports/export-pdf', payload).then((response) => response.data)
   },
 }
+
+

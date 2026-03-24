@@ -269,3 +269,5 @@ describe('CustomerProductDetailPage', () => {
     expect(screen.getByText('C2')).toBeInTheDocument()
   })
 })
+
+

@@ -29,3 +29,5 @@ export function getDynamicProductImage(productName) {
   }
   return IMAGE_MAP.default;
 }
+
+

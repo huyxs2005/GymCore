@@ -3,6 +3,18 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
 import { Calendar, Clock, User, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react'
+import { formatDate } from '../../utils/formatters'
+
+const MODAL_TONES = {
+  emerald: {
+    wrap: 'bg-emerald-500/10 ring-emerald-500/20',
+    icon: 'text-emerald-400',
+  },
+  rose: {
+    wrap: 'bg-rose-500/10 ring-rose-500/20',
+    icon: 'text-rose-400',
+  },
+}
 
 function CoachBookingManagementPage() {
   const [requests, setRequests] = useState([])
@@ -146,19 +158,22 @@ function CoachBookingManagementPage() {
       case 'DENIED':
         return <span className="rounded-full bg-rose-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-rose-500 border border-rose-500/20">Denied</span>
       default:
-        return <span className="rounded-full bg-slate-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border border-slate-500/20">{status}</span>
+        return <span className="rounded-full border border-slate-500/20 bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{status}</span>
     }
   }
 
-  const ModalHeader = ({ title, kicker, icon: Icon, colorClass }) => (
-    <div className="mb-6">
-      <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-${colorClass}-500/10 ring-1 ring-${colorClass}-500/20`}>
-        <Icon className={`h-6 w-6 text-${colorClass}-500`} />
+  const ModalHeader = ({ title, kicker, icon: Icon, colorClass }) => {
+    const tone = MODAL_TONES[colorClass] || MODAL_TONES.emerald
+    return (
+      <div className="mb-6">
+        <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ${tone.wrap}`}>
+          <Icon className={`h-6 w-6 ${tone.icon}`} />
+        </div>
+        <p className="gc-page-kicker">{kicker}</p>
+        <h4 className="mt-2 font-display text-2xl font-bold tracking-tight text-white">{title}</h4>
       </div>
-      <p className="gc-section-kicker">{kicker}</p>
-      <h4 className="mt-2 font-display text-2xl font-bold tracking-tight text-white">{title}</h4>
-    </div>
-  )
+    )
+  }
 
   return (
     <WorkspaceScaffold 
@@ -168,13 +183,14 @@ function CoachBookingManagementPage() {
       <div className="max-w-6xl space-y-8 pb-12">
         {/* Messages */}
         {(error || message) && (
-          <div className={`gc-card-compact flex items-center justify-between border-l-4 ${error ? 'border-l-rose-500 bg-rose-500/5' : 'border-l-emerald-500 bg-emerald-500/5'}`}>
+          <div aria-live="polite" className={`gc-card-compact flex items-center justify-between border-l-4 ${error ? 'border-l-rose-500 bg-rose-500/5' : 'border-l-emerald-500 bg-emerald-500/5'}`}>
             <div className="flex items-center gap-3">
               {error ? <AlertCircle className="h-5 w-5 text-rose-500" /> : <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
               <span className={`text-sm font-medium ${error ? 'text-rose-200' : 'text-emerald-200'}`}>{error || message}</span>
             </div>
             <button 
               onClick={() => { setError(''); setMessage('') }}
+              aria-label="Dismiss status message"
               className="rounded-lg p-1 text-slate-500 transition hover:bg-white/5 hover:text-white"
             >
               <XCircle className="h-4 w-4" />
@@ -213,13 +229,13 @@ function CoachBookingManagementPage() {
                   <div className="mb-6 space-y-3">
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/5">
                       <div className="text-center">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Current</p>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Current</p>
                         <p className="text-xs font-bold text-slate-300">{req.currentSessionDate}</p>
                         <p className="text-[10px] text-slate-500">Slot {req.currentSlot?.slotIndex || req.currentTimeSlotId}</p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-600" />
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
                       <div className="text-center">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">Requested</p>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-500">Requested</p>
                         <p className="text-xs font-bold text-white">{req.requestedSessionDate}</p>
                         <p className="text-[10px] text-slate-400">Slot {req.requestedSlot?.slotIndex || req.requestedTimeSlotId}</p>
                       </div>
@@ -286,7 +302,7 @@ function CoachBookingManagementPage() {
           {!loading && requests.length === 0 && rescheduleRequests.length === 0 && (
             <div className="gc-glass-panel flex flex-col items-center justify-center py-20 text-center">
               <div className="mb-4 rounded-3xl bg-white/5 p-6 ring-1 ring-white/10">
-                <CheckCircle2 className="h-10 w-10 text-slate-600" />
+                <CheckCircle2 className="h-10 w-10 text-slate-400" />
               </div>
               <h3 className="text-lg font-bold text-white font-display">All caught up</h3>
               <p className="mt-2 max-w-xs text-sm text-slate-500">
@@ -324,7 +340,7 @@ function CoachBookingManagementPage() {
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500">Submitted On</span>
-                    <span className="font-medium text-slate-400">{new Date(req.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span className="font-medium text-slate-400">{formatDate(req.createdAt)}</span>
                   </div>
                   <div className="pt-2 border-t border-white/5">
                     <p className="text-[10px] font-bold text-amber-500/80 leading-relaxed uppercase tracking-wider">
@@ -358,7 +374,7 @@ function CoachBookingManagementPage() {
       {/* Modals */}
       {bookingActionModal.open && bookingActionModal.request && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="gc-glass-panel w-full max-w-lg p-8 shadow-2xl overflow-hidden relative">
+          <div className="gc-glass-panel relative w-full max-w-lg overflow-hidden p-8 shadow-2xl">
             <ModalHeader 
               title={bookingActionModal.action === 'ACCEPT' ? 'Confirm Approval' : 'Deny Partnership'}
               kicker="Partnership Action"
@@ -373,14 +389,15 @@ function CoachBookingManagementPage() {
 
             {bookingActionModal.action === 'DENY' && (
               <div className="mt-6">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Denial Reason
+                <label htmlFor="booking-deny-reason" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Reason for denial
                 </label>
                 <textarea
+                  id="booking-deny-reason"
                   value={bookingActionModal.reason}
                   onChange={(e) => setBookingActionModal((prev) => ({ ...prev, reason: e.target.value }))}
-                  className="gc-input min-h-[100px] resize-none"
-                  placeholder="Explain why this request is being declined..."
+                  className="gc-textarea min-h-[100px] resize-none"
+                  placeholder="Explain why this request is being declined…"
                 />
               </div>
             )}
@@ -397,9 +414,9 @@ function CoachBookingManagementPage() {
                 type="button"
                 onClick={submitBookingAction}
                 disabled={loading}
-                className={`${bookingActionModal.action === 'ACCEPT' ? 'gc-button-primary' : 'bg-rose-600 font-semibold text-white hover:bg-rose-700 shadow-lg ring-1 ring-rose-500/50'} rounded-xl px-6 py-2.5 text-sm disabled:opacity-50 transition`}
+                className={`${bookingActionModal.action === 'ACCEPT' ? 'gc-button-primary' : 'rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg ring-1 ring-rose-500/50 transition hover:bg-rose-700'} disabled:opacity-50`}
               >
-                {loading ? 'Processing...' : bookingActionModal.action === 'ACCEPT' ? 'Confirm Partnership' : 'Confirm Denial'}
+                {loading ? 'Processing…' : bookingActionModal.action === 'ACCEPT' ? 'Confirm Partnership' : 'Confirm denial'}
               </button>
             </div>
           </div>
@@ -410,35 +427,42 @@ function CoachBookingManagementPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="gc-glass-panel w-full max-w-lg p-8 shadow-2xl">
             <ModalHeader 
-              title={rescheduleActionModal.action === 'APPROVE' ? 'Approve Reschedule' : 'Deny Reschedule'}
+              title={rescheduleActionModal.action === 'APPROVE' ? 'Approve this reschedule request' : 'Deny this reschedule request'}
               kicker="Session Adjustment"
               icon={RefreshCw}
               colorClass={rescheduleActionModal.action === 'APPROVE' ? 'emerald' : 'rose'}
             />
 
-            <div className="grid grid-cols-2 gap-4 mb-6 rounded-2xl bg-white/5 p-4 border border-white/5">
+            <div className="mb-6 grid grid-cols-2 gap-4 rounded-2xl border border-white/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),rgba(26,26,36,0.72)] p-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">From</p>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">From</p>
                 <p className="text-xs font-bold text-slate-300">{rescheduleActionModal.request.currentSessionDate}</p>
                 <p className="text-[10px] text-slate-500 italic">Slot {rescheduleActionModal.request.currentSlot?.slotIndex || rescheduleActionModal.request.currentTimeSlotId}</p>
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">To</p>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-500">To</p>
                 <p className="text-xs font-bold text-white">{rescheduleActionModal.request.requestedSessionDate}</p>
                 <p className="text-[10px] text-slate-400 italic">Slot {rescheduleActionModal.request.requestedSlot?.slotIndex || rescheduleActionModal.request.requestedTimeSlotId}</p>
               </div>
             </div>
 
+            {rescheduleActionModal.action === 'APPROVE' ? (
+              <p className="mb-6 text-sm leading-relaxed text-slate-400">
+                Confirm the updated date and slot to move this customer without creating a brand-new PT request.
+              </p>
+            ) : null}
+
             {rescheduleActionModal.action === 'DENY' && (
               <div className="mb-6">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Optional Reason
+                <label htmlFor="reschedule-deny-reason" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Reason for denial
                 </label>
                 <textarea
+                  id="reschedule-deny-reason"
                   value={rescheduleActionModal.reason}
                   onChange={(e) => setRescheduleActionModal((prev) => ({ ...prev, reason: e.target.value }))}
-                  className="gc-input min-h-[100px] resize-none"
-                  placeholder="Explain why you cannot accept this change..."
+                  className="gc-textarea min-h-[100px] resize-none"
+                  placeholder="Explain why you cannot accept this change…"
                 />
               </div>
             )}
@@ -455,9 +479,9 @@ function CoachBookingManagementPage() {
                 type="button"
                 onClick={submitRescheduleAction}
                 disabled={loading}
-                className={`${rescheduleActionModal.action === 'APPROVE' ? 'gc-button-primary' : 'bg-rose-600 font-semibold text-white hover:bg-rose-700 shadow-lg ring-1 ring-rose-500/50'} rounded-xl px-6 py-2.5 text-sm disabled:opacity-50 transition`}
+                className={`${rescheduleActionModal.action === 'APPROVE' ? 'gc-button-primary' : 'rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg ring-1 ring-rose-500/50 transition hover:bg-rose-700'} disabled:opacity-50`}
               >
-                {loading ? 'Updating...' : rescheduleActionModal.action === 'APPROVE' ? 'Approve Change' : 'Deny Change'}
+                {loading ? 'Updating…' : rescheduleActionModal.action === 'APPROVE' ? 'Approve request' : 'Confirm denial'}
               </button>
             </div>
           </div>
@@ -468,3 +492,6 @@ function CoachBookingManagementPage() {
 }
 
 export default CoachBookingManagementPage
+
+
+

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import AuthPageShell from '../../components/auth/AuthPageShell'
+import FormField from '../../components/ui/FormField'
 import { authApi } from '../../features/auth/api/authApi'
 
 function ChangePasswordPage() {
@@ -30,57 +32,38 @@ function ChangePasswordPage() {
         confirmPassword: '',
       })
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || 'Could not change password.')
+      setErrorMessage(error?.response?.data?.message || 'Could not change password. Check the current password and try again.')
     }
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <h1 className="text-2xl font-bold text-slate-900">Change password</h1>
-      <p className="mt-2 text-sm text-slate-600">Starter page for authenticated password change flow.</p>
-
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4 gc-card">
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-700">Current password</span>
-          <input
-            type="password"
-            name="oldPassword"
-            value={form.oldPassword}
-            onChange={handleChange}
-            className="gc-input"
-            required
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-700">New password</span>
-          <input
-            type="password"
-            name="newPassword"
-            value={form.newPassword}
-            onChange={handleChange}
-            className="gc-input"
-            required
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-700">Confirm password</span>
-          <input
-            type="password"
-            name="confirmPassword"
-            value={form.confirmPassword}
-            onChange={handleChange}
-            className="gc-input"
-            required
-          />
-        </label>
-        {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-        <button type="submit" className="w-full rounded-lg bg-gym-500 px-4 py-2 font-semibold text-white hover:bg-gym-700">
-          Update password
-        </button>
+    <AuthPageShell
+      kicker="Account Security"
+      title="Rotate your password without leaving the authenticated flow."
+      description="Use this page after login to replace the current password with a new one."
+      asideItems={[
+        'Password policy matches registration and reset.',
+        'Current password is required before a new one is accepted.',
+      ]}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <FormField id="change-old-password" label="Current password" required>
+          <input id="change-old-password" type="password" name="oldPassword" autoComplete="current-password" value={form.oldPassword} onChange={handleChange} className="gc-input" required />
+        </FormField>
+        <FormField id="change-new-password" label="New password" required>
+          <input id="change-new-password" type="password" name="newPassword" autoComplete="new-password" value={form.newPassword} onChange={handleChange} className="gc-input" required />
+        </FormField>
+        <FormField id="change-confirm-password" label="Confirm password" required>
+          <input id="change-confirm-password" type="password" name="confirmPassword" autoComplete="new-password" value={form.confirmPassword} onChange={handleChange} className="gc-input" required />
+        </FormField>
+        {errorMessage ? <div role="alert" className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
+        {message ? <div aria-live="polite" className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm leading-6 text-emerald-100">{message}</div> : null}
+        <button type="submit" className="gc-button-primary w-full">Update Password</button>
       </form>
-    </div>
+    </AuthPageShell>
   )
 }
 
 export default ChangePasswordPage
+
+

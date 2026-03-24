@@ -171,3 +171,5 @@ describe('CustomerCartPage', () => {
     expect(screen.getByRole('button', { name: /Checkout with PayOS/i })).toBeDisabled()
   })
 })
+
+

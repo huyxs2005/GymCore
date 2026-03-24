@@ -48,3 +48,5 @@ describe('membershipApi', () => {
     await expect(membershipApi.purchase({ membershipPlanId: 1 })).resolves.toEqual({ success: true })
   })
 })
+
+

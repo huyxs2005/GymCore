@@ -376,3 +376,5 @@ describe('AdminPromotionsPage', () => {
     expect(toast.error).toHaveBeenCalledWith('Promotion banner file is too large. Maximum size is 5 MB.')
   })
 })
+
+

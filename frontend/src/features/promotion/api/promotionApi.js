@@ -18,3 +18,5 @@ export const promotionApi = {
     return apiClient.get('/v1/promotions/my-claims').then(unwrapApiData)
   },
 }
+
+

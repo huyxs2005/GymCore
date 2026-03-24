@@ -180,3 +180,5 @@ describe('NotificationDropdown', () => {
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 })
+
+

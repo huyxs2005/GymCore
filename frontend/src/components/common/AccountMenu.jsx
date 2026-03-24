@@ -115,7 +115,7 @@ function AccountMenu({ className = '' }) {
         >
           <div className="border-b border-white/10 px-4 py-3">
             <p className="truncate text-sm font-semibold text-slate-50">{user?.fullName || 'Account'}</p>
-            <p className="truncate text-xs text-slate-500">{user?.email}</p>
+            <p className="truncate text-xs text-zinc-500">{user?.email}</p>
           </div>
           <div className="p-2">
             <button
@@ -190,3 +190,7 @@ function AccountMenu({ className = '' }) {
 }
 
 export default AccountMenu
+
+
+
+

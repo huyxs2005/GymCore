@@ -1,14 +1,41 @@
 import { useState, useEffect, useCallback } from 'react'
+import {
+  User,
+  Star,
+  Activity,
+  ClipboardList,
+  TrendingUp,
+  Phone,
+  Mail,
+  ChevronRight,
+  X,
+  Plus,
+  Edit2,
+  Check,
+  Scale,
+  Calendar,
+  Clock,
+  CheckCircle2,
+  Users,
+  Search,
+  Quote,
+  AlertCircle,
+} from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
-import { User, Star, Activity, ClipboardList, TrendingUp, Phone, Mail, ChevronRight, X, Plus, Edit2, Check, Scale, Calendar, Clock, CheckCircle2, Users, Search, Quote } from 'lucide-react'
+import { formatDate, formatDateTime } from '../../utils/formatters'
 
 function StarDisplay({ rating }) {
   return (
-    <span className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((s) => (
-        <span key={s} className={`text-base ${s <= rating ? 'text-amber-400' : 'text-white/10'}`}>★</span>
+    <span className="flex items-center gap-1" aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((starValue) => (
+        <Star
+          key={starValue}
+          aria-hidden="true"
+          className={starValue <= rating ? 'h-4 w-4 fill-amber-400 text-amber-400' : 'h-4 w-4 fill-transparent text-white/15'}
+          strokeWidth={1.6}
+        />
       ))}
     </span>
   )
@@ -21,6 +48,7 @@ function StatusBadge({ status }) {
     CANCELLED: { label: 'Cancelled', cls: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
   }
   const cfg = map[status] ?? { label: status, cls: 'bg-white/5 text-slate-400 border-white/10' }
+
   return <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${cfg.cls}`}>{cfg.label}</span>
 }
 
@@ -79,6 +107,7 @@ function StudentDetailModal({ student, onClose }) {
       setError('Please enter valid height and weight values')
       return
     }
+
     try {
       setProgressLoading(true)
       setError('')
@@ -99,10 +128,11 @@ function StudentDetailModal({ student, onClose }) {
       setError('Please choose a session and enter note content')
       return
     }
+
     try {
       setNoteLoading(true)
       setError('')
-      await coachBookingApi.createSessionNote(parseInt(noteForm.sessionId), { noteContent: noteForm.content })
+      await coachBookingApi.createSessionNote(parseInt(noteForm.sessionId, 10), { noteContent: noteForm.content })
       setNoteMsg('Note added successfully!')
       setNoteForm({ sessionId: '', content: '' })
       await loadHistory()
@@ -119,6 +149,7 @@ function StudentDetailModal({ student, onClose }) {
       setError('Note content cannot be empty')
       return
     }
+
     try {
       setNoteLoading(true)
       setError('')
@@ -141,66 +172,94 @@ function StudentDetailModal({ student, onClose }) {
     { id: 'notes', label: 'Notes', icon: <ClipboardList className="h-3.5 w-3.5" /> },
   ]
 
-  const h = studentInfo.health ?? {}
-  const bmi = h.bmi ? parseFloat(h.bmi).toFixed(1) : null
+  const health = studentInfo.health ?? {}
+  const bmi = health.bmi ? parseFloat(health.bmi).toFixed(1) : null
   const bmiInfo = getBmiLabel(bmi ? parseFloat(bmi) : null)
+  const sessionHistory = history?.sessions ?? []
+  const healthHistory = history?.healthHistory ?? []
+  const notes = history?.notes ?? []
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col bg-transparent overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="gc-glass-panel flex flex-col h-full overflow-hidden border-white/10 shadow-2xl">
-          <div className="flex items-center gap-4 border-b border-white/5 p-6 bg-white/[0.02]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coach-customer-modal-title"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden bg-transparent overscroll-contain"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="gc-glass-panel flex h-full flex-col overflow-hidden border-white/10 shadow-2xl">
+          <div className="flex items-center gap-4 border-b border-white/5 bg-white/[0.02] p-6">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
               <User className="h-7 w-7 text-slate-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="truncate text-xl font-bold text-white font-display">{student.fullName}</h3>
+              <h3 id="coach-customer-modal-title" className="truncate font-display text-xl font-bold text-white">
+                {student.fullName}
+              </h3>
               <p className="text-sm font-medium text-slate-500">{student.sessionCount} sessions &bull; {student.email}</p>
             </div>
-            <button onClick={onClose} className="rounded-xl p-2 transition-colors hover:bg-white/5 text-slate-500 hover:text-white">
+            <button type="button" aria-label="Close trainee detail" onClick={onClose} className="gc-button-icon text-slate-500 hover:text-white">
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="flex gap-1 overflow-x-auto border-b border-white/5 p-3 bg-white/[0.01]">
-            {tabs.map(t => (
+          <div role="tablist" aria-label="Trainee detail sections" className="flex gap-1 overflow-x-auto border-b border-white/5 bg-white/[0.01] p-3">
+            {tabs.map((tab) => (
               <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all ${activeTab === t.id ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'}`}
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`coach-customer-tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                aria-controls={`coach-customer-panel-${tab.id}`}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-[transform,opacity,box-shadow,background-color,border-color,color] ${
+                  activeTab === tab.id ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
+                }`}
               >
-                {t.icon}
-                <span className="tracking-wide uppercase">{t.label}</span>
+                {tab.icon}
+                <span className="tracking-wide uppercase">{tab.label}</span>
               </button>
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-            {error && <div className="mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-400">{error}</div>}
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+            {error ? (
+              <div aria-live="polite" className="mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-400">
+                {error}
+              </div>
+            ) : null}
 
-            {activeTab === 'overview' && (
-              <div className="space-y-8">
+            {activeTab === 'overview' ? (
+              <section id="coach-customer-panel-overview" role="tabpanel" aria-labelledby="coach-customer-tab-overview" className="space-y-8">
                 <div>
                   <p className="gc-section-kicker mb-4">Health Profile</p>
-                  {Object.keys(h).length === 0 ? (
+                  {Object.keys(health).length === 0 ? (
                     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-8 text-center">
-                      <Scale className="mx-auto mb-3 h-10 w-10 text-slate-600" />
+                      <Scale className="mx-auto mb-3 h-10 w-10 text-slate-400" />
                       <p className="text-sm text-slate-500">No health metrics have been recorded for this customer yet.</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-center transition hover:bg-white/[0.05]">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div className="gc-card-compact border-white/5 bg-white/[0.03] text-center">
                         <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Height</p>
-                        <p className="text-3xl font-black text-white font-display">{h.heightCm}<span className="text-sm font-medium text-slate-500 ml-1">cm</span></p>
+                        <p className="font-display text-3xl font-black text-white">
+                          {health.heightCm}
+                          <span className="ml-1 text-sm font-medium text-slate-500">cm</span>
+                        </p>
                       </div>
-                      <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-center transition hover:bg-white/[0.05]">
+                      <div className="gc-card-compact border-white/5 bg-white/[0.03] text-center">
                         <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Weight</p>
-                        <p className="text-3xl font-black text-white font-display">{h.weightKg}<span className="text-sm font-medium text-slate-500 ml-1">kg</span></p>
+                        <p className="font-display text-3xl font-black text-white">
+                          {health.weightKg}
+                          <span className="ml-1 text-sm font-medium text-slate-500">kg</span>
+                        </p>
                       </div>
-                      <div className={`rounded-2xl border p-5 text-center transition ${bmiInfo?.cls || 'border-white/5 bg-white/[0.03]'}`}>
+                      <div className={`gc-card-compact border text-center ${bmiInfo?.cls || 'border-white/5 bg-white/[0.03] text-white'}`}>
                         <p className="mb-2 text-[10px] font-bold uppercase tracking-widest opacity-60">BMI</p>
-                        <p className="text-3xl font-black font-display">{bmi ?? '--'}</p>
-                        {bmiInfo && <p className="mt-1 text-[9px] font-black uppercase tracking-tighter opacity-80">{bmiInfo.label}</p>}
+                        <p className="font-display text-3xl font-black">{bmi ?? '--'}</p>
+                        {bmiInfo ? <p className="mt-1 text-[9px] font-black uppercase tracking-tighter opacity-80">{bmiInfo.label}</p> : null}
                       </div>
                     </div>
                   )}
@@ -208,163 +267,188 @@ function StudentDetailModal({ student, onClose }) {
 
                 <div>
                   <p className="gc-section-kicker mb-4">Communication</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <a href={`tel:${student.phone}`} className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-all hover:bg-white/[0.06] hover:border-white/10 group">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 group-hover:bg-gym-500/10 group-hover:ring-gym-500/20">
-                        <Phone className="h-5 w-5 text-slate-400 group-hover:text-gym-500" />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <a
+                      href={`tel:${student.phone}`}
+                      className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-white/10 hover:bg-white/[0.06]"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
+                        <Phone className="h-5 w-5 text-gym-500" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Phone</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Phone</p>
                         <p className="truncate text-sm font-semibold text-slate-200">{student.phone || 'Not provided'}</p>
                       </div>
                     </a>
-                    <a href={`mailto:${student.email}`} className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-all hover:bg-white/[0.06] hover:border-white/10 group">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 group-hover:bg-sky-500/10 group-hover:ring-sky-500/20">
-                        <Mail className="h-5 w-5 text-slate-400 group-hover:text-sky-400" />
+                    <a
+                      href={`mailto:${student.email}`}
+                      className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-white/10 hover:bg-white/[0.06]"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
+                        <Mail className="h-5 w-5 text-sky-400" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Email</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Email</p>
                         <p className="truncate text-sm font-semibold text-slate-200">{student.email}</p>
                       </div>
                     </a>
                   </div>
                 </div>
 
-                <div className="rounded-2xl bg-gradient-to-r from-gym-500/10 to-transparent border border-gym-500/20 p-6">
+                <div className="rounded-2xl border border-gym-500/20 bg-gradient-to-r from-gym-500/10 to-transparent p-6">
                   <div className="flex items-center gap-5">
                     <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gym-500/10 shadow-glow ring-1 ring-gym-500/30">
                       <Activity className="h-8 w-8 text-gym-500" />
                     </div>
                     <div>
-                      <p className="text-4xl font-black text-white font-display leading-none">{student.sessionCount}</p>
-                      <p className="mt-1 text-sm font-bold text-gym-500 uppercase tracking-widest">Total Partnerships</p>
+                      <p className="font-display text-4xl font-black leading-none text-white">{student.sessionCount}</p>
+                      <p className="mt-1 text-sm font-bold uppercase tracking-widest text-gym-500">Total Partnerships</p>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              </section>
+            ) : null}
 
-            {activeTab === 'history' && (
-              <div className="space-y-6">
+            {activeTab === 'history' ? (
+              <section id="coach-customer-panel-history" role="tabpanel" aria-labelledby="coach-customer-tab-history" className="space-y-6">
                 <div>
                   <p className="gc-section-kicker mb-4">Training Agenda</p>
                   {historyLoading ? (
-                    <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-16 animate-pulse rounded-2xl bg-white/5" />)}</div>
-                  ) : (history?.sessions ?? []).length === 0 ? (
-                    <div className="py-12 text-center rounded-2xl border border-dashed border-white/10">
-                      <Calendar className="mx-auto mb-3 h-10 w-10 text-slate-600 opacity-40" />
+                    <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-16 animate-pulse rounded-2xl bg-white/5" />)}</div>
+                  ) : sessionHistory.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
+                      <Calendar className="mx-auto mb-3 h-10 w-10 text-slate-400 opacity-40" />
                       <p className="text-sm text-slate-500">No training sessions recorded yet.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {(history?.sessions ?? []).map(s => (
-                        <div key={s.ptSessionId} className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition hover:bg-white/[0.06]">
+                      {sessionHistory.map((session) => (
+                        <div
+                          key={session.ptSessionId}
+                          className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:bg-white/[0.06]"
+                        >
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
                             <Clock className="h-5 w-5 text-slate-500" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-white font-display">
-                              {new Date(s.sessionDate).toLocaleDateString(undefined, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                            <p className="font-display text-sm font-bold text-white">
+                              {formatDateTime(session.sessionDate, undefined, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
                             </p>
                             <p className="text-xs font-semibold text-slate-500">
-                              Slot {s.slotIndex} &bull; {s.startTime?.substring(0, 5)} — {s.endTime?.substring(0, 5)}
+                              Slot {session.slotIndex} &bull; {session.startTime?.substring(0, 5)} - {session.endTime?.substring(0, 5)}
                             </p>
                           </div>
-                          <StatusBadge status={s.status} />
+                          <StatusBadge status={session.status} />
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {(history?.healthHistory ?? []).length > 0 && (
+                {healthHistory.length > 0 ? (
                   <div>
                     <p className="gc-section-kicker mb-4">Body Composition Log</p>
                     <div className="space-y-3">
-                      {history.healthHistory.map((rec, i) => (
-                        <div key={i} className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                      {healthHistory.map((record, index) => (
+                        <div key={index} className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
                           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5">
                             <Scale className="h-4 w-4 text-slate-500" />
                           </div>
-                          <div className="flex-1">
-                            <span className="text-sm font-bold text-slate-200">{rec.weightKg} kg &bull; {rec.heightCm} cm</span>
-                            <span className="ml-3 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-white/5">BMI {rec.bmi?.toFixed ? rec.bmi.toFixed(1) : rec.bmi}</span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm font-bold text-slate-200">{record.weightKg} kg &bull; {record.heightCm} cm</span>
+                            <span className="ml-3 rounded-full border border-white/5 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                              BMI {record.bmi?.toFixed ? record.bmi.toFixed(1) : record.bmi}
+                            </span>
                           </div>
-                          <span className="text-xs font-medium text-slate-600">{rec.recordedAt ? new Date(rec.recordedAt).toLocaleDateString() : ''}</span>
+                          <span className="text-xs font-medium text-slate-400">{record.recordedAt ? formatDate(record.recordedAt) : ''}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                ) : null}
+              </section>
+            ) : null}
 
-            {activeTab === 'progress' && (
-              <div className="space-y-8">
+            {activeTab === 'progress' ? (
+              <section id="coach-customer-panel-progress" role="tabpanel" aria-labelledby="coach-customer-tab-progress" className="space-y-8">
                 <div>
                   <p className="gc-section-kicker mb-2">Metrics Update</p>
-                  <p className="text-xs text-slate-500 mb-6 font-medium">Record the latest height and weight to track customer progress and BMI trends.</p>
-                  
-                  {progressMsg && (
-                    <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400 flex items-center gap-3">
+                  <p className="mb-6 text-xs font-medium text-slate-500">Record the latest height and weight to track customer progress and BMI trends.</p>
+
+                  {progressMsg ? (
+                    <div aria-live="polite" className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400">
                       <CheckCircle2 className="h-5 w-5" />
                       {progressMsg}
                     </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 gap-6">
+                  ) : null}
+
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Height (cm)</label>
+                      <label htmlFor="coach-customer-height" className="ml-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                        Height (cm)
+                      </label>
                       <input
+                        id="coach-customer-height"
+                        name="height_cm"
                         type="number"
-                        min="100" max="250" step="0.1"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        min="100"
+                        max="250"
+                        step="0.1"
                         placeholder="175.5"
                         value={progressForm.heightCm}
-                        onChange={e => setProgressForm(f => ({ ...f, heightCm: e.target.value }))}
+                        onChange={(event) => setProgressForm((form) => ({ ...form, heightCm: event.target.value }))}
                         className="gc-input"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Weight (kg)</label>
+                      <label htmlFor="coach-customer-weight" className="ml-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                        Weight (kg)
+                      </label>
                       <input
+                        id="coach-customer-weight"
+                        name="weight_kg"
                         type="number"
-                        min="30" max="300" step="0.1"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        min="30"
+                        max="300"
+                        step="0.1"
                         placeholder="72.0"
                         value={progressForm.weightKg}
-                        onChange={e => setProgressForm(f => ({ ...f, weightKg: e.target.value }))}
+                        onChange={(event) => setProgressForm((form) => ({ ...form, weightKg: event.target.value }))}
                         className="gc-input"
                       />
                     </div>
                   </div>
 
-                  {progressForm.heightCm && progressForm.weightKg && parseFloat(progressForm.heightCm) > 0 && parseFloat(progressForm.weightKg) > 0 && (
-                    <div className="mt-8 flex items-center justify-between rounded-2xl bg-gym-500/10 border border-gym-500/20 p-5 ring-1 ring-gym-500/10">
+                  {progressForm.heightCm && progressForm.weightKg && parseFloat(progressForm.heightCm) > 0 && parseFloat(progressForm.weightKg) > 0 ? (
+                    <div className="mt-8 flex items-center justify-between rounded-2xl border border-gym-500/20 bg-gym-500/10 p-5 ring-1 ring-gym-500/10">
                       <div className="flex items-center gap-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gym-500/10">
                           <TrendingUp className="h-6 w-6 text-gym-500" />
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold text-gym-500 uppercase tracking-widest">Calculated BMI</p>
-                          <p className="text-2xl font-black text-white font-display">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gym-500">Calculated BMI</p>
+                          <p className="font-display text-2xl font-black text-white">
                             {(parseFloat(progressForm.weightKg) / Math.pow(parseFloat(progressForm.heightCm) / 100, 2)).toFixed(1)}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] font-black uppercase tracking-tighter bg-gym-500 text-slate-950 px-2.5 py-1 rounded-full shadow-glow">Auto-updated</span>
+                        <span className="rounded-full bg-gym-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-tighter text-slate-950 shadow-glow">
+                          Auto-updated
+                        </span>
                       </div>
                     </div>
-                  )}
-                  
-                  <button
-                    onClick={handleUpdateProgress}
-                    disabled={progressLoading}
-                    className="gc-button-primary w-full mt-8"
-                  >
+                  ) : null}
+
+                  <button type="button" onClick={handleUpdateProgress} disabled={progressLoading} className="gc-button-primary mt-8 w-full">
                     {progressLoading ? (
                       <span className="flex items-center gap-2">
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
-                        Saving Metrics...
+                        Saving Metrics…
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">
@@ -374,54 +458,68 @@ function StudentDetailModal({ student, onClose }) {
                     )}
                   </button>
                 </div>
-              </div>
-            )}
+              </section>
+            ) : null}
 
-            {activeTab === 'notes' && (
-              <div className="space-y-8">
-                {noteMsg && (
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400 flex items-center gap-3">
+            {activeTab === 'notes' ? (
+              <section id="coach-customer-panel-notes" role="tabpanel" aria-labelledby="coach-customer-tab-notes" className="space-y-8">
+                {noteMsg ? (
+                  <div aria-live="polite" className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400">
                     <CheckCircle2 className="h-5 w-5" />
                     {noteMsg}
                   </div>
-                )}
+                ) : null}
 
                 <div className="gc-card-compact border-white/10 bg-white/[0.02]">
                   <p className="gc-section-kicker mb-4">Chronicle New Note</p>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Target Session</label>
+                      <label htmlFor="coach-customer-session" className="ml-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                        Target Session
+                      </label>
                       <select
+                        id="coach-customer-session"
+                        name="session_id"
                         value={noteForm.sessionId}
-                        onChange={e => setNoteForm(f => ({ ...f, sessionId: e.target.value }))}
+                        onChange={(event) => setNoteForm((form) => ({ ...form, sessionId: event.target.value }))}
                         className="gc-input"
                       >
-                        <option value="" className="bg-slate-900">-- Choose associated session --</option>
-                        {historyLoading ? <option disabled>Loading history...</option> : (history?.sessions ?? []).map(s => (
-                          <option key={s.ptSessionId} value={s.ptSessionId} className="bg-slate-900">
-                            {new Date(s.sessionDate).toLocaleDateString()} | Slot {s.slotIndex} | {s.status}
-                          </option>
-                        ))}
+                        <option value="" className="bg-[rgba(18,18,26,0.92)]">-- Choose associated session --</option>
+                        {historyLoading ? (
+                          <option disabled>Loading history…</option>
+                        ) : (
+                          sessionHistory.map((session) => (
+                            <option key={session.ptSessionId} value={session.ptSessionId} className="bg-[rgba(18,18,26,0.92)]">
+                              {formatDate(session.sessionDate)} | Slot {session.slotIndex} | {session.status}
+                            </option>
+                          ))
+                        )}
                       </select>
                     </div>
+
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Note Content</label>
+                      <label htmlFor="coach-customer-note" className="ml-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                        Note Content
+                      </label>
                       <textarea
+                        id="coach-customer-note"
+                        name="session_note"
+                        autoComplete="off"
                         rows={4}
-                        placeholder="Summarize performance, diet suggestions, or recovery plans..."
+                        placeholder="Summarize performance, diet suggestions, or recovery plans…"
                         value={noteForm.content}
-                        onChange={e => setNoteForm(f => ({ ...f, content: e.target.value }))}
-                        className="gc-input resize-none py-3"
+                        onChange={(event) => setNoteForm((form) => ({ ...form, content: event.target.value }))}
+                        className="gc-textarea"
                       />
                     </div>
-                    <button
-                      onClick={handleAddNote}
-                      disabled={noteLoading}
-                      className="gc-button-primary w-full !bg-white !text-slate-950 hover:!bg-slate-200 shadow-none ring-1 ring-white/20"
-                    >
-                      {noteLoading ? 'Processing...' : (
-                        <span className="flex items-center gap-2 justify-center">
-                          <Plus className="h-5 w-5" /> Add Note Entry
+
+                    <button type="button" onClick={handleAddNote} disabled={noteLoading} className="gc-button-primary w-full">
+                      {noteLoading ? (
+                        'Processing…'
+                      ) : (
+                        <span className="flex items-center justify-center gap-2">
+                          <Plus className="h-5 w-5" />
+                          Add Note Entry
                         </span>
                       )}
                     </button>
@@ -431,62 +529,64 @@ function StudentDetailModal({ student, onClose }) {
                 <div>
                   <p className="gc-section-kicker mb-4">Historical Archives</p>
                   {historyLoading ? (
-                    <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-20 animate-pulse rounded-2xl bg-white/5" />)}</div>
-                  ) : (history?.notes ?? []).length === 0 ? (
-                    <div className="py-12 text-center rounded-2xl border border-dashed border-white/10">
-                      <ClipboardList className="mx-auto mb-3 h-10 w-10 text-slate-600 opacity-30" />
+                    <div className="space-y-3">{[1, 2].map((item) => <div key={item} className="h-20 animate-pulse rounded-2xl bg-white/5" />)}</div>
+                  ) : notes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
+                      <ClipboardList className="mx-auto mb-3 h-10 w-10 text-slate-400 opacity-30" />
                       <p className="text-sm text-slate-500">No notes found for this trainee.</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {history.notes.map(n => (
-                        <div key={n.noteId} className="group rounded-2xl border border-white/5 bg-white/[0.03] p-5 transition hover:border-white/10 hover:bg-white/[0.05]">
-                          {editingNote?.noteId === n.noteId ? (
+                      {notes.map((note) => (
+                        <div key={note.noteId} className="group rounded-2xl border border-white/5 bg-white/[0.03] p-5 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-white/10 hover:bg-white/[0.05]">
+                          {editingNote?.noteId === note.noteId ? (
                             <div className="space-y-4">
                               <textarea
+                                name={`session_note_edit_${note.noteId}`}
+                                autoComplete="off"
                                 rows={4}
-                                className="gc-input resize-none py-3"
+                                className="gc-textarea"
                                 value={editingNote.content}
-                                onChange={e => setEditingNote(en => ({ ...en, content: e.target.value }))}
+                                onChange={(event) => setEditingNote((entry) => ({ ...entry, content: event.target.value }))}
                               />
                               <div className="flex gap-3">
-                                <button onClick={handleUpdateNote} disabled={noteLoading} className="gc-button-primary flex-1 text-sm">
-                                  {noteLoading ? 'Saving...' : 'Update Entry'}
+                                <button type="button" onClick={handleUpdateNote} disabled={noteLoading} className="gc-button-primary flex-1 text-sm">
+                                  {noteLoading ? 'Saving…' : 'Update Entry'}
                                 </button>
-                                <button onClick={() => setEditingNote(null)} className="gc-button-secondary flex-1 text-sm">
+                                <button type="button" onClick={() => setEditingNote(null)} className="gc-button-secondary flex-1 text-sm">
                                   Discard
                                 </button>
                               </div>
                             </div>
                           ) : (
-                            <>
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm leading-relaxed text-slate-300 font-medium">"{n.noteContent}"</p>
-                                  <div className="mt-4 flex items-center gap-3">
-                                    <span className="rounded-lg bg-white/5 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500 border border-white/10">Session #{n.ptSessionId}</span>
-                                    <span className="text-[10px] font-bold text-slate-600">
-                                      {n.updatedAt ? new Date(n.updatedAt).toLocaleDateString() : new Date(n.createdAt).toLocaleDateString()}
-                                    </span>
-                                  </div>
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <p className="break-words text-sm font-medium leading-relaxed text-slate-300">&ldquo;{note.noteContent}&rdquo;</p>
+                                <div className="mt-4 flex items-center gap-3">
+                                  <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                                    Session #{note.ptSessionId}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-400">{note.updatedAt ? formatDate(note.updatedAt) : formatDate(note.createdAt)}</span>
                                 </div>
-                                <button
-                                  onClick={() => setEditingNote({ noteId: n.noteId, content: n.noteContent })}
-                                  className="shrink-0 rounded-xl p-2.5 text-slate-500 transition-all hover:bg-white/5 hover:text-gym-500"
-                                  title="Edit note"
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </button>
                               </div>
-                            </>
+                              <button
+                                type="button"
+                                aria-label={`Edit note ${note.noteId}`}
+                                onClick={() => setEditingNote({ noteId: note.noteId, content: note.noteContent })}
+                                className="shrink-0 rounded-xl p-2.5 text-slate-500 transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:bg-white/5 hover:text-gym-500"
+                                title="Edit note"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              </section>
+            ) : null}
           </div>
         </div>
       </div>
@@ -532,14 +632,14 @@ function CoachCustomersPage() {
   async function loadFeedback() {
     try {
       setFeedbackLoading(true)
-      const [fbRes, avgRes] = await Promise.all([
+      const [feedbackRes, averageRes] = await Promise.all([
         coachBookingApi.getCoachFeedback(),
         coachBookingApi.getCoachFeedbackAverage(),
       ])
-      const fbRaw = fbRes?.data ?? fbRes
-      const avgRaw = avgRes?.data ?? avgRes
-      setFeedback(Array.isArray(fbRaw?.items) ? fbRaw.items : [])
-      setFeedbackAvg(avgRaw)
+      const feedbackRaw = feedbackRes?.data ?? feedbackRes
+      const averageRaw = averageRes?.data ?? averageRes
+      setFeedback(Array.isArray(feedbackRaw?.items) ? feedbackRaw.items : [])
+      setFeedbackAvg(averageRaw)
     } catch (e) {
       setError(e?.response?.data?.message || 'Could not load feedback')
     } finally {
@@ -559,181 +659,224 @@ function CoachCustomersPage() {
     }
   }
 
-  const filteredStudents = students.filter(s => 
-    s.fullName.toLowerCase().includes(search.toLowerCase()) || 
-    s.email.toLowerCase().includes(search.toLowerCase())
+  const filteredStudents = students.filter((student) =>
+    student.fullName.toLowerCase().includes(search.toLowerCase()) ||
+    student.email.toLowerCase().includes(search.toLowerCase())
   )
 
   return (
     <WorkspaceScaffold
       title="Training Ecosystem"
       subtitle="Comprehensive intelligence on your trainee base, satisfaction metrics, and performance history."
+      links={coachNav}
+      headerMeta={
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-zinc-300">
+            {students.length} trainees
+          </span>
+          <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold text-amber-300">
+            {feedbackAvg?.averageRating?.toFixed ? feedbackAvg.averageRating.toFixed(1) : '0.0'} coach rating
+          </span>
+        </div>
+      }
     >
       <div className="max-w-7xl space-y-8 pb-20">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex rounded-2xl bg-white/5 p-1.5 ring-1 ring-white/10 backdrop-blur-md">
+          <div role="tablist" aria-label="Coach customer views" className="flex rounded-2xl bg-white/5 p-1.5 ring-1 ring-white/10 backdrop-blur-md">
             <button
+              type="button"
+              role="tab"
+              id="coach-customer-view-students"
+              aria-selected={activeTab === 'students'}
+              aria-controls="coach-customer-view-panel-students"
               onClick={() => setActiveTab('students')}
-              className={`flex items-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'students' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:text-slate-200'}`}
+              className={`flex items-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-[transform,opacity,box-shadow,background-color,border-color,color] ${
+                activeTab === 'students' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:text-slate-200'
+              }`}
             >
-              <Users className="h-4 w-4" /> Trainees
+              <Users className="h-4 w-4" />
+              Trainees
             </button>
             <button
+              type="button"
+              role="tab"
+              id="coach-customer-view-feedback"
+              aria-selected={activeTab === 'feedback'}
+              aria-controls="coach-customer-view-panel-feedback"
               onClick={() => setActiveTab('feedback')}
-              className={`flex items-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'feedback' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:text-slate-200'}`}
+              className={`flex items-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-[transform,opacity,box-shadow,background-color,border-color,color] ${
+                activeTab === 'feedback' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:text-slate-200'
+              }`}
             >
-              <Star className="h-4 w-4" /> Feedback
-              {feedbackAvg?.averageRating && (
+              <Star className="h-4 w-4" />
+              Feedback
+              {feedbackAvg?.averageRating ? (
                 <span className="ml-1 rounded-full bg-black/20 px-1.5 py-0.5 text-[9px] font-black text-amber-500 ring-1 ring-amber-500/20">
                   {feedbackAvg.averageRating.toFixed(1)}
                 </span>
-              )}
+              ) : null}
             </button>
           </div>
 
-          {activeTab === 'students' && (
-            <div className="relative w-full max-w-sm group">
+          {activeTab === 'students' ? (
+            <div className="group relative w-full max-w-sm">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-gym-500" />
               <input
                 type="text"
-                placeholder="Search dossiers..."
+                name="coach-customer-search"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Search dossiers…"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="gc-input !pl-11 !h-12 !rounded-2xl border-white/5 bg-white/[0.03] transition-all focus:bg-white/[0.06] focus:ring-gym-500/20"
+                onChange={(event) => setSearch(event.target.value)}
+                className="gc-input !h-12 !rounded-2xl !pl-11 border-white/5 bg-white/[0.03] transition-[transform,opacity,box-shadow,background-color,border-color,color] focus:bg-white/[0.06] focus:ring-gym-500/20"
               />
             </div>
-          )}
+          ) : null}
         </div>
 
-        {error && (
-          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-400 flex items-center gap-3 shadow-2xl">
+        {error ? (
+          <div aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-400 shadow-2xl">
             <AlertCircle className="h-5 w-5" />
             {error}
           </div>
-        )}
+        ) : null}
 
-        {activeTab === 'students' && (
-          <div className="space-y-6">
+        {activeTab === 'students' ? (
+          <section id="coach-customer-view-panel-students" role="tabpanel" aria-labelledby="coach-customer-view-students" className="space-y-6">
             {loading ? (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-48 animate-pulse rounded-[2rem] bg-white/[0.02] border border-white/5" />)}
+                {[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-48 animate-pulse rounded-[2rem] border border-white/5 bg-white/[0.02]" />)}
               </div>
             ) : filteredStudents.length === 0 ? (
               <div className="gc-glass-panel flex flex-col items-center justify-center py-24 text-center">
-                <div className="mb-6 rounded-3xl bg-white/5 p-8 border border-white/5">
-                  <User className="h-12 w-12 text-slate-700" />
+                <div className="mb-6 rounded-3xl border border-white/5 bg-white/5 p-8">
+                  <User className="h-12 w-12 text-slate-200" />
                 </div>
-                <h3 className="text-xl font-bold text-white font-display uppercase tracking-tight">Vault Empty</h3>
+                <h3 className="font-display text-xl font-bold uppercase tracking-tight text-white">Vault Empty</h3>
                 <p className="mt-2 max-w-sm text-sm text-slate-500">
-                  {search ? `No trainees matching "${search}" were found in your record.` : "Practitioners will appear here once your training partnerships are established."}
+                  {search ? `No trainees matching "${search}" were found in your record.` : 'Practitioners will appear here once your training partnerships are established.'}
                 </p>
-                {search && <button onClick={() => setSearch('')} className="mt-4 text-xs font-black text-gym-500 uppercase tracking-widest hover:underline">Reset Search</button>}
+                {search ? (
+                  <button type="button" onClick={() => setSearch('')} className="gc-button-ghost mt-4 text-xs font-black uppercase tracking-widest text-gym-500 hover:underline">
+                    Reset Search
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {filteredStudents.map(student => (
-                  <div
+                {filteredStudents.map((student) => (
+                  <button
                     key={student.customerId}
+                    type="button"
                     onClick={() => handleSelectStudent(student)}
-                    className="gc-card group cursor-pointer border-white/5 bg-white/[0.02] transition-all duration-500 hover:scale-[1.02] hover:border-white/10 hover:bg-white/[0.04] p-0 overflow-hidden flex flex-col"
+                    className="gc-card group flex cursor-pointer flex-col overflow-hidden border-white/5 bg-white/[0.02] p-0 text-left transition-[transform,opacity,box-shadow,background-color,border-color,color] duration-500 hover:scale-[1.02] hover:border-white/10 hover:bg-white/[0.04]"
                   >
-                    <div className="p-7 flex-1">
+                    <div className="flex-1 p-7">
                       <div className="mb-6 flex items-start justify-between">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 transition group-hover:bg-gym-500 group-hover:ring-gym-500">
-                          <User className="h-7 w-7 text-slate-400 group-hover:text-slate-900" />
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 transition-[transform,opacity,box-shadow,background-color,border-color,color] group-hover:bg-gym-500 group-hover:ring-gym-500">
+                          <User className="h-7 w-7 text-slate-400 group-hover:text-slate-50" />
                         </div>
-                        <ChevronRight className="h-5 w-5 text-slate-600 transition-all group-hover:text-white group-hover:translate-x-1" />
+                        <ChevronRight className="h-5 w-5 text-slate-400 transition-[transform,opacity,box-shadow,background-color,border-color,color] group-hover:translate-x-1 group-hover:text-white" />
                       </div>
-                      
-                      <h4 className="truncate text-lg font-black text-white font-display group-hover:text-gym-500 transition-colors uppercase tracking-tight">{student.fullName}</h4>
-                      <p className="truncate text-xs font-medium text-slate-500 mt-0.5">{student.email}</p>
-                      
-                      <div className="mt-8 flex items-center gap-3">
-                        <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 border border-white/5 transition group-hover:bg-white/[0.08]">
+
+                      <h4 className="truncate font-display text-lg font-black uppercase tracking-tight text-white transition-colors group-hover:text-gym-500">
+                        {student.fullName}
+                      </h4>
+                      <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{student.email}</p>
+
+                      <div className="mt-8 flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-2 transition-[transform,opacity,box-shadow,background-color,border-color,color] group-hover:bg-white/[0.08]">
                           <Activity className="h-3.5 w-3.5 text-gym-500" />
-                          <span className="text-[10px] font-bold text-slate-200 uppercase tracking-tight">{student.sessionCount} Sessions</span>
+                          <span className="text-[10px] font-bold uppercase tracking-tight text-slate-200">{student.sessionCount} Sessions</span>
                         </div>
-                        {student.phone && (
-                          <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 border border-white/5 transition group-hover:bg-white/[0.08]">
+                        {student.phone ? (
+                          <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-2 transition-[transform,opacity,box-shadow,background-color,border-color,color] group-hover:bg-white/[0.08]">
                             <Phone className="h-3.5 w-3.5 text-slate-500" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Contact Set</span>
+                            <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">Contact Set</span>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
-                    
+
                     <div className="mt-auto border-t border-white/5 bg-white/[0.01] px-7 py-4">
-                      <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest group-hover:text-slate-400 transition-colors">Trainee Profile Dossier</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 transition-colors group-hover:text-slate-300">
+                        Trainee Profile Dossier
+                      </p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
-          </div>
-        )}
+          </section>
+        ) : null}
 
-        {activeTab === 'feedback' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {feedbackAvg && (
-              <div className="gc-glass-panel relative overflow-hidden p-8 border-white/10">
+        {activeTab === 'feedback' ? (
+          <section id="coach-customer-view-panel-feedback" role="tabpanel" aria-labelledby="coach-customer-view-feedback" className="animate-in slide-in-from-bottom-4 space-y-8 fade-in duration-500">
+            {feedbackAvg ? (
+              <div className="gc-glass-panel relative overflow-hidden border-white/10 p-8">
                 <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-amber-500/5 blur-[100px]" />
                 <div className="relative flex flex-col gap-8 md:flex-row md:items-center">
                   <div className="text-center md:text-left">
-                    <p className="text-7xl font-black text-white leading-none font-display mb-4">
+                    <p className="mb-4 font-display text-7xl font-black leading-none text-white">
                       {feedbackAvg.averageRating?.toFixed ? feedbackAvg.averageRating.toFixed(1) : (feedbackAvg.averageRating ?? '0.0')}
                     </p>
-                    <div className="flex justify-center md:justify-start mb-2 scale-110 origin-left">
+                    <div className="mb-2 flex origin-left justify-center md:justify-start md:scale-110">
                       <StarDisplay rating={Math.round(feedbackAvg.averageRating ?? 0)} />
                     </div>
-                    <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest">{feedbackAvg.totalReviews} Verified Appraisals</p>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-amber-500">{feedbackAvg.totalReviews} Verified Appraisals</p>
                   </div>
                   <div className="hidden h-20 w-px bg-white/10 md:block" />
                   <div className="flex-1">
-                    <h3 className="font-display text-2xl font-bold text-white tracking-tight">Satisfaction Quotient</h3>
+                    <h3 className="font-display text-2xl font-bold tracking-tight text-white">Satisfaction Quotient</h3>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                      Your standing is calculated from all customer feedback following completed sessions. High ratings 
-                      increase your visibility and partnership potential in the GymCore ecosystem.
+                      Your standing is calculated from all customer feedback following completed sessions. High ratings increase your visibility and partnership potential in the GymCore ecosystem.
                     </p>
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
 
             {feedbackLoading ? (
-              <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-32 animate-pulse rounded-[2rem] bg-white/[0.02] border border-white/5" />)}</div>
+              <div className="space-y-4">{[1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-[2rem] border border-white/5 bg-white/[0.02]" />)}</div>
             ) : feedback.length === 0 ? (
-              <div className="gc-glass-panel flex flex-col items-center justify-center py-20 text-center border-white/5">
-                <Star className="mx-auto mb-6 h-12 w-12 text-slate-700 opacity-20" />
-                <h3 className="text-xl font-bold text-white font-display uppercase tracking-tight">No Testimonials</h3>
+              <div className="gc-glass-panel flex flex-col items-center justify-center border-white/5 py-20 text-center">
+                <Star className="mx-auto mb-6 h-12 w-12 text-slate-200 opacity-20" />
+                <h3 className="font-display text-xl font-bold uppercase tracking-tight text-white">No Testimonials</h3>
                 <p className="mt-2 max-w-sm text-sm text-slate-500">Customers can submit anonymous or identified feedback once a training session is marked as completed.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6">
-                {feedback.map(fb => (
-                  <div key={fb.coachFeedbackId} className="gc-card-compact border-white/5 bg-white/[0.02] transition-all hover:bg-white/[0.04] hover:border-white/10 group">
+                {feedback.map((entry) => (
+                  <div
+                    key={entry.coachFeedbackId}
+                    className="gc-card-compact group border-white/5 bg-white/[0.02] transition-[transform,opacity,box-shadow,background-color,border-color,color] hover:border-white/10 hover:bg-white/[0.04]"
+                  >
                     <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 transition group-hover:bg-white/10 group-hover:ring-white/20">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 transition-[transform,opacity,box-shadow,background-color,border-color,color] group-hover:bg-white/10 group-hover:ring-white/20">
                         <User className="h-6 w-6 text-slate-500 group-hover:text-slate-300" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
                           <div>
-                            <h4 className="font-bold text-white font-display text-lg tracking-tight uppercase">{fb.customerName}</h4>
-                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Client Authenticated</p>
+                            <h4 className="font-display text-lg font-bold uppercase tracking-tight text-white">{entry.customerName}</h4>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Client Authenticated</p>
                           </div>
                           <div className="flex flex-col items-end">
-                            <StarDisplay rating={fb.rating} />
-                            <span className="mt-1 text-[10px] font-bold text-slate-500">{fb.createdAt ? new Date(fb.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
+                            <StarDisplay rating={entry.rating} />
+                            <span className="mt-1 text-[10px] font-bold text-slate-500">{entry.createdAt ? formatDate(entry.createdAt) : ''}</span>
                           </div>
                         </div>
-                        {fb.comment && (
+                        {entry.comment ? (
                           <div className="relative mt-4">
                             <Quote className="absolute -left-2 -top-2 h-8 w-8 text-white/[0.03]" />
-                            <p className="relative text-sm italic leading-relaxed text-slate-300">"{fb.comment}"</p>
+                            <p className="relative break-words text-sm italic leading-relaxed text-slate-300">&ldquo;{entry.comment}&rdquo;</p>
                           </div>
-                        )}
+                        ) : null}
                         <div className="mt-6 flex items-center gap-3">
-                          <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-500 ring-1 ring-emerald-500/20">Session #{fb.ptSessionId}</span>
+                          <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-500 ring-1 ring-emerald-500/20">
+                            Session #{entry.ptSessionId}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -741,16 +884,19 @@ function CoachCustomersPage() {
                 ))}
               </div>
             )}
-          </div>
-        )}
+          </section>
+        ) : null}
       </div>
 
-      {selectedStudent && studentDetail && (
+      {selectedStudent && studentDetail ? (
         <StudentDetailModal
           student={studentDetail}
-          onClose={() => { setSelectedStudent(null); setStudentDetail(null) }}
+          onClose={() => {
+            setSelectedStudent(null)
+            setStudentDetail(null)
+          }}
         />
-      )}
+      ) : null}
     </WorkspaceScaffold>
   )
 }

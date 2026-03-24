@@ -241,3 +241,5 @@ describe('AdminInvoicesPage', () => {
     expect(screen.getAllByRole('combobox')[0]).toBeDisabled()
   })
 })
+
+

@@ -622,3 +622,5 @@ describe('CustomerCoachBookingPage', () => {
     expect(screen.getAllByText(/Slot 2 \(08:30-10:00\)/i).length).toBeGreaterThanOrEqual(1)
   })
 })
+
+

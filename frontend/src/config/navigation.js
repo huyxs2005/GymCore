@@ -36,3 +36,5 @@ export const adminNav = [
   { to: '/admin/promotions', label: 'Promotions' },
   { to: '/admin/reports', label: 'Reports' },
 ]
+
+

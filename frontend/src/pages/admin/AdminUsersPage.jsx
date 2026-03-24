@@ -17,6 +17,7 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { adminUserApi } from '../../features/users/api/adminUserApi'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import { formatDateTime as formatDateTimeValue } from '../../utils/formatters'
 
 const ROLE_OPTIONS = [
   { value: 'ADMIN', label: 'Admin' },
@@ -31,7 +32,9 @@ const BOOLEAN_FILTERS = [
   { value: 'false', label: 'No' },
 ]
 const INPUT_CLASS =
-  'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-gym-300'
+  'gc-input'
+const INPUT_CLASS_COMPACT =
+  'gc-select min-h-0 rounded-2xl bg-[rgba(18,18,26,0.92)] px-4 py-3'
 
 function buildInitialForm() {
   return {
@@ -196,15 +199,15 @@ function AdminUsersPage() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Staff directory</p>
-              <h2 className="mt-2 text-2xl font-bold text-slate-900">Employees only</h2>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              <h2 className="mt-2 text-2xl font-bold text-white">Employees only</h2>
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">
                 This page manages employee accounts only. Customers are not created here and must remain customer-originated accounts.
               </p>
             </div>
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="gc-button-primary"
             >
               <PlusCircle size={18} />
               New staff
@@ -212,29 +215,34 @@ function AdminUsersPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <SummaryCard label="Total staff" value={summary.totalStaff} icon={<Users size={18} />} tone="bg-gym-50 text-gym-700" />
-            <SummaryCard label="Admins" value={summary.adminCount} icon={<ShieldCheck size={18} />} tone="bg-violet-50 text-violet-700" />
-            <SummaryCard label="Coaches" value={summary.coachCount} icon={<UserCog size={18} />} tone="bg-blue-50 text-blue-700" />
-            <SummaryCard label="Receptionists" value={summary.receptionistCount} icon={<UserRound size={18} />} tone="bg-emerald-50 text-emerald-700" />
-            <SummaryCard label="Locked" value={summary.lockedCount} icon={<Lock size={18} />} tone="bg-rose-50 text-rose-700" />
+            <SummaryCard label="Total staff" value={summary.totalStaff} icon={<Users size={18} />} tone="bg-gym-500/10 text-gym-300" />
+            <SummaryCard label="Admins" value={summary.adminCount} icon={<ShieldCheck size={18} />} tone="bg-violet-500/10 text-violet-300 ring-violet-500/20" />
+            <SummaryCard label="Coaches" value={summary.coachCount} icon={<UserCog size={18} />} tone="bg-sky-500/10 text-sky-300" />
+            <SummaryCard label="Receptionists" value={summary.receptionistCount} icon={<UserRound size={18} />} tone="bg-emerald-500/10 text-emerald-300" />
+            <SummaryCard label="Locked" value={summary.lockedCount} icon={<Lock size={18} />} tone="bg-rose-500/10 text-rose-300" />
           </div>
 
           <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))]">
             <label className="relative">
+              <span className="sr-only">Search staff</span>
               <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
-                type="text"
+                type="search"
+                name="admin-user-search"
+                autoComplete="off"
+                spellCheck={false}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by name, email, or phone"
-                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition focus:border-gym-300"
+                placeholder="Search by name, email, or phone…"
+                className="gc-input min-h-0 rounded-2xl bg-[rgba(18,18,26,0.92)] py-3 pl-11 pr-4"
               />
             </label>
 
             <select
+              name="admin-user-role-filter"
               value={roleFilter}
               onChange={(event) => setRoleFilter(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-gym-300"
+              className={INPUT_CLASS_COMPACT}
             >
               {ROLE_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -242,9 +250,10 @@ function AdminUsersPage() {
             </select>
 
             <select
+              name="admin-user-lock-filter"
               value={lockedFilter}
               onChange={(event) => setLockedFilter(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-gym-300"
+              className={INPUT_CLASS_COMPACT}
             >
               <option value="all">All lock states</option>
               {BOOLEAN_FILTERS.slice(1).map((option) => (
@@ -253,9 +262,10 @@ function AdminUsersPage() {
             </select>
 
             <select
+              name="admin-user-active-filter"
               value={activeFilter}
               onChange={(event) => setActiveFilter(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-gym-300"
+              className={INPUT_CLASS_COMPACT}
             >
               <option value="all">All active states</option>
               {BOOLEAN_FILTERS.slice(1).map((option) => (
@@ -265,13 +275,13 @@ function AdminUsersPage() {
           </div>
 
           {usersQuery.error ? (
-            <div className="rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+            <div className="rounded-3xl border border-rose-500/20 bg-rose-500/10/80 p-4 text-sm text-rose-300">
               {usersQuery.error?.response?.data?.message || 'Staff data could not be loaded.'}
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-[28px] border border-slate-100 bg-white">
-            <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_140px_110px_110px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+          <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.92)]">
+            <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_140px_110px_110px] gap-4 border-b border-white/10 bg-white/5 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               <span>Staff</span>
               <span>Contact</span>
               <span>Role</span>
@@ -281,27 +291,27 @@ function AdminUsersPage() {
 
             <div className="divide-y divide-slate-100">
               {usersQuery.isLoading && !usersQuery.data ? (
-                <div className="p-6 text-sm text-slate-500">Loading staff accounts...</div>
+                <div aria-live="polite" className="p-6 text-sm text-zinc-500">Loading staff accounts…</div>
               ) : items.length === 0 ? (
-                <div className="p-6 text-sm text-slate-500">No staff accounts match the current filters.</div>
+                <div className="p-6 text-sm text-zinc-500">No staff accounts match the current filters.</div>
               ) : (
                 items.map((user) => (
                   <div
                     key={user.userId}
                     className={`grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_140px_110px_110px] gap-4 px-5 py-4 text-sm ${
-                      selectedUserId === user.userId ? 'bg-gym-50/60' : 'bg-white'
+                      selectedUserId === user.userId ? 'bg-gym-500/10/60' : 'bg-[rgba(18,18,26,0.92)]'
                     }`}
                   >
                     <button type="button" className="text-left" onClick={() => selectUser(user)}>
-                      <p className="font-bold text-slate-900">{user.fullName}</p>
-                      <p className="mt-1 text-xs text-slate-500">ID #{user.userId}</p>
+                      <p className="font-bold text-white">{user.fullName}</p>
+                      <p className="mt-1 text-xs text-zinc-500">ID #{user.userId}</p>
                     </button>
                     <div>
-                      <p className="font-medium text-slate-700">{user.email}</p>
-                      <p className="mt-1 text-xs text-slate-500">{user.phone || 'No phone'}</p>
+                      <p className="font-medium text-slate-300">{user.email}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{user.phone || 'No phone'}</p>
                     </div>
                     <div className="flex items-start">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{formatRole(user.role)}</span>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">{formatRole(user.role)}</span>
                     </div>
                     <div className="space-y-1">
                       <StatusPill active={user.active} />
@@ -311,7 +321,7 @@ function AdminUsersPage() {
                       <button
                         type="button"
                         onClick={() => openEdit(user)}
-                        className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-gym-200 hover:text-gym-700"
+                        className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-gym-500/20 hover:text-gym-300"
                       >
                         Edit
                       </button>
@@ -319,7 +329,7 @@ function AdminUsersPage() {
                         <button
                           type="button"
                           onClick={() => setUnlockDraft(user)}
-                          className="rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                          className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10"
                         >
                           Unlock
                         </button>
@@ -327,7 +337,7 @@ function AdminUsersPage() {
                         <button
                           type="button"
                           onClick={() => setLockDraft({ user, reason: '' })}
-                          className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+                          className="rounded-full border border-rose-500/20 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"
                         >
                           Lock
                         </button>
@@ -345,16 +355,16 @@ function AdminUsersPage() {
             <>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Editor</p>
-                <h2 className="mt-2 text-2xl font-bold text-slate-900">
+                <h2 className="mt-2 text-2xl font-bold text-white">
                   {editorMode === 'create' ? 'Create staff account' : 'Update staff account'}
                 </h2>
-                <p className="mt-2 text-sm text-slate-600">
+                <p className="mt-2 text-sm text-slate-400">
                   Customers are intentionally excluded. This form provisions only Admin, Coach, and Receptionist accounts.
                 </p>
               </div>
 
               {formError ? (
-                <div className="rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+                <div aria-live="polite" className="rounded-3xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-300">
                   {formError}
                 </div>
               ) : null}
@@ -362,6 +372,9 @@ function AdminUsersPage() {
               <form className="space-y-4" onSubmit={handleSubmit}>
                 <FormField label="Full name">
                   <input
+                    type="text"
+                    name="fullName"
+                    autoComplete="name"
                     value={form.fullName}
                     onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
                     className={INPUT_CLASS}
@@ -370,15 +383,24 @@ function AdminUsersPage() {
 
                 <FormField label="Email">
                   <input
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    spellCheck={false}
                     value={form.email}
                     readOnly={editorMode === 'edit'}
                     onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-                    className={`${INPUT_CLASS} disabled:bg-slate-50`}
+                    className={`${INPUT_CLASS} disabled:bg-white/5`}
                   />
                 </FormField>
 
                 <FormField label="Phone">
                   <input
+                    type="tel"
+                    name="phone"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    spellCheck={false}
                     value={form.phone}
                     onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
                     className={INPUT_CLASS}
@@ -387,10 +409,11 @@ function AdminUsersPage() {
 
                 <FormField label="Role">
                   <select
+                    name="role"
                     value={form.role}
                     disabled={editorMode === 'edit'}
                     onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
-                    className={`${INPUT_CLASS} disabled:bg-slate-50`}
+                    className="gc-select disabled:bg-white/5"
                   >
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -403,6 +426,8 @@ function AdminUsersPage() {
                     <FormField label="Temporary password">
                       <input
                         type="password"
+                        name="password"
+                        autoComplete="new-password"
                         value={form.password}
                         onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                         className={INPUT_CLASS}
@@ -411,6 +436,8 @@ function AdminUsersPage() {
                     <FormField label="Confirm password">
                       <input
                         type="password"
+                        name="confirmPassword"
+                        autoComplete="new-password"
                         value={form.confirmPassword}
                         onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))}
                         className={INPUT_CLASS}
@@ -418,27 +445,29 @@ function AdminUsersPage() {
                     </FormField>
                   </>
                 ) : (
-                  <label className="flex items-center justify-between rounded-3xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm font-medium text-slate-700">
+                  <label className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300">
                     <span>Active account</span>
                     <input
                       type="checkbox"
                       checked={form.active}
                       onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-gym-600 focus:ring-gym-500"
+                      className="h-4 w-4 rounded border-white/10 text-gym-600 focus:ring-gym-500"
                     />
                   </label>
                 )}
 
                 {form.role === 'COACH' ? (
-                  <div className="space-y-4 rounded-[28px] border border-blue-100 bg-blue-50/60 p-4">
+                  <div className="space-y-4 rounded-[28px] border border-blue-100 bg-sky-500/10/60 p-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">Coach profile</p>
-                      <p className="mt-1 text-sm text-blue-900">Coach accounts also create or update the linked coach profile.</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Coach profile</p>
+                      <p className="mt-1 text-sm text-slate-300">Coach accounts also create or update the linked coach profile.</p>
                     </div>
 
                     <FormField label="Date of birth">
                       <input
                         type="date"
+                        name="dateOfBirth"
+                        autoComplete="bday"
                         value={form.dateOfBirth}
                         onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))}
                         className={INPUT_CLASS}
@@ -447,6 +476,9 @@ function AdminUsersPage() {
 
                     <FormField label="Gender">
                       <input
+                        type="text"
+                        name="gender"
+                        autoComplete="sex"
                         value={form.gender}
                         onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
                         className={INPUT_CLASS}
@@ -456,6 +488,9 @@ function AdminUsersPage() {
                     <FormField label="Experience years">
                       <input
                         type="number"
+                        name="experienceYears"
+                        inputMode="numeric"
+                        autoComplete="off"
                         min="0"
                         value={form.experienceYears}
                         onChange={(event) => setForm((current) => ({ ...current, experienceYears: event.target.value }))}
@@ -466,9 +501,11 @@ function AdminUsersPage() {
                     <FormField label="Bio">
                       <textarea
                         rows="4"
+                        name="bio"
+                        autoComplete="off"
                         value={form.bio}
                         onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))}
-                        className={`${INPUT_CLASS} resize-none`}
+                        className="gc-textarea resize-none"
                       />
                     </FormField>
                   </div>
@@ -481,16 +518,16 @@ function AdminUsersPage() {
                       setEditorMode(null)
                       setFormError('')
                     }}
-                    className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    className="gc-button-secondary flex-1"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={upsertMutation.isPending}
-                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="gc-button-primary flex-1"
                   >
-                    {upsertMutation.isPending ? 'Saving...' : editorMode === 'create' ? 'Create staff' : 'Save changes'}
+                    {upsertMutation.isPending ? 'Saving…' : editorMode === 'create' ? 'Create staff' : 'Save changes'}
                   </button>
                 </div>
               </form>
@@ -499,14 +536,14 @@ function AdminUsersPage() {
             <>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Staff detail</p>
-                <h2 className="mt-2 text-2xl font-bold text-slate-900">{selectedUser.fullName}</h2>
-                <p className="mt-2 text-sm text-slate-600">
+                <h2 className="mt-2 text-2xl font-bold text-white">{selectedUser.fullName}</h2>
+                <p className="mt-2 text-sm text-slate-400">
                   Account detail, verification state, lock status, and coach metadata when applicable.
                 </p>
               </div>
 
               {formError ? (
-                <div className="rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+                <div className="rounded-3xl border border-rose-500/20 bg-rose-500/10/80 p-4 text-sm text-rose-300">
                   {formError}
                 </div>
               ) : null}
@@ -524,13 +561,13 @@ function AdminUsersPage() {
               </div>
 
               {selectedUser.role === 'COACH' ? (
-                <div className="rounded-[28px] border border-blue-100 bg-blue-50/60 p-4">
-                  <h3 className="text-sm font-bold text-blue-900">Coach profile</h3>
-                  <dl className="mt-3 space-y-2 text-sm text-blue-900">
+                <div className="rounded-[28px] border border-blue-100 bg-sky-500/10/60 p-4">
+                  <h3 className="text-sm font-bold text-sky-200">Coach profile</h3>
+                  <dl className="mt-3 space-y-2 text-sm text-slate-300">
                     <div className="flex justify-between gap-4"><dt>Date of birth</dt><dd>{selectedUser.coachProfile?.dateOfBirth || '--'}</dd></div>
                     <div className="flex justify-between gap-4"><dt>Gender</dt><dd>{selectedUser.coachProfile?.gender || '--'}</dd></div>
                     <div className="flex justify-between gap-4"><dt>Experience</dt><dd>{selectedUser.coachProfile?.experienceYears ?? '--'}</dd></div>
-                    <div className="space-y-1"><dt>Bio</dt><dd className="text-blue-800/80">{selectedUser.coachProfile?.bio || 'No bio provided.'}</dd></div>
+                    <div className="space-y-1"><dt>Bio</dt><dd className="text-slate-400">{selectedUser.coachProfile?.bio || 'No bio provided.'}</dd></div>
                   </dl>
                 </div>
               ) : null}
@@ -539,7 +576,7 @@ function AdminUsersPage() {
                 <button
                   type="button"
                   onClick={() => openEdit(selectedUser)}
-                  className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-gym-200 hover:text-gym-700"
+                  className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:border-gym-500/20 hover:text-gym-300"
                 >
                   Edit account
                 </button>
@@ -547,7 +584,7 @@ function AdminUsersPage() {
                   <button
                     type="button"
                     onClick={() => setUnlockDraft(selectedUser)}
-                    className="rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    className="rounded-2xl border border-emerald-500/20 px-4 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/10"
                   >
                     Unlock account
                   </button>
@@ -555,7 +592,7 @@ function AdminUsersPage() {
                   <button
                     type="button"
                     onClick={() => setLockDraft({ user: selectedUser, reason: '' })}
-                    className="rounded-2xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                    className="rounded-2xl border border-rose-500/20 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10"
                   >
                     Lock account
                   </button>
@@ -563,12 +600,12 @@ function AdminUsersPage() {
               </div>
             </>
           ) : (
-            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
-              <span className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-white text-gym-600 shadow-sm">
+            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/5 p-8 text-center">
+              <span className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-[rgba(18,18,26,0.92)] text-gym-600 shadow-sm">
                 <Users size={24} />
               </span>
-              <h2 className="mt-5 text-xl font-bold text-slate-900">Select a staff account</h2>
-              <p className="mt-2 max-w-sm text-sm text-slate-500">
+              <h2 className="mt-5 text-xl font-bold text-white">Select a staff account</h2>
+              <p className="mt-2 max-w-sm text-sm text-zinc-500">
                 Pick an employee from the list to manage the account, or create a new Admin, Coach, or Receptionist profile.
               </p>
             </div>
@@ -578,30 +615,33 @@ function AdminUsersPage() {
 
       {lockDraft ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.92)] p-6 shadow-2xl">
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Lock account</p>
-              <h2 className="text-xl font-bold text-slate-900">{lockDraft.user.fullName}</h2>
-              <p className="text-sm text-slate-600">
+              <h2 className="text-xl font-bold text-white">{lockDraft.user.fullName}</h2>
+              <p className="text-sm text-slate-400">
                 Locking blocks password access immediately. Provide a reason so the state is explicit in the admin record.
               </p>
             </div>
 
-            <label className="mt-5 block space-y-2 text-sm font-medium text-slate-700">
+            <label className="mt-5 block space-y-2 text-sm font-medium text-slate-300">
               <span>Lock reason</span>
               <textarea
                 rows="4"
+                name="lockReason"
+                autoComplete="off"
+                placeholder="Explain why this account is being locked…"
                 value={lockDraft.reason}
                 onChange={(event) => {
                   setLockDraft((current) => ({ ...current, reason: event.target.value }))
                   setLockError('')
                 }}
-                className={`${INPUT_CLASS} resize-none`}
+                className="gc-textarea resize-none"
               />
             </label>
 
             {lockError ? (
-              <div className="mt-4 rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+              <div aria-live="polite" className="mt-4 rounded-3xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-300">
                 {lockError}
               </div>
             ) : null}
@@ -613,7 +653,7 @@ function AdminUsersPage() {
                   setLockDraft(null)
                   setLockError('')
                 }}
-                className="rounded-full border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="gc-button-secondary"
               >
                 Cancel
               </button>
@@ -621,9 +661,9 @@ function AdminUsersPage() {
                 type="button"
                 onClick={handleLockConfirm}
                 disabled={lockMutation.isPending}
-                className="rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="inline-flex min-h-[2.9rem] items-center justify-center rounded-[0.875rem] bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition-[transform,background-color,opacity] duration-200 hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {lockMutation.isPending ? 'Locking...' : 'Confirm lock'}
+                {lockMutation.isPending ? 'Locking…' : 'Confirm lock'}
               </button>
             </div>
           </div>
@@ -646,13 +686,13 @@ function AdminUsersPage() {
 
 function SummaryCard({ label, value, icon, tone }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-4">
+    <div className="gc-card-compact rounded-3xl border-white/10 bg-[rgba(18,18,26,0.92)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{value ?? 0}</p>
+          <p className="mt-2 text-2xl font-black text-white">{value ?? 0}</p>
         </div>
-        <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${tone}`}>
+        <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${tone}`}>
           {icon}
         </span>
       </div>
@@ -662,7 +702,7 @@ function SummaryCard({ label, value, icon, tone }) {
 
 function FormField({ label, children }) {
   return (
-    <label className="block space-y-2 text-sm font-medium text-slate-700">
+    <label className="block space-y-2 text-sm font-medium text-slate-300">
       <span>{label}</span>
       {children}
     </label>
@@ -671,17 +711,17 @@ function FormField({ label, children }) {
 
 function DetailCard({ label, value }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-4">
+    <div className="gc-card-compact border-white/10 bg-white/5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
+      <p className="mt-2 text-sm font-semibold text-white">{value}</p>
     </div>
   )
 }
 
 function InfoPill({ icon, label }) {
   return (
-    <div className="flex items-center gap-3 rounded-3xl border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
-      <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+    <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-[rgba(18,18,26,0.92)] px-4 py-3 text-sm font-semibold text-slate-300">
+      <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/10 text-slate-300">
         {icon}
       </span>
       <span>{label}</span>
@@ -692,7 +732,7 @@ function InfoPill({ icon, label }) {
 function StatusPill({ active }) {
   return (
     <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
-      active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
+      active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/10 text-slate-300'
     }`}>
       {active ? 'Active' : 'Inactive'}
     </span>
@@ -702,7 +742,7 @@ function StatusPill({ active }) {
 function LockPill({ locked }) {
   return (
     <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
-      locked ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'
+      locked ? 'bg-rose-500/15 text-rose-300' : 'bg-sky-500/15 text-sky-300'
     }`}>
       {locked ? 'Locked' : 'Open'}
     </span>
@@ -753,12 +793,13 @@ function formatRole(role) {
 }
 
 function formatDateTime(value) {
-  if (!value) return '--'
-  try {
-    return new Date(value).toLocaleString()
-  } catch {
-    return String(value)
-  }
+  return formatDateTimeValue(value)
 }
 
 export default AdminUsersPage
+
+
+
+
+
+

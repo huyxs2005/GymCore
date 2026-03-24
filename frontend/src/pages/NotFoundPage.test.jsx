@@ -15,3 +15,5 @@ describe('NotFoundPage', () => {
     expect(screen.getByRole('link', { name: 'Back to home' })).toBeInTheDocument()
   })
 })
+
+

@@ -17,3 +17,5 @@ export const adminUserApi = {
     return apiClient.patch(`/v1/admin/users/${userId}/unlock`).then((response) => response.data)
   },
 }
+
+

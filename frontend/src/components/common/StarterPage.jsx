@@ -5,7 +5,7 @@ function StarterPage({ title, subtitle, notes, endpoints, frontendFiles, backend
         <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
         <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
         {notes ? (
-          <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">{notes}</p>
+          <p className="mt-3 rounded-lg bg-sky-500/10 px-3 py-2 text-sm text-blue-900">{notes}</p>
         ) : null}
       </article>
 
@@ -48,3 +48,6 @@ function StarterPage({ title, subtitle, notes, endpoints, frontendFiles, backend
 }
 
 export default StarterPage
+
+
+

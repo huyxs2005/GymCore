@@ -177,3 +177,5 @@ describe('ReceptionCheckinPage', () => {
     expect(screen.queryByRole('button', { name: /Check in by token/i })).toBeNull()
   })
 })
+
+

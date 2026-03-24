@@ -65,3 +65,5 @@ describe('Forgot password flow', () => {
     expect(screen.getByLabelText(/Confirm password/i)).toBeInTheDocument()
   })
 })
+
+

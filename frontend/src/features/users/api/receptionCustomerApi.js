@@ -8,3 +8,5 @@ export const receptionCustomerApi = {
     return apiClient.get(`/v1/reception/customers/${customerId}/membership`).then((response) => response.data)
   },
 }
+
+
