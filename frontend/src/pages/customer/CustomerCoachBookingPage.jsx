@@ -204,6 +204,29 @@ function renderMembershipStatusIndicator(membershipGate) {
   }
 }
 
+function countCoachConflicts(coach) {
+  return Array.isArray(coach?.unavailableSlots) ? coach.unavailableSlots.length : 0
+}
+
+function sortPartialMatchesByLeastConflict(items) {
+  return [...items].sort((left, right) => {
+    const leftConflicts = countCoachConflicts(left)
+    const rightConflicts = countCoachConflicts(right)
+
+    if (leftConflicts !== rightConflicts) {
+      return leftConflicts - rightConflicts
+    }
+
+    const leftMatched = Number(left?.matchedSlots || 0)
+    const rightMatched = Number(right?.matchedSlots || 0)
+    if (leftMatched !== rightMatched) {
+      return rightMatched - leftMatched
+    }
+
+    return String(left?.fullName || '').localeCompare(String(right?.fullName || ''))
+  })
+}
+
 function CustomerCoachBookingPage() {
   const [activeTab, setActiveTab] = useState('match')
   const [timeSlots, setTimeSlots] = useState([])
@@ -632,7 +655,9 @@ function CustomerCoachBookingPage() {
       const payload = response?.data ?? response
       setMatches({
         fullMatches: Array.isArray(payload?.fullMatches) ? payload.fullMatches : [],
-        partialMatches: Array.isArray(payload?.partialMatches) ? payload.partialMatches : [],
+        partialMatches: sortPartialMatchesByLeastConflict(
+          Array.isArray(payload?.partialMatches) ? payload.partialMatches : [],
+        ),
       })
       setHasPreviewedMatches(true)
     } catch (err) {
@@ -949,12 +974,7 @@ function CustomerCoachBookingPage() {
               <div className="bg-white border border-slate-200 rounded-[30px] p-5 space-y-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-gym-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-gym-700">1. Plan</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">2. Preview</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">3. Request</span>
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
+                    <h3 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h3>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold ${membershipStatusIndicator.tone}`}>
@@ -973,7 +993,6 @@ function CustomerCoachBookingPage() {
 
                 <div className="space-y-3 pt-1">
                   <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                    <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
                     <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
                     <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
                   </div>
@@ -1025,7 +1044,7 @@ function CustomerCoachBookingPage() {
                 </div>
 
                 <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
-                  {loading ? 'Loading...' : '2) Preview Matches'}
+                  {loading ? 'Loading...' : 'Search Coaches'}
                 </button>
               </div>
             </div>

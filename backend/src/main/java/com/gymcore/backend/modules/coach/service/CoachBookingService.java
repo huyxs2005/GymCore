@@ -31,6 +31,7 @@ public class CoachBookingService {
     private static final int SELF_SERVICE_RESCHEDULE_CUTOFF_HOURS = 12;
     private static final String RESCHEDULE_REQUEST_PREFIX = "RESCHEDULE_REQUEST|";
     private static final String RESCHEDULE_DENIED_PREFIX = "RESCHEDULE_DENIED|";
+    private static final String COACH_MATCH_OPT_OUT_TOKEN = "[[PT_MATCH_DISABLED]]";
 
     private final JdbcTemplate jdbcTemplate;
     private final AuthService authService;
@@ -165,7 +166,9 @@ public class CoachBookingService {
                 ) agg ON agg.CoachID = ch.CoachID
                 WHERE u.IsActive = 1
                 ORDER BY AvgRating DESC, u.FullName
-                """, coachListRowMapper());
+                """, coachListRowMapper()).stream()
+                .filter(item -> Boolean.TRUE.equals(item.get("acceptingCustomers")))
+                .toList();
         return Map.of("items", items);
     }
 
@@ -1572,6 +1575,8 @@ public class CoachBookingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "slots array is required.");
         }
         int coachId = coach.userId();
+        boolean acceptingCustomerRequests = payload.get("acceptingCustomerRequests") == null
+                || Boolean.TRUE.equals(payload.get("acceptingCustomerRequests"));
         jdbcTemplate.update("DELETE FROM dbo.CoachWeeklyAvailability WHERE CoachID = ?", coachId);
         int insertedCount = 0;
         for (Map<String, Object> slot : slots) {
@@ -1586,16 +1591,31 @@ public class CoachBookingService {
                     """, coachId, dayOfWeek, timeSlotId);
             insertedCount++;
         }
+        String existingBio = jdbcTemplate.queryForObject(
+                "SELECT Bio FROM dbo.Coaches WHERE CoachID = ?",
+                String.class,
+                coachId);
+        jdbcTemplate.update(
+                "UPDATE dbo.Coaches SET Bio = ?, UpdatedAt = SYSDATETIME() WHERE CoachID = ?",
+                mergeCoachAvailabilityFlagIntoBio(existingBio, acceptingCustomerRequests),
+                coachId);
         return Map.of(
                 "message", "Availability updated successfully.",
                 "inserted", insertedCount,
-                "total", insertedCount);
+                "total", insertedCount,
+                "acceptingCustomerRequests", acceptingCustomerRequests);
     }
 
     private Map<String, Object> coachGetMyAvailability(Map<String, Object> payload) {
         AuthService.AuthContext coach = requireCoach(payload);
         List<Map<String, Object>> weeklyAvailability = loadWeeklyAvailability(coach.userId());
-        return Map.of("weeklyAvailability", weeklyAvailability);
+        String rawBio = jdbcTemplate.queryForObject(
+                "SELECT Bio FROM dbo.Coaches WHERE CoachID = ?",
+                String.class,
+                coach.userId());
+        return Map.of(
+                "weeklyAvailability", weeklyAvailability,
+                "acceptingCustomerRequests", extractCoachMatchAvailability(rawBio));
     }
 
     private Map<String, Object> coachGetSchedule(Map<String, Object> payload) {
@@ -2195,6 +2215,7 @@ public class CoachBookingService {
         String bio = asText(body.get("bio"));
         String dateOfBirth = asText(body.get("dateOfBirth"));
         String gender = asText(body.get("gender"));
+        Boolean acceptingCustomerRequests = body.get("acceptingCustomerRequests") instanceof Boolean flag ? flag : null;
 
         Integer coachCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?",
@@ -2233,6 +2254,18 @@ public class CoachBookingService {
         if (phone != null)
             jdbcTemplate.update("UPDATE dbo.Users SET Phone = ?, UpdatedAt = SYSDATETIME() WHERE UserID = ?", phone,
                     coachId);
+        String existingBio = jdbcTemplate.queryForObject(
+                "SELECT Bio FROM dbo.Coaches WHERE CoachID = ?",
+                String.class,
+                coachId);
+        boolean acceptingCustomers = acceptingCustomerRequests != null
+                ? acceptingCustomerRequests
+                : extractCoachMatchAvailability(existingBio);
+        String persistedBio = bio != null
+                ? mergeCoachAvailabilityFlagIntoBio(bio, acceptingCustomers)
+                : (acceptingCustomerRequests != null
+                        ? mergeCoachAvailabilityFlagIntoBio(existingBio, acceptingCustomers)
+                        : null);
         int updatedRows = jdbcTemplate.update("""
                 UPDATE dbo.Coaches SET ExperienceYears = COALESCE(?, ExperienceYears), Bio = COALESCE(?, Bio),
                        DateOfBirth = CASE WHEN ? IS NOT NULL THEN ? ELSE DateOfBirth END,
@@ -2240,7 +2273,7 @@ public class CoachBookingService {
                 WHERE CoachID = ?
                 """,
                 experienceYears,
-                bio,
+                persistedBio,
                 parsedDateOfBirth == null ? null : java.sql.Date.valueOf(parsedDateOfBirth),
                 parsedDateOfBirth == null ? null : java.sql.Date.valueOf(parsedDateOfBirth),
                 gender,
@@ -2894,13 +2927,15 @@ public class CoachBookingService {
     private RowMapper<Map<String, Object>> coachListRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
+            String rawBio = rs.getString("Bio");
             m.put("coachId", rs.getInt("CoachID"));
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
             m.put("phone", rs.getString("Phone"));
             m.put("avatarUrl", rs.getString("AvatarUrl"));
             m.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
-            m.put("bio", rs.getString("Bio"));
+            m.put("bio", sanitizeCoachBio(rawBio));
+            m.put("acceptingCustomers", extractCoachMatchAvailability(rawBio));
             m.put("averageRating",
                     rs.getObject("AvgRating") != null ? Math.round(rs.getDouble("AvgRating") * 100.0) / 100.0 : 0);
             m.put("reviewCount", rs.getInt("ReviewCount"));
@@ -2911,6 +2946,7 @@ public class CoachBookingService {
     private RowMapper<Map<String, Object>> coachDetailRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
+            String rawBio = rs.getString("Bio");
             m.put("coachId", rs.getInt("CoachID"));
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
@@ -2920,7 +2956,8 @@ public class CoachBookingService {
             m.put("dateOfBirth", dob != null ? dob.toLocalDate().format(DATE_FORMAT) : null);
             m.put("gender", rs.getString("Gender"));
             m.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
-            m.put("bio", rs.getString("Bio"));
+            m.put("bio", sanitizeCoachBio(rawBio));
+            m.put("acceptingCustomers", extractCoachMatchAvailability(rawBio));
             m.put("averageRating",
                     rs.getObject("AvgRating") != null ? Math.round(rs.getDouble("AvgRating") * 100.0) / 100.0 : 0);
             m.put("reviewCount", rs.getInt("ReviewCount"));
@@ -3308,18 +3345,40 @@ public class CoachBookingService {
     private RowMapper<Map<String, Object>> adminCoachListRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
+            String rawBio = rs.getString("Bio");
             m.put("coachId", rs.getInt("CoachID"));
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
             m.put("phone", rs.getString("Phone"));
             m.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
-            m.put("bio", rs.getString("Bio"));
+            m.put("bio", sanitizeCoachBio(rawBio));
+            m.put("acceptingCustomers", extractCoachMatchAvailability(rawBio));
             m.put("averageRating",
                     rs.getObject("AvgRating") != null ? Math.round(rs.getDouble("AvgRating") * 100.0) / 100.0 : 0);
             m.put("reviewCount", rs.getInt("ReviewCount"));
             m.put("studentCount", rs.getInt("StudentCount"));
             return m;
         };
+    }
+
+    private boolean extractCoachMatchAvailability(String rawBio) {
+        return rawBio == null || !rawBio.contains(COACH_MATCH_OPT_OUT_TOKEN);
+    }
+
+    private String sanitizeCoachBio(String rawBio) {
+        if (rawBio == null) {
+            return null;
+        }
+        String sanitized = rawBio.replace(COACH_MATCH_OPT_OUT_TOKEN, "").trim();
+        return sanitized.isBlank() ? null : sanitized;
+    }
+
+    private String mergeCoachAvailabilityFlagIntoBio(String rawBio, boolean acceptingCustomers) {
+        String cleanBio = sanitizeCoachBio(rawBio);
+        if (acceptingCustomers) {
+            return cleanBio;
+        }
+        return cleanBio == null ? COACH_MATCH_OPT_OUT_TOKEN : cleanBio + "\n" + COACH_MATCH_OPT_OUT_TOKEN;
     }
 
     private ResponseStatusException unsupportedAction(String action) {

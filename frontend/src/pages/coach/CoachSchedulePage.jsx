@@ -149,6 +149,7 @@ function CoachSchedulePage() {
   const [mySchedule, setMySchedule] = useState([])
   const [timeSlots, setTimeSlots] = useState(DEFAULT_TIME_SLOTS)
   const [availability, setAvailability] = useState({})
+  const [acceptingCustomerRequests, setAcceptingCustomerRequests] = useState(true)
   const [selectedAvailabilityDay, setSelectedAvailabilityDay] = useState(1)
   const [selectedAvailabilitySummaryDay, setSelectedAvailabilitySummaryDay] = useState(1)
   const [scheduleMonthCursor, setScheduleMonthCursor] = useState('')
@@ -162,6 +163,10 @@ function CoachSchedulePage() {
     open: false,
     kind: '',
     sessionId: null,
+  })
+  const [intakeToggleDialog, setIntakeToggleDialog] = useState({
+    open: false,
+    nextValue: true,
   })
 
   const isFirstAvailabilityView = useRef(true)
@@ -208,6 +213,7 @@ function CoachSchedulePage() {
         }
       })
       setAvailability(next)
+      setAcceptingCustomerRequests(raw?.acceptingCustomerRequests !== false)
     } catch (err) {
       console.warn('Could not load saved availability:', err)
       setError(err?.response?.data?.message || 'Could not load saved availability.')
@@ -257,6 +263,30 @@ function CoachSchedulePage() {
       kind: '',
       sessionId: null,
     })
+  }
+
+  function openIntakeToggleDialog(nextValue) {
+    setIntakeToggleDialog({
+      open: true,
+      nextValue,
+    })
+  }
+
+  function closeIntakeToggleDialog() {
+    setIntakeToggleDialog({
+      open: false,
+      nextValue: acceptingCustomerRequests,
+    })
+  }
+
+  function confirmIntakeToggle() {
+    setAcceptingCustomerRequests(intakeToggleDialog.nextValue)
+    setMessage(
+      intakeToggleDialog.nextValue
+        ? 'You are visible in customer coach matches again. Save availability to publish the change.'
+        : 'You are hidden from future customer coach matches. Save availability to publish the change.',
+    )
+    closeIntakeToggleDialog()
   }
 
   async function handleCompleteSession(sessionId) {
@@ -369,7 +399,10 @@ function CoachSchedulePage() {
         })
       })
 
-      await coachApi.updateAvailability({ slots })
+      await coachApi.updateAvailability({
+        slots,
+        acceptingCustomerRequests,
+      })
       setMessage('Availability updated successfully. Selected slots stay visible so you can keep adjusting them.')
       setTimeout(() => setMessage(''), 6000)
     } catch (err) {
@@ -569,6 +602,34 @@ function CoachSchedulePage() {
                     {selectedAvailabilityEntries.length} Slots Active
                   </span>
                 </div>
+              </div>
+
+              <div className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-white/[0.03] px-5 py-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Coach Intake</p>
+                  <p className="mt-1 text-sm text-slate-300">
+                    Choose whether you still want to appear in customer PT match results.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openIntakeToggleDialog(!acceptingCustomerRequests)}
+                  className={`relative inline-flex h-11 min-w-[214px] items-center rounded-full px-3 transition-all ${
+                    acceptingCustomerRequests
+                      ? 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30'
+                  }`}
+                >
+                  <span
+                    className={`absolute h-8 w-8 rounded-full transition-all ${
+                      acceptingCustomerRequests ? 'translate-x-[156px] bg-emerald-400' : 'translate-x-0 bg-rose-400'
+                    }`}
+                  />
+                  <span className="relative z-10 flex w-full items-center justify-between gap-6 text-[10px] font-black uppercase tracking-[0.2em]">
+                    <span>Pause intake</span>
+                    <span>{acceptingCustomerRequests ? 'Accepting customers' : 'Hidden from matches'}</span>
+                  </span>
+                </button>
               </div>
 
               {loading && timeSlots.length === 0 ? (
@@ -1003,6 +1064,20 @@ function CoachSchedulePage() {
         pending={loading}
         onCancel={closeConfirmAction}
         onConfirm={confirmScheduleAction}
+      />
+
+      <ConfirmDialog
+        open={intakeToggleDialog.open}
+        title={intakeToggleDialog.nextValue ? 'Show yourself in customer matches?' : 'Hide yourself from customer matches?'}
+        description={
+          intakeToggleDialog.nextValue
+            ? 'Your coach profile will appear in future customer PT match results again after you save availability.'
+            : 'You will stop appearing in future customer PT match results after you save availability. Existing PT sessions and requests are not changed.'
+        }
+        confirmLabel={intakeToggleDialog.nextValue ? 'Show in matches' : 'Hide from matches'}
+        pending={false}
+        onCancel={closeIntakeToggleDialog}
+        onConfirm={confirmIntakeToggle}
       />
     </WorkspaceScaffold>
   )
