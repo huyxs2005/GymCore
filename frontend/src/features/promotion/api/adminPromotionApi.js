@@ -1,0 +1,46 @@
+import { apiClient } from '../../../api/client'
+
+export const adminPromotionApi = {
+  getCoupons() {
+    return apiClient.get('/v1/admin/promotions/coupons').then((response) => response.data)
+  },
+  createCoupon(payload) {
+    return apiClient.post('/v1/admin/promotions/coupons', payload).then((response) => response.data)
+  },
+  updateCoupon(promotionId, payload) {
+    return apiClient.put(`/v1/admin/promotions/coupons/${promotionId}`, payload).then((response) => response.data)
+  },
+  createPost(payload) {
+    return apiClient.post('/v1/admin/promotions/posts', payload).then((response) => response.data)
+  },
+  uploadBanner(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiClient.post('/v1/admin/promotions/banners', formData)
+      .then((response) => response.data?.data ?? response.data)
+  },
+  deleteUploadedBanner(imageUrl) {
+    return apiClient.delete('/v1/admin/promotions/banners', {
+      params: { imageUrl },
+    }).then((response) => response.data?.data ?? response.data)
+  },
+  updatePost(postId, payload) {
+    return apiClient.put(`/v1/admin/promotions/posts/${postId}`, payload).then((response) => response.data)
+  },
+  deletePost(postId) {
+    return apiClient.delete(`/v1/admin/promotions/posts/${postId}`).then((response) => response.data)
+  },
+  deleteCoupon(promotionId) {
+    return apiClient.delete(`/v1/admin/promotions/coupons/${promotionId}`).then((response) => response.data)
+  },
+  getPosts() {
+    return apiClient.get('/v1/admin/promotions/posts').then((response) => response.data)
+  },
+  getRevenueReport() {
+    return apiClient.get('/v1/admin/promotions/revenue-report').then((response) => response.data)
+  },
+  exportRevenuePdf() {
+    return apiClient.get('/v1/admin/promotions/revenue-report/pdf', { responseType: 'blob' })
+      .then((response) => response.data)
+  },
+}

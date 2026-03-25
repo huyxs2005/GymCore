@@ -1,0 +1,1472 @@
+/*
+GymCore - Clean Alter Script (from feature/coupon review)
+
+Purpose:
+- Keep main schema/seed files as source of truth.
+- Apply only safe, idempotent additions from coupon-related SQL changes.
+- Avoid destructive changes that removed existing constraints/logic in main.
+
+Recommended run order:
+1) docs/GymCore.txt
+2) docs/alter.txt
+3) docs/InsertValues.txt
+4) docs/InsertTestingValues.txt (optional)
+*/
+
+USE GymCore;
+GO
+
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+GO
+
+--- =========================================================
+--- Section 1: Orders - add payment method field (idempotent)
+--- =========================================================
+IF OBJECT_ID('dbo.Orders', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Orders was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Orders', 'PaymentMethod') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD PaymentMethod NVARCHAR(50) NULL;
+END;
+GO
+
+--- =========================================================
+--- Section 1a: Orders - add shipping snapshot fields
+--- =========================================================
+IF COL_LENGTH('dbo.Orders', 'ShippingFullName') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingFullName NVARCHAR(255) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Orders', 'ShippingPhone') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingPhone NVARCHAR(50) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Orders', 'ShippingEmail') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingEmail NVARCHAR(255) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Orders', 'ShippingAddress') IS NULL
+BEGIN
+    ALTER TABLE dbo.Orders ADD ShippingAddress NVARCHAR(MAX) NULL;
+END;
+GO
+
+--- =========================================================
+--- Section 1b: Orders/Payments payment method normalization
+--- Business rule: only PAYOS or CASH
+--- =========================================================
+IF OBJECT_ID('dbo.Payments', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Payments was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Payments', 'PaymentMethod') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments ADD PaymentMethod NVARCHAR(50) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Payments', 'MembershipCheckoutMode') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments ADD MembershipCheckoutMode NVARCHAR(20) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Payments', 'UpgradeCreditAmount') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments ADD UpgradeCreditAmount DECIMAL(18,2) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Payments', 'MembershipCouponDiscountAmount') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments ADD MembershipCouponDiscountAmount DECIMAL(18,2) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Payments', 'UpgradeFromMembershipID') IS NULL
+BEGIN
+    ALTER TABLE dbo.Payments ADD UpgradeFromMembershipID INT NULL;
+END;
+GO
+
+UPDATE dbo.Payments
+SET UpgradeCreditAmount = COALESCE(UpgradeCreditAmount, 0),
+    MembershipCouponDiscountAmount = COALESCE(MembershipCouponDiscountAmount, 0)
+WHERE UpgradeCreditAmount IS NULL
+   OR MembershipCouponDiscountAmount IS NULL;
+GO
+
+--- =========================================================
+--- Section 1c: Product invoice snapshot tables + backfill
+--- =========================================================
+IF OBJECT_ID('dbo.Users', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Users was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.Products', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Products was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.OrderItems', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.OrderItems was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.OrderInvoices', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OrderInvoices (
+        InvoiceID INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceCode NVARCHAR(40) NOT NULL UNIQUE,
+        OrderID INT NOT NULL UNIQUE,
+        PaymentID INT NOT NULL UNIQUE,
+        CustomerID INT NOT NULL,
+        RecipientEmail NVARCHAR(255) NULL,
+        RecipientName NVARCHAR(255) NULL,
+        ShippingPhone NVARCHAR(50) NULL,
+        ShippingAddress NVARCHAR(MAX) NULL,
+        PaymentMethod NVARCHAR(50) NULL,
+        Currency NVARCHAR(10) NOT NULL
+            CONSTRAINT DF_OrderInvoices_Currency DEFAULT N'VND',
+        Subtotal DECIMAL(18,2) NOT NULL,
+        DiscountAmount DECIMAL(18,2) NOT NULL,
+        TotalAmount DECIMAL(18,2) NOT NULL,
+        PaidAt DATETIME2 NOT NULL,
+        EmailSentAt DATETIME2 NULL,
+        EmailSendError NVARCHAR(1000) NULL,
+        PickedUpAt DATETIME2 NULL,
+        PickedUpByUserID INT NULL,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderInvoices_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderInvoices_UpdatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderInvoices_Order
+            FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+        CONSTRAINT FK_OrderInvoices_Payment
+            FOREIGN KEY (PaymentID) REFERENCES dbo.Payments(PaymentID),
+        CONSTRAINT FK_OrderInvoices_Customer
+            FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID),
+        CONSTRAINT FK_OrderInvoices_PickedUpByUser
+            FOREIGN KEY (PickedUpByUserID) REFERENCES dbo.Users(UserID)
+    );
+END;
+GO
+
+IF COL_LENGTH('dbo.OrderInvoices', 'PickedUpAt') IS NULL
+BEGIN
+    ALTER TABLE dbo.OrderInvoices ADD PickedUpAt DATETIME2 NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.OrderInvoices', 'PickedUpByUserID') IS NULL
+BEGIN
+    ALTER TABLE dbo.OrderInvoices ADD PickedUpByUserID INT NULL;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE parent_object_id = OBJECT_ID('dbo.OrderInvoices')
+      AND name = 'FK_OrderInvoices_PickedUpByUser'
+)
+BEGIN
+    ALTER TABLE dbo.OrderInvoices
+    ADD CONSTRAINT FK_OrderInvoices_PickedUpByUser
+        FOREIGN KEY (PickedUpByUserID) REFERENCES dbo.Users(UserID);
+END;
+GO
+
+IF OBJECT_ID('dbo.OrderInvoiceItems', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OrderInvoiceItems (
+        InvoiceItemID INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceID INT NOT NULL,
+        ProductID INT NULL,
+        ProductName NVARCHAR(255) NOT NULL,
+        Quantity INT NOT NULL,
+        UnitPrice DECIMAL(18,2) NOT NULL,
+        LineTotal DECIMAL(18,2) NOT NULL,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderInvoiceItems_CreatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderInvoiceItems_Invoice
+            FOREIGN KEY (InvoiceID) REFERENCES dbo.OrderInvoices(InvoiceID),
+        CONSTRAINT FK_OrderInvoiceItems_Product
+            FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.OrderInvoices')
+      AND name = 'IX_OrderInvoices_Customer_PaidAt'
+)
+BEGIN
+    CREATE INDEX IX_OrderInvoices_Customer_PaidAt
+    ON dbo.OrderInvoices(CustomerID, PaidAt DESC);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.OrderInvoiceItems')
+      AND name = 'IX_OrderInvoiceItems_InvoiceID'
+)
+BEGIN
+    CREATE INDEX IX_OrderInvoiceItems_InvoiceID
+    ON dbo.OrderInvoiceItems(InvoiceID);
+END;
+GO
+
+IF OBJECT_ID('dbo.OrderRecipientChangeRequests', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OrderRecipientChangeRequests (
+        RequestID INT IDENTITY(1,1) PRIMARY KEY,
+        OrderID INT NOT NULL,
+        CustomerID INT NOT NULL,
+        RequestedFullName NVARCHAR(255) NOT NULL,
+        RequestedPhone NVARCHAR(50) NOT NULL,
+        RequestedEmail NVARCHAR(255) NOT NULL,
+        Status NVARCHAR(30) NOT NULL
+            CONSTRAINT DF_OrderRecipientChangeRequests_Status DEFAULT N'PENDING',
+        ApprovedAt DATETIME2 NULL,
+        ApprovedByUserID INT NULL,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderRecipientChangeRequests_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_OrderRecipientChangeRequests_UpdatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_OrderRecipientChangeRequests_Order
+            FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+        CONSTRAINT FK_OrderRecipientChangeRequests_Customer
+            FOREIGN KEY (CustomerID) REFERENCES dbo.Users(UserID),
+        CONSTRAINT FK_OrderRecipientChangeRequests_ApprovedBy
+            FOREIGN KEY (ApprovedByUserID) REFERENCES dbo.Users(UserID),
+        CONSTRAINT CK_OrderRecipientChangeRequests_Status
+            CHECK (Status IN (N'PENDING', N'APPROVED'))
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.OrderRecipientChangeRequests')
+      AND name = 'UX_OrderRecipientChangeRequests_OnePendingPerOrder'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_OrderRecipientChangeRequests_OnePendingPerOrder
+    ON dbo.OrderRecipientChangeRequests(OrderID)
+    WHERE Status = N'PENDING';
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.OrderRecipientChangeRequests')
+      AND name = 'IX_OrderRecipientChangeRequests_Order_Status'
+)
+BEGIN
+    CREATE INDEX IX_OrderRecipientChangeRequests_Order_Status
+    ON dbo.OrderRecipientChangeRequests(OrderID, Status, UpdatedAt DESC);
+END;
+GO
+
+INSERT INTO dbo.OrderInvoices (
+    InvoiceCode,
+    OrderID,
+    PaymentID,
+    CustomerID,
+    RecipientEmail,
+    RecipientName,
+    ShippingPhone,
+    ShippingAddress,
+    PaymentMethod,
+    Currency,
+    Subtotal,
+    DiscountAmount,
+    TotalAmount,
+    PaidAt
+)
+SELECT
+    CONCAT(
+        N'INV-',
+        CONVERT(NVARCHAR(8), CAST(COALESCE(p.PaidAt, o.OrderDate, o.CreatedAt, SYSDATETIME()) AS DATE), 112),
+        N'-',
+        RIGHT(REPLICATE(N'0', 6) + CAST(p.PaymentID AS NVARCHAR(20)), 6)
+    ) AS InvoiceCode,
+    o.OrderID,
+    p.PaymentID,
+    o.CustomerID,
+    COALESCE(o.ShippingEmail, u.Email) AS RecipientEmail,
+    COALESCE(o.ShippingFullName, u.FullName) AS RecipientName,
+    o.ShippingPhone,
+    o.ShippingAddress,
+    o.PaymentMethod,
+    N'VND' AS Currency,
+    CAST(o.Subtotal AS DECIMAL(18,2)) AS Subtotal,
+    CAST(o.DiscountApplied AS DECIMAL(18,2)) AS DiscountAmount,
+    CAST(o.TotalAmount AS DECIMAL(18,2)) AS TotalAmount,
+    COALESCE(CAST(p.PaidAt AS DATETIME2), CAST(o.OrderDate AS DATETIME2), CAST(o.CreatedAt AS DATETIME2), SYSDATETIME()) AS PaidAt
+FROM dbo.Payments p
+JOIN dbo.Orders o ON o.OrderID = p.OrderID
+LEFT JOIN dbo.Users u ON u.UserID = o.CustomerID
+WHERE p.OrderID IS NOT NULL
+  AND p.Status = N'SUCCESS'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM dbo.OrderInvoices i
+      WHERE i.PaymentID = p.PaymentID
+  );
+GO
+
+INSERT INTO dbo.OrderInvoiceItems (
+    InvoiceID,
+    ProductID,
+    ProductName,
+    Quantity,
+    UnitPrice,
+    LineTotal
+)
+SELECT
+    i.InvoiceID,
+    oi.ProductID,
+    COALESCE(pr.ProductName, N'Unknown product') AS ProductName,
+    oi.Quantity,
+    CAST(oi.UnitPrice AS DECIMAL(18,2)) AS UnitPrice,
+    CAST(oi.Quantity * oi.UnitPrice AS DECIMAL(18,2)) AS LineTotal
+FROM dbo.OrderInvoices i
+JOIN dbo.OrderItems oi ON oi.OrderID = i.OrderID
+LEFT JOIN dbo.Products pr ON pr.ProductID = oi.ProductID
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.OrderInvoiceItems ii
+    WHERE ii.InvoiceID = i.InvoiceID
+      AND ISNULL(ii.ProductID, -1) = ISNULL(oi.ProductID, -1)
+      AND ii.ProductName = COALESCE(pr.ProductName, N'Unknown product')
+      AND ii.Quantity = oi.Quantity
+      AND ii.UnitPrice = CAST(oi.UnitPrice AS DECIMAL(18,2))
+);
+GO
+
+DECLARE @DefaultPickupUserID INT = (
+    SELECT TOP (1) UserID
+    FROM dbo.Users
+    WHERE Email IN (N'reception@gymcore.local', N'admin@gymcore.local')
+    ORDER BY CASE WHEN Email = N'reception@gymcore.local' THEN 0 ELSE 1 END, UserID
+);
+
+UPDATE i
+SET i.PickedUpAt = COALESCE(i.PickedUpAt, i.PaidAt, i.CreatedAt, SYSDATETIME()),
+    i.PickedUpByUserID = COALESCE(i.PickedUpByUserID, @DefaultPickupUserID),
+    i.UpdatedAt = SYSDATETIME()
+FROM dbo.OrderInvoices i
+WHERE i.PickedUpAt IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM dbo.ProductReviews r
+      JOIN dbo.OrderItems oi ON oi.ProductID = r.ProductID
+      JOIN dbo.Orders o ON o.OrderID = oi.OrderID
+      WHERE o.OrderID = i.OrderID
+        AND o.CustomerID = r.CustomerID
+  );
+GO
+
+IF OBJECT_ID('dbo.TRG_ProductReviews_RequirePurchase', 'TR') IS NOT NULL
+BEGIN
+    DROP TRIGGER dbo.TRG_ProductReviews_RequirePurchase;
+END;
+GO
+
+CREATE TRIGGER dbo.TRG_ProductReviews_RequirePurchase
+ON dbo.ProductReviews
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted r
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM dbo.Orders o
+            JOIN dbo.OrderItems oi ON oi.OrderID = o.OrderID
+            JOIN dbo.OrderInvoices i ON i.OrderID = o.OrderID
+            WHERE o.CustomerID = r.CustomerID
+              AND oi.ProductID = r.ProductID
+              AND o.Status = N'PAID'
+              AND i.PickedUpAt IS NOT NULL
+        )
+    )
+    BEGIN
+        RAISERROR('Review blocked: customer must have picked up this product before reviewing.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+/* Normalize existing Orders.PaymentMethod text */
+UPDATE dbo.Orders
+SET PaymentMethod = UPPER(LTRIM(RTRIM(PaymentMethod)))
+WHERE PaymentMethod IS NOT NULL;
+GO
+
+UPDATE dbo.Orders
+SET PaymentMethod = N'PAYOS'
+WHERE PaymentMethod IN (N'PAY_OS', N'PAY OS', N'PAY-OS', N'ONLINE', N'ONLINE_PAYOS', N'PAYOS_VN');
+GO
+
+UPDATE dbo.Orders
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IN (N'COD', N'OFFLINE', N'COUNTER', N'RECEPTION');
+GO
+
+/* Backfill missing Orders.PaymentMethod:
+   if linked payment has PayOS evidence => PAYOS, else CASH */
+UPDATE o
+SET o.PaymentMethod = CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM dbo.Payments p
+        WHERE p.OrderID = o.OrderID
+          AND (p.PayOS_PaymentLinkId IS NOT NULL OR p.PayOS_Status IS NOT NULL)
+    ) THEN N'PAYOS'
+    ELSE N'CASH'
+END
+FROM dbo.Orders o
+WHERE o.PaymentMethod IS NULL OR LTRIM(RTRIM(o.PaymentMethod)) = N'';
+GO
+
+/* Coerce any non-supported legacy values */
+UPDATE dbo.Orders
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod NOT IN (N'PAYOS', N'CASH');
+GO
+
+/* Ensure no NULL before switching to NOT NULL */
+UPDATE dbo.Orders
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IS NULL;
+GO
+
+/* Make required for future data quality */
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.Orders')
+      AND name = 'PaymentMethod'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE dbo.Orders
+    ALTER COLUMN PaymentMethod NVARCHAR(50) NOT NULL;
+END;
+GO
+
+/* Add Orders default once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.default_constraints dc
+    JOIN sys.columns c
+      ON c.object_id = dc.parent_object_id
+     AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.Orders')
+      AND c.name = 'PaymentMethod'
+)
+BEGIN
+    ALTER TABLE dbo.Orders
+    ADD CONSTRAINT DF_Orders_PaymentMethod DEFAULT N'PAYOS' FOR PaymentMethod;
+END;
+GO
+
+/* Add Orders check once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Orders_PaymentMethod'
+      AND parent_object_id = OBJECT_ID('dbo.Orders')
+)
+BEGIN
+    ALTER TABLE dbo.Orders
+    ADD CONSTRAINT CK_Orders_PaymentMethod CHECK (PaymentMethod IN (N'PAYOS', N'CASH'));
+END;
+GO
+
+/* Normalize existing Payments.PaymentMethod text */
+UPDATE dbo.Payments
+SET PaymentMethod = UPPER(LTRIM(RTRIM(PaymentMethod)))
+WHERE PaymentMethod IS NOT NULL;
+GO
+
+UPDATE dbo.Payments
+SET PaymentMethod = N'PAYOS'
+WHERE PaymentMethod IN (N'PAY_OS', N'PAY OS', N'PAY-OS', N'ONLINE', N'ONLINE_PAYOS', N'PAYOS_VN');
+GO
+
+UPDATE dbo.Payments
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IN (N'COD', N'OFFLINE', N'COUNTER', N'RECEPTION');
+GO
+
+/* Backfill missing Payments.PaymentMethod:
+   if payment has PayOS evidence => PAYOS
+   else if order method exists => order method
+   else => CASH */
+UPDATE p
+SET p.PaymentMethod = CASE
+    WHEN p.PayOS_PaymentLinkId IS NOT NULL OR p.PayOS_Status IS NOT NULL THEN N'PAYOS'
+    WHEN o.PaymentMethod IN (N'PAYOS', N'CASH') THEN o.PaymentMethod
+    ELSE N'CASH'
+END
+FROM dbo.Payments p
+LEFT JOIN dbo.Orders o ON o.OrderID = p.OrderID
+WHERE p.PaymentMethod IS NULL OR LTRIM(RTRIM(p.PaymentMethod)) = N'';
+GO
+
+/* Coerce any non-supported legacy values */
+UPDATE dbo.Payments
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod NOT IN (N'PAYOS', N'CASH');
+GO
+
+/* Ensure no NULL before switching to NOT NULL */
+UPDATE dbo.Payments
+SET PaymentMethod = N'CASH'
+WHERE PaymentMethod IS NULL;
+GO
+
+/* Make required for future data quality */
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.Payments')
+      AND name = 'PaymentMethod'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ALTER COLUMN PaymentMethod NVARCHAR(50) NOT NULL;
+END;
+GO
+
+/* Add Payments default once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.default_constraints dc
+    JOIN sys.columns c
+      ON c.object_id = dc.parent_object_id
+     AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.Payments')
+      AND c.name = 'PaymentMethod'
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ADD CONSTRAINT DF_Payments_PaymentMethod DEFAULT N'PAYOS' FOR PaymentMethod;
+END;
+GO
+
+/* Add Payments check once */
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Payments_PaymentMethod'
+      AND parent_object_id = OBJECT_ID('dbo.Payments')
+)
+BEGIN
+    ALTER TABLE dbo.Payments
+    ADD CONSTRAINT CK_Payments_PaymentMethod CHECK (PaymentMethod IN (N'PAYOS', N'CASH'));
+END;
+GO
+
+--- =========================================================
+--- Section 2: Promotions - ensure explicit coupon target + month-based membership bonus fields exist
+--- =========================================================
+IF OBJECT_ID('dbo.Promotions', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Promotions was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.Promotions', 'ApplyTarget') IS NULL
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD ApplyTarget NVARCHAR(20) NOT NULL
+        CONSTRAINT DF_Promotions_ApplyTarget DEFAULT N'ORDER'
+        WITH VALUES;
+END;
+
+IF COL_LENGTH('dbo.Promotions', 'BonusDurationMonths') IS NULL
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD BonusDurationMonths INT NOT NULL
+        CONSTRAINT DF_Promotions_BonusDurationMonths DEFAULT 0
+        WITH VALUES;
+END;
+
+IF OBJECT_ID('dbo.UserPromotionClaims', 'U') IS NOT NULL
+   AND EXISTS (
+       SELECT 1
+       FROM sys.columns
+       WHERE object_id = OBJECT_ID('dbo.UserPromotionClaims')
+         AND name = 'SourcePostID'
+         AND is_nullable = 0
+   )
+BEGIN
+    ALTER TABLE dbo.UserPromotionClaims
+    ALTER COLUMN SourcePostID INT NULL;
+END;
+
+IF COL_LENGTH('dbo.Promotions', 'BonusDurationDays') IS NOT NULL
+   AND COL_LENGTH('dbo.Promotions', 'BonusDurationMonths') IS NOT NULL
+BEGIN
+    EXEC sp_executesql N'
+        UPDATE dbo.Promotions
+        SET BonusDurationMonths = CASE
+            WHEN ISNULL(BonusDurationMonths, 0) > 0 THEN BonusDurationMonths
+            WHEN ISNULL(BonusDurationDays, 0) <= 0 THEN 0
+            WHEN BonusDurationDays < 30 THEN 1
+            ELSE CEILING(BonusDurationDays / 30.0)
+        END;
+    ';
+END;
+
+IF EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_BonusDurationDays'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    DROP CONSTRAINT CK_Promotions_BonusDurationDays;
+END;
+
+IF COL_LENGTH('dbo.Promotions', 'BonusDurationDays') IS NOT NULL
+BEGIN
+    DECLARE @PromotionsBonusDaysDefault SYSNAME;
+    DECLARE @DropPromotionsBonusDaysDefaultSql NVARCHAR(400);
+    SELECT @PromotionsBonusDaysDefault = dc.name
+    FROM sys.default_constraints dc
+    JOIN sys.columns c
+      ON c.default_object_id = dc.object_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.Promotions')
+      AND c.name = 'BonusDurationDays';
+
+    IF @PromotionsBonusDaysDefault IS NOT NULL
+    BEGIN
+        SET @DropPromotionsBonusDaysDefaultSql =
+            N'ALTER TABLE dbo.Promotions DROP CONSTRAINT ' + QUOTENAME(@PromotionsBonusDaysDefault) + N';';
+        EXEC sp_executesql @DropPromotionsBonusDaysDefaultSql;
+    END;
+
+    ALTER TABLE dbo.Promotions
+    DROP COLUMN BonusDurationDays;
+END;
+
+UPDATE dbo.Promotions
+SET ApplyTarget = CASE
+    WHEN BonusDurationMonths > 0 THEN N'MEMBERSHIP'
+    ELSE N'ORDER'
+END
+WHERE ApplyTarget IS NULL
+   OR ApplyTarget NOT IN (N'ORDER', N'MEMBERSHIP');
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_BonusDurationMonths'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_BonusDurationMonths CHECK (BonusDurationMonths >= 0);
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_ApplyTarget'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_ApplyTarget CHECK (ApplyTarget IN (N'ORDER', N'MEMBERSHIP'));
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_Benefit'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_Benefit CHECK (
+        DiscountPercent IS NOT NULL
+        OR DiscountAmount IS NOT NULL
+        OR BonusDurationMonths > 0
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_OrderBonusBlocked'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_OrderBonusBlocked CHECK (
+        ApplyTarget = N'MEMBERSHIP'
+        OR BonusDurationMonths = 0
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Promotions_MembershipBonusTarget'
+      AND parent_object_id = OBJECT_ID('dbo.Promotions')
+)
+BEGIN
+    ALTER TABLE dbo.Promotions
+    ADD CONSTRAINT CK_Promotions_MembershipBonusTarget CHECK (
+        BonusDurationMonths = 0
+        OR ApplyTarget = N'MEMBERSHIP'
+    );
+END;
+GO
+
+--- =========================================================
+--- Section 3: Coach availability compatibility migration
+--- =========================================================
+IF OBJECT_ID('dbo.CoachWeeklyAvailability', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.CoachWeeklyAvailability was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.CoachWeeklyAvailability', 'IsAvailable') IS NULL
+BEGIN
+    ALTER TABLE dbo.CoachWeeklyAvailability
+    ADD IsAvailable BIT NOT NULL
+        CONSTRAINT DF_CoachWeeklyAvailability_IsAvailable DEFAULT 1;
+END;
+GO
+
+--- =========================================================
+--- Section 3b: PT request deny reason compatibility migration
+--- =========================================================
+IF OBJECT_ID('dbo.PTRecurringRequests', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.PTRecurringRequests was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF COL_LENGTH('dbo.PTRecurringRequests', 'DenyReason') IS NULL
+BEGIN
+    ALTER TABLE dbo.PTRecurringRequests
+    ADD DenyReason NVARCHAR(500) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.PTRecurringRequests', 'BookingMode') IS NULL
+BEGIN
+    ALTER TABLE dbo.PTRecurringRequests
+    ADD BookingMode NVARCHAR(20) NOT NULL
+        CONSTRAINT DF_PTRecurringRequests_BookingMode DEFAULT N'REQUEST';
+END;
+GO
+
+UPDATE dbo.PTRecurringRequests
+SET BookingMode = N'REQUEST'
+WHERE BookingMode IS NULL;
+GO
+
+--- =========================================================
+--- Section 3b.1: PT exception handling foundation
+--- =========================================================
+IF OBJECT_ID('dbo.CoachUnavailableBlocks', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CoachUnavailableBlocks (
+        UnavailableBlockID INT IDENTITY(1,1) PRIMARY KEY,
+        CoachID INT NOT NULL,
+        StartDate DATE NOT NULL,
+        EndDate DATE NOT NULL,
+        TimeSlotID INT NULL,
+        Note NVARCHAR(500) NULL,
+        IsActive BIT NOT NULL
+            CONSTRAINT DF_CoachUnavailableBlocks_IsActive DEFAULT 1,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_CoachUnavailableBlocks_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_CoachUnavailableBlocks_UpdatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_CoachUnavailableBlocks_Coach
+            FOREIGN KEY (CoachID) REFERENCES dbo.Coaches(CoachID),
+        CONSTRAINT FK_CoachUnavailableBlocks_TimeSlot
+            FOREIGN KEY (TimeSlotID) REFERENCES dbo.TimeSlots(TimeSlotID),
+        CONSTRAINT CK_CoachUnavailableBlocks_DateRange CHECK (StartDate <= EndDate)
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.CoachUnavailableBlocks')
+      AND name = 'IX_CoachUnavailableBlocks_Coach_Date'
+)
+BEGIN
+    CREATE INDEX IX_CoachUnavailableBlocks_Coach_Date
+    ON dbo.CoachUnavailableBlocks(CoachID, StartDate, EndDate, TimeSlotID);
+END;
+GO
+
+IF OBJECT_ID('dbo.PTSessionReplacementOffers', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PTSessionReplacementOffers (
+        OfferID INT IDENTITY(1,1) PRIMARY KEY,
+        PTSessionID INT NOT NULL,
+        OriginalCoachID INT NOT NULL,
+        ReplacementCoachID INT NOT NULL,
+        Status NVARCHAR(30) NOT NULL
+            CONSTRAINT DF_PTSessionReplacementOffers_Status DEFAULT N'PENDING_CUSTOMER',
+        Note NVARCHAR(500) NULL,
+        CustomerRespondedAt DATETIME2 NULL,
+        CreatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_PTSessionReplacementOffers_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL
+            CONSTRAINT DF_PTSessionReplacementOffers_UpdatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_PTSessionReplacementOffers_Session
+            FOREIGN KEY (PTSessionID) REFERENCES dbo.PTSessions(PTSessionID),
+        CONSTRAINT FK_PTSessionReplacementOffers_OriginalCoach
+            FOREIGN KEY (OriginalCoachID) REFERENCES dbo.Coaches(CoachID),
+        CONSTRAINT FK_PTSessionReplacementOffers_ReplacementCoach
+            FOREIGN KEY (ReplacementCoachID) REFERENCES dbo.Coaches(CoachID),
+        CONSTRAINT CK_PTSessionReplacementOffers_Status CHECK (
+            Status IN (N'PENDING_CUSTOMER', N'ACCEPTED', N'DECLINED', N'CANCELLED')
+        )
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.PTSessionReplacementOffers')
+      AND name = 'UX_PTSessionReplacementOffers_OnePending'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_PTSessionReplacementOffers_OnePending
+    ON dbo.PTSessionReplacementOffers(PTSessionID)
+    WHERE Status = N'PENDING_CUSTOMER';
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.PTSessionReplacementOffers')
+      AND name = 'IX_PTSessionReplacementOffers_OriginalCoach'
+)
+BEGIN
+    CREATE INDEX IX_PTSessionReplacementOffers_OriginalCoach
+    ON dbo.PTSessionReplacementOffers(OriginalCoachID, CreatedAt DESC, PTSessionID);
+END;
+GO
+
+--- =========================================================
+--- Section 3c: Membership plan coach-booking strictness
+--- =========================================================
+IF OBJECT_ID('dbo.MembershipPlans', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.MembershipPlans was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+/* Normalize legacy plan rows to match business rule */
+UPDATE dbo.MembershipPlans
+SET AllowsCoachBooking = CASE
+    WHEN PlanType = N'GYM_PLUS_COACH' THEN 1
+    ELSE 0
+END
+WHERE (PlanType = N'GYM_PLUS_COACH' AND AllowsCoachBooking <> 1)
+   OR (PlanType IN (N'GYM_ONLY', N'DAY_PASS') AND AllowsCoachBooking <> 0);
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_MembershipPlans_CoachBookingByType'
+      AND parent_object_id = OBJECT_ID('dbo.MembershipPlans')
+)
+BEGIN
+    ALTER TABLE dbo.MembershipPlans
+    ADD CONSTRAINT CK_MembershipPlans_CoachBookingByType CHECK (
+        (PlanType = 'GYM_PLUS_COACH' AND AllowsCoachBooking = 1)
+        OR (PlanType IN ('GYM_ONLY','DAY_PASS') AND AllowsCoachBooking = 0)
+    );
+END;
+GO
+
+--- =========================================================
+--- Section 3d: Day pass membership date enforcement
+--- =========================================================
+IF OBJECT_ID('dbo.CustomerMemberships', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.CustomerMemberships was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+/* Backfill inconsistent legacy day-pass rows */
+UPDATE cm
+SET EndDate = cm.StartDate
+FROM dbo.CustomerMemberships cm
+JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+WHERE mp.PlanType = N'DAY_PASS'
+  AND cm.StartDate <> cm.EndDate;
+GO
+
+CREATE OR ALTER TRIGGER dbo.TRG_CustomerMemberships_ValidateDayPassDate
+ON dbo.CustomerMemberships
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted cm
+        JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+        WHERE mp.PlanType = 'DAY_PASS'
+          AND cm.StartDate <> cm.EndDate
+    )
+    BEGIN
+        RAISERROR('DAY_PASS membership must have StartDate = EndDate.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+END;
+GO
+
+--- =========================================================
+--- Section 3e: Auto-seed 7x8 availability for new coaches
+--- =========================================================
+IF OBJECT_ID('dbo.Coaches', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.Coaches was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('dbo.TimeSlots', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.TimeSlots was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+
+GO
+
+CREATE OR ALTER TRIGGER dbo.TRG_Coaches_SeedDefaultAvailability
+ON dbo.Coaches
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.CoachWeeklyAvailability (CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    SELECT i.CoachID, d.DayOfWeek, ts.TimeSlotID, CAST(1 AS BIT)
+    FROM inserted i
+    CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6),(7)) AS d(DayOfWeek)
+    CROSS JOIN dbo.TimeSlots ts
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CoachWeeklyAvailability cwa
+        WHERE cwa.CoachID = i.CoachID
+          AND cwa.DayOfWeek = d.DayOfWeek
+          AND cwa.TimeSlotID = ts.TimeSlotID
+    );
+END;
+GO
+
+/* =========================================================
+   Section 3.5: Product shop upgrade (gym scope)
+   - richer product content
+   - categories
+   - image gallery
+   - inventory
+========================================================= */
+IF COL_LENGTH('dbo.Products', 'ShortDescription') IS NULL
+BEGIN
+    ALTER TABLE dbo.Products ADD ShortDescription NVARCHAR(220) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Products', 'UsageInstructions') IS NULL
+BEGIN
+    ALTER TABLE dbo.Products ADD UsageInstructions NVARCHAR(1200) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.Products', 'ThumbnailUrl') IS NULL
+BEGIN
+    ALTER TABLE dbo.Products ADD ThumbnailUrl NVARCHAR(500) NULL;
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductCategories', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductCategories (
+        ProductCategoryID INT IDENTITY(1,1) PRIMARY KEY,
+        CategoryName NVARCHAR(100) NOT NULL UNIQUE,
+        Description NVARCHAR(300) NULL,
+        SortOrder INT NOT NULL CONSTRAINT DF_ProductCategories_SortOrder DEFAULT 0,
+        IsActive BIT NOT NULL CONSTRAINT DF_ProductCategories_IsActive DEFAULT 1,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_ProductCategories_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NULL,
+        CONSTRAINT CK_ProductCategories_SortOrder CHECK (SortOrder >= 0)
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductCategoryMap', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductCategoryMap (
+        ProductID INT NOT NULL,
+        ProductCategoryID INT NOT NULL,
+        PRIMARY KEY (ProductID, ProductCategoryID),
+        CONSTRAINT FK_ProductCategoryMap_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+        CONSTRAINT FK_ProductCategoryMap_Category FOREIGN KEY (ProductCategoryID) REFERENCES dbo.ProductCategories(ProductCategoryID)
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.ProductCategoryMap')
+      AND name = 'IX_ProductCategoryMap_Category'
+)
+BEGIN
+    CREATE INDEX IX_ProductCategoryMap_Category
+    ON dbo.ProductCategoryMap(ProductCategoryID, ProductID);
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductImages', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductImages (
+        ProductImageID INT IDENTITY(1,1) PRIMARY KEY,
+        ProductID INT NOT NULL,
+        ImageUrl NVARCHAR(500) NOT NULL,
+        AltText NVARCHAR(150) NULL,
+        DisplayOrder INT NOT NULL CONSTRAINT DF_ProductImages_DisplayOrder DEFAULT 1,
+        IsPrimary BIT NOT NULL CONSTRAINT DF_ProductImages_IsPrimary DEFAULT 0,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_ProductImages_CreatedAt DEFAULT SYSDATETIME(),
+        UpdatedAt DATETIME2 NULL,
+        CONSTRAINT FK_ProductImages_Product FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+        CONSTRAINT CK_ProductImages_DisplayOrder CHECK (DisplayOrder > 0)
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.ProductImages', 'U') IS NOT NULL
+BEGIN
+    ;WITH PrimaryImageDuplicates AS (
+        SELECT
+            ProductImageID,
+            ROW_NUMBER() OVER (
+                PARTITION BY ProductID
+                ORDER BY CASE WHEN IsPrimary = 1 THEN 0 ELSE 1 END, DisplayOrder, ProductImageID
+            ) AS RowNum
+        FROM dbo.ProductImages
+        WHERE IsPrimary = 1
+    )
+    UPDATE pi
+    SET IsPrimary = 0
+    FROM dbo.ProductImages pi
+    JOIN PrimaryImageDuplicates d
+      ON d.ProductImageID = pi.ProductImageID
+    WHERE d.RowNum > 1;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.ProductImages')
+      AND name = 'UX_ProductImages_OnePrimary'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_ProductImages_OnePrimary
+    ON dbo.ProductImages(ProductID)
+    WHERE IsPrimary = 1;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID('dbo.ProductImages')
+      AND name = 'IX_ProductImages_Product_Order'
+)
+BEGIN
+    CREATE INDEX IX_ProductImages_Product_Order
+    ON dbo.ProductImages(ProductID, DisplayOrder, ProductImageID);
+END;
+GO
+
+UPDATE dbo.Products
+SET ThumbnailUrl = COALESCE(ThumbnailUrl, ImageUrl)
+WHERE ThumbnailUrl IS NULL
+  AND ImageUrl IS NOT NULL;
+GO
+
+INSERT INTO dbo.ProductImages (ProductID, ImageUrl, AltText, DisplayOrder, IsPrimary)
+SELECT
+    p.ProductID,
+    COALESCE(p.ThumbnailUrl, p.ImageUrl) AS ImageUrl,
+    p.ProductName,
+    1,
+    1
+FROM dbo.Products p
+WHERE COALESCE(p.ThumbnailUrl, p.ImageUrl) IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM dbo.ProductImages pi
+      WHERE pi.ProductID = p.ProductID
+        AND pi.IsPrimary = 1
+  );
+GO
+
+IF OBJECT_ID('dbo.ProductInventory', 'U') IS NOT NULL
+BEGIN
+    DROP TABLE dbo.ProductInventory;
+END;
+GO
+
+--- =========================================================
+--- Section 4: Payment confirmation procedures for PayOS flow
+--- =========================================================
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccess
+    @PaymentID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @OrderID INT;
+    DECLARE @CustomerMembershipID INT;
+    DECLARE @MembershipCustomerID INT;
+    DECLARE @MembershipCurrentStatus NVARCHAR(20);
+    DECLARE @ClaimID INT;
+    DECLARE @MembershipCheckoutMode NVARCHAR(20);
+    DECLARE @UpgradeFromMembershipID INT;
+
+    SELECT
+        @OrderID = p.OrderID,
+        @CustomerMembershipID = p.CustomerMembershipID,
+        @ClaimID = p.ClaimID,
+        @MembershipCheckoutMode = p.MembershipCheckoutMode,
+        @UpgradeFromMembershipID = p.UpgradeFromMembershipID
+    FROM dbo.Payments p
+    WHERE p.PaymentID = @PaymentID;
+
+    IF @CustomerMembershipID IS NOT NULL
+    BEGIN
+        SELECT
+            @MembershipCustomerID = m.CustomerID,
+            @MembershipCurrentStatus = m.Status
+        FROM dbo.CustomerMemberships m
+        WHERE m.CustomerMembershipID = @CustomerMembershipID;
+    END;
+
+    UPDATE dbo.Payments
+    SET Status = 'SUCCESS',
+        PaidAt = COALESCE(PaidAt, SYSDATETIME()),
+        PayOS_Status = 'SUCCESS',
+        WebhookVerifiedAt = COALESCE(WebhookVerifiedAt, SYSDATETIME())
+    WHERE PaymentID = @PaymentID
+      AND Status = 'PENDING';
+
+    IF @@ROWCOUNT = 0
+        RETURN;
+
+    IF @OrderID IS NOT NULL
+    BEGIN
+        UPDATE dbo.Orders
+        SET Status = 'PAID',
+            UpdatedAt = SYSDATETIME()
+        WHERE OrderID = @OrderID
+              AND Status = 'PENDING';
+    END;
+
+    IF @ClaimID IS NOT NULL
+    BEGIN
+        UPDATE dbo.UserPromotionClaims
+        SET UsedAt = COALESCE(UsedAt, SYSDATETIME()),
+            UsedPaymentID = COALESCE(UsedPaymentID, @PaymentID),
+            UsedOnOrderID = COALESCE(UsedOnOrderID, @OrderID)
+        WHERE ClaimID = @ClaimID
+          AND UsedAt IS NULL;
+    END;
+
+    IF @CustomerMembershipID IS NOT NULL
+       AND @MembershipCurrentStatus = 'PENDING'
+    BEGIN
+        IF @MembershipCheckoutMode = N'UPGRADE'
+        BEGIN
+            IF @UpgradeFromMembershipID IS NOT NULL
+            BEGIN
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'EXPIRED',
+                    EndDate = CASE
+                        WHEN EndDate > CAST(SYSDATETIME() AS DATE) THEN CAST(SYSDATETIME() AS DATE)
+                        ELSE EndDate
+                    END,
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerMembershipID = @UpgradeFromMembershipID
+                  AND CustomerID = @MembershipCustomerID
+                  AND Status = 'ACTIVE';
+            END;
+
+            UPDATE dbo.CustomerMemberships
+            SET Status = 'CANCELLED',
+                UpdatedAt = SYSDATETIME()
+            WHERE CustomerID = @MembershipCustomerID
+              AND Status = 'SCHEDULED'
+              AND CustomerMembershipID <> @CustomerMembershipID;
+
+            UPDATE dbo.CustomerMemberships
+            SET Status = 'ACTIVE',
+                StartDate = CAST(SYSDATETIME() AS DATE),
+                UpdatedAt = SYSDATETIME()
+            WHERE CustomerMembershipID = @CustomerMembershipID
+              AND Status = 'PENDING';
+        END
+        ELSE
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM dbo.CustomerMemberships m
+                WHERE m.CustomerID = @MembershipCustomerID
+                  AND m.Status = 'ACTIVE'
+                  AND m.CustomerMembershipID <> @CustomerMembershipID
+            )
+            BEGIN
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'SCHEDULED',
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerMembershipID = @CustomerMembershipID
+                  AND Status = 'PENDING';
+            END
+            ELSE
+            BEGIN
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'ACTIVE',
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerMembershipID = @CustomerMembershipID
+                  AND Status = 'PENDING';
+            END;
+        END;
+    END;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPaymentSuccessByPayOSLinkId
+    @PayOSPaymentLinkId NVARCHAR(80)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @PaymentID INT;
+
+    SELECT TOP (1) @PaymentID = p.PaymentID
+    FROM dbo.Payments p
+    WHERE p.PayOS_PaymentLinkId = @PayOSPaymentLinkId
+    ORDER BY p.PaymentID DESC;
+
+    IF @PaymentID IS NULL
+        RETURN;
+
+    EXEC dbo.sp_ConfirmPaymentSuccess @PaymentID;
+END;
+GO
+
+--- =========================================================
+--- Section 4a: Daily reminder discipline alignment
+--- =========================================================
+CREATE OR ALTER PROCEDURE dbo.sp_RunDailyMembershipJobs
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @today DATE = CAST(GETDATE() AS DATE);
+
+    /* 1) Countdown notifications (7/3/1 days left) for ACTIVE memberships */
+    ;WITH ActiveM AS (
+        SELECT m.CustomerMembershipID, m.CustomerID, m.EndDate,
+               DATEDIFF(DAY, @today, m.EndDate) AS DaysLeft
+        FROM dbo.CustomerMemberships m
+        WHERE m.Status = 'ACTIVE'
+    )
+    INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
+    SELECT
+        a.CustomerID,
+        'MEMBERSHIP_EXPIRES_COUNTDOWN',
+        N'Membership expiring soon',
+        CONCAT(N'Your membership expires in ', a.DaysLeft, N' day(s). If you do not renew, all PT schedules will be cancelled.'),
+        N'/membership',
+        a.CustomerMembershipID,
+        CONCAT('DAYSLEFT_', a.DaysLeft)
+    FROM ActiveM a
+    WHERE a.DaysLeft IN (7, 3, 1)
+      AND NOT EXISTS (
+            SELECT 1 FROM dbo.Notifications n
+            WHERE n.UserID = a.CustomerID
+              AND n.NotificationType = 'MEMBERSHIP_EXPIRES_COUNTDOWN'
+              AND n.RefId = a.CustomerMembershipID
+              AND n.ExtraKey = CONCAT('DAYSLEFT_', a.DaysLeft)
+      );
+
+    /* 2) Expire memberships that ended before today */
+    UPDATE dbo.CustomerMemberships
+    SET Status = 'EXPIRED', UpdatedAt = SYSDATETIME()
+    WHERE Status = 'ACTIVE' AND EndDate < @today;
+
+    /* 3) Activate due SCHEDULED memberships when customer has no ACTIVE membership */
+    ;WITH DueScheduled AS (
+        SELECT m.CustomerMembershipID
+        FROM dbo.CustomerMemberships m
+        WHERE m.Status = 'SCHEDULED'
+          AND m.StartDate <= @today
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.CustomerMemberships a
+              WHERE a.CustomerID = m.CustomerID
+                AND a.Status = 'ACTIVE'
+          )
+    )
+    UPDATE m
+    SET m.Status = 'ACTIVE',
+        m.UpdatedAt = SYSDATETIME()
+    FROM dbo.CustomerMemberships m
+    JOIN DueScheduled d ON d.CustomerMembershipID = m.CustomerMembershipID;
+
+    /* 4) Cancel PT sessions ONLY for customers who now have NO ACTIVE membership */
+    ;WITH NoActive AS (
+        SELECT DISTINCT c.CustomerID
+        FROM dbo.Customers c
+        WHERE NOT EXISTS (
+            SELECT 1 FROM dbo.CustomerMemberships m
+            WHERE m.CustomerID = c.CustomerID AND m.Status = 'ACTIVE'
+        )
+    )
+    UPDATE s
+    SET s.Status = 'CANCELLED',
+        s.CancelReason = 'Membership expired',
+        s.UpdatedAt = SYSDATETIME()
+    FROM dbo.PTSessions s
+    JOIN NoActive na ON na.CustomerID = s.CustomerID
+    WHERE s.Status = 'SCHEDULED'
+      AND s.SessionDate >= @today;
+
+    /* 5) Notify customers whose PT got cancelled */
+    INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
+    SELECT DISTINCT
+        s.CustomerID,
+        'PT_CANCELLED_MEMBERSHIP_EXPIRED',
+        N'PT schedule cancelled',
+        N'Your membership expired, so all PT schedules were cancelled. Renew to book again.',
+        N'/schedule',
+        NULL,
+        NULL
+    FROM dbo.PTSessions s
+    WHERE s.Status = 'CANCELLED'
+      AND s.CancelReason = 'Membership expired'
+      AND s.UpdatedAt >= DATEADD(MINUTE, -5, SYSDATETIME());
+
+    /* 6) Remind customers to pick up paid orders on day 1, 3, and 7 */
+    ;WITH AwaitingPickup AS (
+        SELECT
+            o.OrderID,
+            o.CustomerID,
+            DATEDIFF(DAY, CAST(i.PaidAt AS DATE), @today) AS DaysWaiting
+        FROM dbo.Orders o
+        JOIN dbo.OrderInvoices i ON i.OrderID = o.OrderID
+        WHERE o.Status = 'PAID'
+          AND i.PickedUpAt IS NULL
+          AND i.PaidAt IS NOT NULL
+    )
+    INSERT INTO dbo.Notifications (UserID, NotificationType, Title, Message, LinkUrl, RefId, ExtraKey)
+    SELECT
+        p.CustomerID,
+        'ORDER_PICKUP_REMINDER',
+        N'Order waiting for pickup',
+        CONCAT(N'Your paid order #', p.OrderID, N' is still waiting for pickup. Please visit reception to collect it.'),
+        N'/customer/orders',
+        p.OrderID,
+        CONCAT('WAITING_DAY_', p.DaysWaiting)
+    FROM AwaitingPickup p
+    WHERE p.DaysWaiting IN (1, 3, 7)
+      AND NOT EXISTS (
+            SELECT 1 FROM dbo.Notifications n
+            WHERE n.UserID = p.CustomerID
+              AND n.NotificationType = 'ORDER_PICKUP_REMINDER'
+              AND n.RefId = p.OrderID
+              AND n.ExtraKey = CONCAT('WAITING_DAY_', p.DaysWaiting)
+      );
+END;
+GO
+
+--- =========================================================
+--- Section 4b: Promotion post broadcast discipline
+--- =========================================================
+IF OBJECT_ID('dbo.PromotionPosts', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.PromotionPosts was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+GO
+
+IF COL_LENGTH('dbo.PromotionPosts', 'IsImportant') IS NULL
+BEGIN
+    ALTER TABLE dbo.PromotionPosts
+    ADD IsImportant BIT NOT NULL
+        CONSTRAINT DF_PromotionPosts_IsImportant DEFAULT 0;
+END;
+GO
+
+--- =========================================================
+--- Section 5: Seed data moved out of alter script
+--- =========================================================
+--- Coupon and product seed/test records are maintained in:
+--- - docs/InsertValues.txt
+--- - docs/InsertTestingValues.txt
+

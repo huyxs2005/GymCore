@@ -1,0 +1,217 @@
+USE GymCore;
+GO
+
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+
+BEGIN TRY
+    BEGIN TRAN;
+
+    DECLARE @RoleCustomer INT;
+    DECLARE @RoleCoach INT;
+    DECLARE @RoleReceptionist INT;
+    DECLARE @RoleAdmin INT;
+
+    DECLARE @AdminID INT;
+    DECLARE @ReceptionistID INT;
+    DECLARE @CoachID INT;
+    DECLARE @CustomerID INT;
+
+    /* Roles (must-have) */
+    INSERT INTO dbo.Roles (RoleName)
+    SELECT v.RoleName
+    FROM (VALUES
+        (N'Customer'),
+        (N'Coach'),
+        (N'Receptionist'),
+        (N'Admin')
+    ) AS v(RoleName)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Roles r WHERE r.RoleName = v.RoleName
+    );
+
+    SELECT @RoleCustomer = RoleID FROM dbo.Roles WHERE RoleName = N'Customer';
+    SELECT @RoleCoach = RoleID FROM dbo.Roles WHERE RoleName = N'Coach';
+    SELECT @RoleReceptionist = RoleID FROM dbo.Roles WHERE RoleName = N'Receptionist';
+    SELECT @RoleAdmin = RoleID FROM dbo.Roles WHERE RoleName = N'Admin';
+
+    IF @RoleCustomer IS NULL OR @RoleCoach IS NULL OR @RoleReceptionist IS NULL OR @RoleAdmin IS NULL
+    BEGIN
+        THROW 50001, 'Missing one or more required roles.', 1;
+    END;
+
+    /* Users (must-have)
+       NOTE: PasswordHash must be bcrypt hashes. Login with plain passwords below:
+       - Admin: Admin123456!
+       - Receptionist: Reception123456!
+       - Coach: Coach123456!
+       - Customer: Customer123456!
+    */
+    INSERT INTO dbo.Users (RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+    SELECT v.RoleID, v.FullName, v.Email, v.Phone, v.PasswordHash, v.IsEmailVerified, v.EmailVerifiedAt
+    FROM (VALUES
+        (@RoleAdmin,        N'Admin GymCore',        N'admin@gymcore.local',      N'0900000001', N'$2a$10$Ms9kKRlpN/13o7CqvZrpMup4lz2MXD1NbKEFZ54qigrtgXlUjzsKO', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleReceptionist, N'Receptionist GymCore', N'reception@gymcore.local',  N'0900000002', N'$2a$10$g/lpvbVBJEUBB4mgSE41d.2Fk.8OnV0Mjoi6zwo1DiLKTV/R/Q/VW', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleCoach,        N'Coach Alex',           N'coach@gymcore.local',      N'0900000003', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+        (@RoleCustomer,     N'Customer Minh',        N'customer@gymcore.local',   N'0900000004', N'$2a$10$EiimMLC5OYOJCTSB.tc0uuOpVpi4IpeFwPqfytKuyd6HohAoerL1m', CAST(1 AS BIT), SYSDATETIME())
+    ) AS v(RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Users u WHERE u.Email = v.Email
+    );
+
+    SELECT @AdminID = UserID FROM dbo.Users WHERE Email = N'admin@gymcore.local';
+    SELECT @ReceptionistID = UserID FROM dbo.Users WHERE Email = N'reception@gymcore.local';
+    SELECT @CoachID = UserID FROM dbo.Users WHERE Email = N'coach@gymcore.local';
+    SELECT @CustomerID = UserID FROM dbo.Users WHERE Email = N'customer@gymcore.local';
+
+    IF @AdminID IS NULL OR @ReceptionistID IS NULL OR @CoachID IS NULL OR @CustomerID IS NULL
+    BEGIN
+        THROW 50002, 'Missing one or more required users.', 1;
+    END;
+
+    /* Keep seeded accounts verified + valid bcrypt even if re-run */
+    UPDATE dbo.Users
+    SET IsEmailVerified = 1,
+        EmailVerifiedAt = COALESCE(EmailVerifiedAt, SYSDATETIME()),
+        PasswordHash = CASE Email
+            WHEN N'admin@gymcore.local' THEN N'$2a$10$Ms9kKRlpN/13o7CqvZrpMup4lz2MXD1NbKEFZ54qigrtgXlUjzsKO'
+            WHEN N'reception@gymcore.local' THEN N'$2a$10$g/lpvbVBJEUBB4mgSE41d.2Fk.8OnV0Mjoi6zwo1DiLKTV/R/Q/VW'
+            WHEN N'coach@gymcore.local' THEN N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G'
+            WHEN N'customer@gymcore.local' THEN N'$2a$10$EiimMLC5OYOJCTSB.tc0uuOpVpi4IpeFwPqfytKuyd6HohAoerL1m'
+            ELSE PasswordHash
+        END
+    WHERE Email IN (
+        N'admin@gymcore.local',
+        N'reception@gymcore.local',
+        N'coach@gymcore.local',
+        N'customer@gymcore.local'
+    );
+
+    /* Profiles (must-have) */
+    IF NOT EXISTS (SELECT 1 FROM dbo.Coaches WHERE CoachID = @CoachID)
+    BEGIN
+        INSERT INTO dbo.Coaches (CoachID, DateOfBirth, Gender, ExperienceYears, Bio)
+        VALUES (@CoachID, '1998-01-01', N'Male', 5, N'Strength and conditioning coach.');
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Customers WHERE CustomerID = @CustomerID)
+    BEGIN
+        INSERT INTO dbo.Customers (CustomerID, DateOfBirth, Gender)
+        VALUES (@CustomerID, '2003-01-01', N'Male');
+    END;
+
+    /* Time slots (must-have for booking/check-in flows) */
+    INSERT INTO dbo.TimeSlots (SlotIndex, StartTime, EndTime)
+    SELECT v.SlotIndex, v.StartTime, v.EndTime
+    FROM (VALUES
+        (1, CAST('07:00' AS TIME), CAST('08:30' AS TIME)),
+        (2, CAST('08:30' AS TIME), CAST('10:00' AS TIME)),
+        (3, CAST('10:00' AS TIME), CAST('11:30' AS TIME)),
+        (4, CAST('11:30' AS TIME), CAST('13:00' AS TIME)),
+        (5, CAST('13:00' AS TIME), CAST('14:30' AS TIME)),
+        (6, CAST('14:30' AS TIME), CAST('16:00' AS TIME)),
+        (7, CAST('16:00' AS TIME), CAST('17:30' AS TIME)),
+        (8, CAST('17:30' AS TIME), CAST('19:00' AS TIME))
+    ) AS v(SlotIndex, StartTime, EndTime)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.TimeSlots ts WHERE ts.SlotIndex = v.SlotIndex
+    );
+
+    /* Default coach weekly availability: all 8 slots for every day (Mon..Sun) */
+    INSERT INTO dbo.CoachWeeklyAvailability (CoachID, DayOfWeek, TimeSlotID, IsAvailable)
+    SELECT c.CoachID, d.DayOfWeek, ts.TimeSlotID, CAST(1 AS BIT)
+    FROM dbo.Coaches c
+    CROSS JOIN (VALUES
+        (1), (2), (3), (4), (5), (6), (7)
+    ) AS d(DayOfWeek)
+    CROSS JOIN dbo.TimeSlots ts
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CoachWeeklyAvailability cwa
+        WHERE cwa.CoachID = c.CoachID
+          AND cwa.DayOfWeek = d.DayOfWeek
+          AND cwa.TimeSlotID = ts.TimeSlotID
+    );
+
+    /* Membership plans (must-have) */
+    INSERT INTO dbo.MembershipPlans (PlanName, PlanType, Price, DurationDays, AllowsCoachBooking, UpdatedBy)
+    SELECT v.PlanName, v.PlanType, v.Price, v.DurationDays, v.AllowsCoachBooking, @AdminID
+    FROM (VALUES
+        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Day Pass',               N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
+    ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.MembershipPlans mp
+        WHERE mp.PlanName = v.PlanName
+          AND mp.PlanType = v.PlanType
+          AND mp.DurationDays = v.DurationDays
+    );
+
+    /* Keep baseline plan prices synchronized on re-run */
+    UPDATE mp
+    SET mp.Price = v.Price,
+        mp.AllowsCoachBooking = v.AllowsCoachBooking,
+        mp.UpdatedAt = SYSDATETIME(),
+        mp.UpdatedBy = @AdminID
+    FROM dbo.MembershipPlans mp
+    JOIN (VALUES
+        (N'Gym Only - 1 Month',     N'GYM_ONLY',       CAST(2000 AS DECIMAL(12,2)),  30, CAST(0 AS BIT)),
+        (N'Day Pass',               N'DAY_PASS',       CAST(1000 AS DECIMAL(12,2)),   1, CAST(0 AS BIT)),
+        (N'Gym + Coach - 6 Months', N'GYM_PLUS_COACH', CAST(4500 AS DECIMAL(12,2)), 180, CAST(1 AS BIT))
+    ) AS v(PlanName, PlanType, Price, DurationDays, AllowsCoachBooking)
+      ON mp.PlanName = v.PlanName
+     AND mp.PlanType = v.PlanType
+     AND mp.DurationDays = v.DurationDays;
+
+    /* Baseline goals for AI module setup */
+    INSERT INTO dbo.FitnessGoals (GoalCode, GoalName, Description)
+    SELECT v.GoalCode, v.GoalName, v.Description
+    FROM (VALUES
+        (N'LOSE_FAT', N'Lose fat', N'Focus on calorie deficit and cardio/strength mix.'),
+        (N'GAIN_MUSCLE', N'Gain muscle', N'Focus on progressive overload and sufficient protein.'),
+        (N'MAINTAIN', N'Maintain', N'Maintain current fitness and body composition.')
+    ) AS v(GoalCode, GoalName, Description)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.FitnessGoals g WHERE g.GoalCode = v.GoalCode
+    );
+
+    /* Baseline product categories for the gym shop */
+    INSERT INTO dbo.ProductCategories (CategoryName, Description, SortOrder, IsActive)
+    SELECT v.CategoryName, v.Description, v.SortOrder, CAST(1 AS BIT)
+    FROM (VALUES
+        (N'Protein',      N'Protein powders and recovery blends.', 1),
+        (N'Creatine',     N'Creatine supplements for strength and power.', 2),
+        (N'Mass Gainer',  N'High-calorie gainers for weight and muscle growth.', 3),
+        (N'Pre-workout',  N'Energy and focus supplements for training.', 4),
+        (N'BCAA',         N'Intra-workout amino acid recovery products.', 5),
+        (N'Vitamins',     N'Daily support supplements and micronutrients.', 6)
+    ) AS v(CategoryName, Description, SortOrder)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.ProductCategories pc
+        WHERE pc.CategoryName = v.CategoryName
+    );
+
+    COMMIT TRAN;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRAN;
+    THROW;
+END CATCH;
+
+/*
+Run order:
+1) docs/GymCore.txt
+2) docs/alter.txt                   -- merged coupon/payos alterations
+3) docs/InsertValues.txt            -- required baseline data
+4) docs/InsertTestingValues.txt     -- optional example/testing data
+*/
