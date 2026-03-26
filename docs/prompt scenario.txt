@@ -1,7 +1,7 @@
 you are a software engineer with 15 years of experience.
 
 Our project is a gym website build with react and with framework Springboot with 2 folder frotend and backend and project 
-context in folder docs at "C:\Users\Huy\Desktop\ky 7 fpt\SWP\GymCore", please read all the files in there before doing anything. 
+context in folder docs at "C:\Users\Huy\Desktop\ky 7 fpt\SWP\GymCore", and the current working branch baseline is `main`. Please read the relevant docs before making schema or business-rule changes. 
 Dependencies are: Spring Web, Spring Data JPA, SQL Server Driver, Spring Security, Validation, Spring Boot DevTools and Lombok. 
 The database is Microsoft sql with database name is GymCore, login is sa, password is "1". React stuff are Axios: To call your 
 Spring Boot API. React Router Dom: For page navigation. TanStack Query: For caching and 

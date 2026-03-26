@@ -43,7 +43,7 @@ describe('AccountMenu', () => {
     expect(screen.getByText('Notifications')).toBeInTheDocument()
     expect(screen.getByText('Current membership')).toBeInTheDocument()
     expect(screen.getByText('Order history')).toBeInTheDocument()
-    expect(screen.getByText('QR code')).toBeInTheDocument()
+    expect(screen.getByText('Check in QR')).toBeInTheDocument()
     expect(screen.getByText('Logout')).toBeInTheDocument()
 
     // Switch to a staff user and ensure QR is not present.
@@ -68,7 +68,7 @@ describe('AccountMenu', () => {
     expect(screen.getByText('Notifications')).toBeInTheDocument()
     expect(screen.queryByText('Current membership')).toBeNull()
     expect(screen.queryByText('Order history')).toBeNull()
-    expect(screen.queryByText('QR code')).toBeNull()
+    expect(screen.queryByText('Check in QR')).toBeNull()
     expect(screen.getByText('Logout')).toBeInTheDocument()
   })
 

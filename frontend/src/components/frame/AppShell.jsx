@@ -169,7 +169,7 @@ function CustomerShopCartButton({ visible, onOpenCart }) {
       type="button"
       aria-label="Open cart"
       onClick={onOpenCart}
-      className={`relative rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 shadow-ambient-sm backdrop-blur-md transition duration-200 hover:border-white/15 hover:bg-white/10 hover:text-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${pulse ? 'scale-110 shadow-glow' : 'scale-100'}`}
+      className={`relative p-1 text-slate-50 transition duration-200 hover:text-gym-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${pulse ? 'scale-110 shadow-glow' : 'scale-100'}`}
     >
       <ShoppingCart size={20} />
       {itemCount > 0 && (
@@ -308,18 +308,15 @@ function AppShell({ children }) {
     <div className="flex min-h-screen flex-col bg-transparent text-slate-50">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[rgba(10,10,15,0.82)] backdrop-blur-xl">
         <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6">
-          <Link to="/" onClick={() => handleRouteClick('/')} className="group inline-flex items-center gap-4 text-slate-50">
-            <div className="relative">
-              <div className="absolute -inset-2 rounded-full bg-gym-500/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity" />
-              <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500 text-slate-950 shadow-glow transition-transform group-hover:scale-105">
-                <Dumbbell size={20} strokeWidth={2.5} />
-              </span>
-            </div>
-            <div className="flex flex-col">
-              <span className="font-display text-xl font-black tracking-tight text-white group-hover:text-gym-500 transition-colors">GymCore</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 group-hover:text-slate-400 transition-colors">Atmospheric fitness workspace</span>
-            </div>
-          </Link>
+            <Link to="/" onClick={() => handleRouteClick('/')} className="group inline-flex items-center gap-4 text-slate-200">
+              <div className="relative">
+                <div className="absolute -inset-2 rounded-full bg-gym-500/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500 text-slate-950 shadow-glow transition-transform group-hover:scale-105">
+                  <Dumbbell size={20} strokeWidth={2.5} />
+                </span>
+              </div>
+              <span className="font-display text-xl font-black tracking-tight text-slate-50 group-hover:text-gym-500 transition-colors">GymCore</span>
+            </Link>
 
           {showWorkspaceNav ? (
             <div className="relative hidden min-w-0 flex-1 sm:block">
@@ -350,8 +347,8 @@ function AppShell({ children }) {
                       className={({ isActive }) =>
                         `relative px-3 py-2 text-[11px] font-black uppercase tracking-[0.13em] transition-all duration-300 ${
                           isActive
-                            ? 'text-gym-500'
-                            : 'text-slate-500 hover:text-white'
+                            ? 'text-[#0ea773]'
+                            : 'text-slate-200 hover:text-[#0ea773]'
                         }`
                       }
                     >
@@ -359,7 +356,7 @@ function AppShell({ children }) {
                         <>
                           {link.label}
                           {isActive && (
-                            <span className="absolute -bottom-1 left-4 right-4 h-0.5 rounded-full bg-gym-500 shadow-glow animate-in fade-in zoom-in-50 duration-500" />
+                            <span className="absolute -bottom-1 left-4 right-4 h-0.5 rounded-full bg-[#0ea773] shadow-glow animate-in fade-in zoom-in-50 duration-500" />
                           )}
                         </>
                       )}
@@ -414,8 +411,8 @@ function AppShell({ children }) {
                       className={({ isActive }) =>
                         `relative rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition-all duration-300 ${
                           isActive
-                            ? 'bg-gym-500/10 text-gym-500 ring-1 ring-gym-500/20'
-                            : 'text-slate-500'
+                            ? 'bg-[#0ea773]/10 text-[#0ea773] ring-1 ring-[#0ea773]/20'
+                            : 'text-slate-200 hover:text-[#0ea773]'
                         }`
                       }
                     >

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, BadgeCheck, ChevronDown, UserCircle2, X } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, ChevronDown, Search, UserCircle2, X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
@@ -951,15 +951,13 @@ function CustomerCoachBookingPage() {
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav} showHeader={false}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
-        <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Match Coaches</button>
-              <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
-              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback Coach</button>
-            </div>
+        <div className="flex justify-center">
+          <div className="flex flex-wrap justify-center gap-2">
+              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Find PT</button>
+            <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
+              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback your PT</button>
           </div>
-        </section>
+        </div>
 
         {(error || message) && (
           <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -970,83 +968,83 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'match' && (
           <div className="space-y-6">
-            <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-              <div className="bg-white border border-slate-200 rounded-[30px] p-5 space-y-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h3>
+            <div className="space-y-5 px-2 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-50 md:text-3xl">Find suitable personal trainer</h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className={`inline-flex items-center gap-2 px-1 py-1 text-xs font-semibold ${membershipStatusIndicator.tone.replace('rounded-full', '').replace('bg-slate-100', 'bg-transparent').replace('bg-emerald-50', 'bg-transparent').replace('bg-rose-50', 'bg-transparent')}`}>
+                    <span className={`h-2.5 w-2.5 rounded-full ${membershipStatusIndicator.dot}`} />
+                    <membershipStatusIndicator.Icon size={14} />
+                    <span>{membershipStatusIndicator.label}</span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold ${membershipStatusIndicator.tone}`}>
-                      <span className={`h-2.5 w-2.5 rounded-full ${membershipStatusIndicator.dot}`} />
-                      <membershipStatusIndicator.Icon size={14} />
-                      <span>{membershipStatusIndicator.label}</span>
-                    </div>
                     <button
                       onClick={openPlannerModal}
-                      className="px-4 py-2 rounded-xl bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700"
+                      className="gc-button-primary-flat min-h-0 rounded-full px-5 py-2.5 text-sm font-semibold"
                     >
-                      Open Schedule Planner
+                      Set schedule
                     </button>
-                  </div>
                 </div>
+              </div>
 
-                <div className="space-y-3 pt-1">
-                  <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                    <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
-                    <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
-                  </div>
-                  {weeklySlots.length === 0 && (
-                    <p className="text-sm text-slate-500">No recurring slots selected yet.</p>
-                  )}
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-wrap gap-5 text-xs text-slate-600">
+                  <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
+                  <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
+                </div>
                   {weeklySlots.length > 0 && (
                     <div className="space-y-3">
-                      {groupedWeeklySlots.map((group) => (
-                        <div key={`summary-group-${group.id}`} className="border-b border-slate-200/80 pb-3 last:border-b-0 last:pb-0">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpandedSummaryDay(group.id)}
-                            className="flex w-full items-center justify-between gap-3 text-left"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-900">{group.label}</p>
-                              <p className="text-[11px] font-semibold text-slate-500">
-                                {group.slots.length} recurring slot(s) selected
-                              </p>
+                    {groupedWeeklySlots.map((group) => (
+                      <div key={`summary-group-${group.id}`} className="border-b border-slate-200/80 pb-3 last:border-b-0 last:pb-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandedSummaryDay(group.id)}
+                          className="flex w-full items-center justify-between gap-3 py-1 text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900">{group.label}</p>
+                            <p className="text-[11px] font-semibold text-slate-500">
+                              {group.slots.length} recurring slot(s) selected
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                              {group.slots.length} slot{group.slots.length > 1 ? 's' : ''}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                                {group.slots.length} slot{group.slots.length > 1 ? 's' : ''}
-                              </div>
-                              <ChevronDown
-                                size={16}
-                                className={`text-slate-500 transition-transform duration-300 ${isGroupExpanded(expandedSummaryDays, group.id) ? 'rotate-180' : 'rotate-0'}`}
-                              />
-                            </div>
-                          </button>
-                          <div
-                            className={`grid overflow-hidden transition-all duration-300 ease-out ${isGroupExpanded(expandedSummaryDays, group.id) ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'}`}
-                          >
-                            <div className="overflow-hidden">
-                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                {group.slots.map((item) => (
-                                  <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                                    {formatSlotLabel(item.timeSlotId)}
-                                  </span>
-                                ))}
-                              </div>
+                            <ChevronDown
+                              size={16}
+                              className={`text-slate-500 transition-transform duration-300 ${isGroupExpanded(expandedSummaryDays, group.id) ? 'rotate-180' : 'rotate-0'}`}
+                            />
+                          </div>
+                        </button>
+                        <div
+                          className={`grid overflow-hidden transition-all duration-300 ease-out ${isGroupExpanded(expandedSummaryDays, group.id) ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'}`}
+                        >
+                          <div className="overflow-hidden">
+                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                              {group.slots.map((item) => (
+                                <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                                  {formatSlotLabel(item.timeSlotId)}
+                                </span>
+                              ))}
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
-                  {loading ? 'Loading...' : 'Search Coaches'}
-                </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              <button
+                onClick={previewMatches}
+                disabled={loading}
+                className="gc-button-primary-flat min-h-0 gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>{loading ? 'Loading...' : 'Search Coaches'}</span>
+                <Search size={16} className="shrink-0" />
+              </button>
             </div>
 
             {hasPreviewedMatches && (
@@ -1093,30 +1091,30 @@ function CustomerCoachBookingPage() {
         )}
 
         {activeTab === 'schedule' && (
-          <div className="space-y-6">
-            <h3 className="text-xl font-bold text-slate-900">My PT Schedule</h3>
+            <div className="space-y-6">
+              <h3 className="text-xl font-bold text-slate-900">My PT Schedule</h3>
 
-            {scheduleData.pendingRequests.length > 0 && (
-              <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <h4 className="font-bold text-amber-800 mb-2">Pending Requests</h4>
-                <div className="space-y-2">
-                  {scheduleData.pendingRequests.map((r) => (
-                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-amber-200 px-3 py-2 text-sm">
-                      <div className="font-semibold text-slate-800">{r.coachName}</div>
-                      <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
-                      <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
-                    </div>
-                  ))}
+              {scheduleData.pendingRequests.length > 0 && (
+                <section className="space-y-3">
+                  <h4 className="font-bold text-amber-800">Pending Requests</h4>
+                  <div className="space-y-2">
+                    {scheduleData.pendingRequests.map((r) => (
+                      <div key={r.ptRequestId} className="border-b border-amber-200 pb-3 text-sm last:border-b-0">
+                        <div className="font-semibold text-slate-800">{r.coachName}</div>
+                        <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
+                        <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
+                      </div>
+                    ))}
                 </div>
               </section>
             )}
 
             {scheduleData.deniedRequests.length > 0 && (
-              <section className="bg-red-50 border border-red-200 rounded-2xl p-4">
-                <h4 className="font-bold text-red-800 mb-2">Denied Requests</h4>
+              <section className="space-y-3">
+                <h4 className="font-bold text-red-800">Denied Requests</h4>
                 <div className="space-y-2">
                   {scheduleData.deniedRequests.map((r) => (
-                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-red-200 px-3 py-2 text-sm">
+                    <div key={r.ptRequestId} className="border-b border-red-200 pb-3 text-sm last:border-b-0">
                       <div className="font-semibold text-slate-800">{r.coachName}: {r.startDate} to {r.endDate}</div>
                       <div className="text-red-700">Reason: {r.denyReason || 'No reason provided'}</div>
                     </div>
@@ -1125,13 +1123,13 @@ function CustomerCoachBookingPage() {
               </section>
             )}
 
-            {!loading && scheduleData.items.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-12 text-center text-sm text-slate-500">
+            {!loading && scheduleData.items.length === 0 && scheduleData.pendingRequests.length === 0 ? (
+              <div className="py-12 text-center text-sm text-slate-500">
                 No PT sessions yet.
               </div>
             ) : (
               <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="p-1">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Monthly view</p>
@@ -1158,7 +1156,7 @@ function CustomerCoachBookingPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mt-4 p-1">
                     <div className="grid grid-cols-7 gap-1">
                       {DAYS.map((day) => (
                         <div key={`schedule-header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1204,7 +1202,7 @@ function CustomerCoachBookingPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="p-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Selected date</p>
                   <h4 className="mt-2 text-lg font-bold text-slate-900">
                     {selectedScheduleDate ? formatHumanDate(selectedScheduleDate) : 'Pick a green-marked day'}
@@ -1293,7 +1291,7 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'feedback' && (
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-slate-900">Feedback Coach</h3>
+            <h3 className="text-xl font-bold text-slate-900">Feedback your PT</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {completedSessions.map((s) => (
                 <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4">
@@ -1312,7 +1310,7 @@ function CustomerCoachBookingPage() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-visible rounded-2xl bg-white p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h4>
+              <h4 className="text-xl font-bold text-slate-50 md:text-2xl">Find suitable personal trainer</h4>
               <button
                 onClick={closePlannerModal}
                 className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
@@ -1563,21 +1561,21 @@ function CustomerCoachBookingPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="gc-surface-soft">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Experience</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{coachProfileModal.coach.experienceYears || 0} years</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="gc-surface-soft">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Average rating</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{coachProfileModal.coach.avgRating || coachProfileModal.coach.averageRating || 0}</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="gc-surface-soft">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reviews</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{coachProfileModal.coach.reviewCount || 0}</p>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="gc-surface-plain">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Bio</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-700">{coachProfileModal.coach.bio || 'No bio available.'}</p>
                 </div>
@@ -1598,7 +1596,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="gc-surface-soft mt-5">
               <p className="text-sm font-semibold text-slate-900">{rescheduleModal.session?.coachName || 'Assigned coach'}</p>
               <p className="mt-1 text-xs text-slate-500">
                 Current session: {rescheduleModal.session?.sessionDate || '-'} | {formatSlotLabel(rescheduleModal.session?.timeSlotId)}
@@ -1647,7 +1645,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeRescheduleModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="gc-button-neutral"
               >
                 Keep current session
               </button>
@@ -1746,13 +1744,11 @@ function CustomerCoachBookingPage() {
                   })}
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="gc-surface-soft">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New recurring template</p>
-                  {groupedSeriesSlots.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">No recurring slots selected yet.</p>
-                  ) : (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {groupedSeriesSlots.flatMap((day) =>
+                    {groupedSeriesSlots.length === 0 ? null : (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {groupedSeriesSlots.flatMap((day) =>
                         day.slots.map((slot) => (
                           <span key={`series-preview-${day.id}-${slot.timeSlotId}`} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
                             {day.label} • {formatSlotLabel(slot.timeSlotId)}
@@ -1769,7 +1765,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeSeriesModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="gc-button-neutral"
               >
                 Keep current template
               </button>
@@ -1815,7 +1811,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="gc-surface-soft mt-5">
               <p className="text-sm font-semibold text-slate-900">{cancelModal.session.coachName || 'Assigned coach'}</p>
               <p className="mt-1 text-xs text-slate-500">
                 {cancelModal.session.sessionDate || '-'} | {formatSlotLabel(cancelModal.session.timeSlotId)}
@@ -1837,7 +1833,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeCancelModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="gc-button-neutral"
               >
                 Keep session
               </button>
@@ -1873,7 +1869,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="gc-surface-soft mt-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current PT status</p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div>
@@ -1893,7 +1889,7 @@ function CustomerCoachBookingPage() {
                   setPtBookingBlockedModal(false)
                   setActiveTab('schedule')
                 }}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="gc-button-neutral"
               >
                 Open My PT Schedule
               </button>
@@ -1921,7 +1917,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="gc-surface-soft mt-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current membership</p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div>
@@ -1940,7 +1936,7 @@ function CustomerCoachBookingPage() {
               <Link
                 to="/customer/current-membership"
                 onClick={() => setMembershipBlockedModal(false)}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="gc-button-neutral"
               >
                 View my membership
               </Link>

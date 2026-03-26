@@ -1,7 +1,7 @@
 export const customerNav = [
   { to: '/customer/checkin-health', label: 'Check-in & Health' },
   { to: '/customer/progress-hub', label: 'Progress Hub' },
-  { to: '/customer/coach-booking', label: 'Coach Booking' },
+  { to: '/customer/coach-booking', label: 'Book PT' },
   { to: '/customer/promotions', label: 'Promotions' },
   { to: '/customer/membership', label: 'Membership' },
   { to: '/customer/shop', label: 'Product Shop' },
