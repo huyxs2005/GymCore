@@ -11,6 +11,7 @@ const ChangePasswordPage = lazy(() => import('../pages/public/ChangePasswordPage
 const ProfilePage = lazy(() => import('../pages/common/ProfilePage'))
 const NotificationsPage = lazy(() => import('../pages/common/NotificationsPage'))
 const CustomerMembershipPage = lazy(() => import('../pages/customer/CustomerMembershipPage'))
+const CustomerMembershipCheckoutPage = lazy(() => import('../pages/customer/CustomerMembershipCheckoutPage'))
 const CustomerCurrentMembershipPage = lazy(() => import('../pages/customer/CustomerCurrentMembershipPage'))
 const CustomerProgressHubPage = lazy(() => import('../pages/customer/CustomerProgressHubPage'))
 const CustomerCheckinHealthPage = lazy(() => import('../pages/customer/CustomerCheckinHealthPage'))
@@ -91,6 +92,7 @@ function AppRouter() {
         <Route path="/notifications" element={withAuth(<NotificationsPage />)} />
 
         <Route path="/customer/membership" element={withRole(['CUSTOMER'], <CustomerMembershipPage />)} />
+        <Route path="/customer/membership/checkout" element={withRole(['CUSTOMER'], <CustomerMembershipCheckoutPage />)} />
         <Route path="/customer/current-membership" element={withRole(['CUSTOMER'], <CustomerCurrentMembershipPage />)} />
         <Route path="/customer/progress-hub" element={withRole(['CUSTOMER'], <CustomerProgressHubPage />)} />
         <Route path="/customer/checkin-health" element={withRole(['CUSTOMER'], <CustomerCheckinHealthPage />)} />

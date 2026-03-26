@@ -444,31 +444,31 @@ function AppShell({ children }) {
         />
       ) : null}
 
-      <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.45),rgba(10,10,15,0.94))] px-4 pb-6 pt-12 sm:px-6">
+      <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.45),rgba(10,10,15,0.94))] px-4 pb-4 pt-8 sm:px-6">
         <div className="mx-auto max-w-[1600px]">
-          <div className="grid gap-10 lg:grid-cols-[1.15fr_1fr_0.95fr] lg:gap-14">
-            <section className="space-y-4">
-              <div className="inline-flex items-center gap-3 text-slate-50">
-                <span className="rounded-xl bg-gym-500 p-2 text-slate-950 shadow-glow">
-                  <Dumbbell size={14} />
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr_0.9fr] lg:gap-10">
+            <section className="space-y-3">
+              <div className="inline-flex items-center gap-2.5 text-slate-50">
+                <span className="rounded-lg bg-gym-500 p-1.5 text-slate-950 shadow-glow">
+                  <Dumbbell size={13} />
                 </span>
-                <span className="font-display text-xl font-bold tracking-tight">GymCore</span>
+                <span className="font-display text-lg font-bold tracking-tight">GymCore</span>
               </div>
-              <p className="max-w-md text-base leading-8 text-slate-200">
+              <p className="max-w-md text-sm leading-6 text-slate-200">
                 A customer-first fitness space for training, memberships, coaching support, and everyday routines that are easier to keep going.
               </p>
             </section>
 
-            <section className="space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-[0.24em] text-slate-100">Visit Us</h3>
-              <div className="space-y-4 text-base text-slate-200">
-                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <section className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-slate-100">Visit Us</h3>
+              <div className="space-y-3 text-sm text-slate-200">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                   <p className="inline-flex items-center gap-2.5">
-                    <Clock3 size={14} className="text-gym-600" />
+                    <Clock3 size={13} className="text-gym-600" />
                     <span>Open daily: {gymPublicInfo.openingHours}</span>
                   </p>
                   <p className="inline-flex items-center gap-2.5">
-                    <Phone size={14} className="text-gym-600" />
+                    <Phone size={13} className="text-gym-600" />
                     <span>{gymPublicInfo.hotline}</span>
                   </p>
                 </div>
@@ -478,15 +478,15 @@ function AppShell({ children }) {
                   rel="noreferrer"
                   className="inline-flex items-start gap-2.5 text-slate-200 transition duration-200 hover:text-gym-500"
                 >
-                  <MapPin size={14} className="mt-0.5 text-gym-600" />
+                  <MapPin size={13} className="mt-0.5 text-gym-600" />
                   <span className="leading-relaxed">{gymPublicInfo.address}</span>
                 </a>
               </div>
             </section>
 
-            <section className="space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-[0.24em] text-slate-100">Explore</h3>
-              <div className="flex flex-col gap-3 text-base text-slate-200">
+            <section className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-slate-100">Explore</h3>
+              <div className="flex flex-col gap-2 text-sm text-slate-200">
                 <Link
                   to="/"
                   onClick={() => handleRouteClick('/')}
@@ -517,7 +517,7 @@ function AppShell({ children }) {
             </section>
           </div>
 
-          <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-5 text-sm text-slate-200 sm:flex-row sm:items-center">
+          <div className="mt-6 flex flex-col items-start justify-between gap-2 border-t border-white/10 pt-4 text-xs text-slate-200 sm:flex-row sm:items-center">
             <p>&copy; {new Date().getFullYear()} GymCore. All rights reserved.</p>
             <p>Pickup at gym front desk for all product orders.</p>
           </div>

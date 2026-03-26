@@ -52,20 +52,21 @@ function NotificationDropdown() {
   const dropdownData = notifData?.data
   const unreadCount = dropdownData?.unreadCount || 0
   const notifications = useMemo(() => dropdownData?.notifications || [], [dropdownData])
+  const unreadNotifications = useMemo(
+    () => notifications.filter((notification) => !notification.isRead),
+    [notifications],
+  )
   const reminderCenter = useMemo(() => {
-    if (dropdownData?.reminderCenter) {
-      return dropdownData.reminderCenter
-    }
-    const fallback = partitionReminderCenter(notifications)
+    const fallback = partitionReminderCenter(unreadNotifications)
     return {
       ...fallback,
       counts: {
-        total: notifications.length,
+        total: unreadNotifications.length,
         actionable: fallback.actionable.length,
         history: fallback.history.length,
       },
     }
-  }, [dropdownData, notifications])
+  }, [unreadNotifications])
   const actionableItems = useMemo(() => reminderCenter?.actionable || [], [reminderCenter])
   const historyItems = useMemo(() => reminderCenter?.history || [], [reminderCenter])
   const previewActionable = useMemo(() => actionableItems.slice(0, 3), [actionableItems])
@@ -315,7 +316,7 @@ function NotificationDropdown() {
               onClick={handleShowAllNotifications}
               className="font-medium text-white transition hover:text-gym-500"
             >
-              Open reminder center
+              Show all
             </button>
             <button
               type="button"

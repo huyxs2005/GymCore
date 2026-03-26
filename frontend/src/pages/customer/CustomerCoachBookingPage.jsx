@@ -99,6 +99,27 @@ function formatDateTimeLabel(value) {
   })
 }
 
+function formatApprovalEta(value) {
+  if (!value) return 'Approve ETA: Pending'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Approve ETA: Pending'
+  }
+  const eta = addDays(parsed, 7)
+  return `Approve ETA: ${eta.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })}`
+}
+
+function canCancelPendingRequest(createdAt) {
+  if (!createdAt) return false
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) return false
+  return Date.now() <= created.getTime() + 5 * 60 * 1000
+}
+
 function isCoachEnabledPlanType(planType) {
   const normalizedPlanType = String(planType || '').toUpperCase()
   return normalizedPlanType === 'GYM_PLUS_COACH' || normalizedPlanType === 'GYM_COACH'
@@ -141,7 +162,7 @@ function buildPtBookingGate(schedule) {
       loaded: true,
       blocked: true,
       type: 'PENDING',
-      reason: 'You already have a PT request pending coach approval. Please wait for the coach response before booking again.',
+      reason: 'Please wait for the coach response before booking again.',
       pendingRequest: pendingRequests[0],
       activeSession: null,
     }
@@ -228,7 +249,7 @@ function sortPartialMatchesByLeastConflict(items) {
 }
 
 function CustomerCoachBookingPage() {
-  const [activeTab, setActiveTab] = useState('match')
+  const [activeTab, setActiveTab] = useState('schedule')
   const [timeSlots, setTimeSlots] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -365,6 +386,21 @@ function CustomerCoachBookingPage() {
       if (!silent) {
         setLoading(false)
       }
+    }
+  }
+
+  async function cancelPendingRequest(requestId) {
+    try {
+      setLoading(true)
+      setError('')
+      setMessage('')
+      const response = await coachBookingApi.deleteRequest(requestId)
+      setMessage(response?.message || 'PT booking request cancelled successfully.')
+      await loadMySchedule({ silent: true })
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot cancel PT booking request')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -519,8 +555,8 @@ function CustomerCoachBookingPage() {
     if (ptBookingGate.type === 'PENDING' && ptBookingGate.pendingRequest) {
       return {
         title: ptBookingGate.pendingRequest.coachName || 'Pending PT request',
-        detail: `Request window: ${ptBookingGate.pendingRequest.startDate || '-'} to ${ptBookingGate.pendingRequest.endDate || '-'}`,
-        badge: 'Pending approval',
+        detail: formatApprovalEta(ptBookingGate.pendingRequest.createdAt),
+        badge: '',
       }
     }
     if (ptBookingGate.type === 'ACTIVE' && ptBookingGate.activeSession) {
@@ -951,11 +987,11 @@ function CustomerCoachBookingPage() {
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav} showHeader={false}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
-        <div className="flex justify-center">
-          <div className="flex flex-wrap justify-center gap-2">
-              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Find PT</button>
-            <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
-              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback your PT</button>
+          <div className="flex justify-center">
+            <div className="flex flex-wrap justify-center gap-2">
+            <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition duration-200 ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-[#0ea773]'}`}>My PT Schedule</button>
+              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition duration-200 ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-[#0ea773]'}`}>Find PT</button>
+              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition duration-200 ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-[#0ea773]'}`}>Feedback your PT</button>
           </div>
         </div>
 
@@ -1096,13 +1132,23 @@ function CustomerCoachBookingPage() {
 
               {scheduleData.pendingRequests.length > 0 && (
                 <section className="space-y-3">
-                  <h4 className="font-bold text-amber-800">Pending Requests</h4>
+                  <h4 className="font-bold text-rose-500">Pending Requests</h4>
                   <div className="space-y-2">
                     {scheduleData.pendingRequests.map((r) => (
-                      <div key={r.ptRequestId} className="border-b border-amber-200 pb-3 text-sm last:border-b-0">
-                        <div className="font-semibold text-slate-800">{r.coachName}</div>
-                        <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
-                        <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
+                      <div key={r.ptRequestId} className="rounded-xl bg-amber-100 px-4 py-3 text-sm text-amber-950">
+                        <div className="font-semibold text-slate-50">{r.coachName}</div>
+                        <div className="text-amber-700">{formatApprovalEta(r.createdAt)}</div>
+                        {canCancelPendingRequest(r.createdAt) ? (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => void cancelPendingRequest(r.ptRequestId)}
+                              className="rounded-full border border-rose-300 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
+                            >
+                              Cancel request
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                 </div>
@@ -1128,7 +1174,7 @@ function CustomerCoachBookingPage() {
                 No PT sessions yet.
               </div>
             ) : (
-              <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+              <section className="space-y-4">
                 <div className="p-1">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1139,7 +1185,7 @@ function CustomerCoachBookingPage() {
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                        className="gc-hover-text-green rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition"
                       >
                         Prev
                       </button>
@@ -1149,7 +1195,7 @@ function CustomerCoachBookingPage() {
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+                        className="gc-hover-text-green rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition"
                       >
                         Next
                       </button>
@@ -1199,89 +1245,6 @@ function CustomerCoachBookingPage() {
                         )
                       })}
                     </div>
-                  </div>
-                </div>
-
-                <div className="p-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Selected date</p>
-                  <h4 className="mt-2 text-lg font-bold text-slate-900">
-                    {selectedScheduleDate ? formatHumanDate(selectedScheduleDate) : 'Pick a green-marked day'}
-                  </h4>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Dates with coaching sessions are marked with a green signal in the calendar.
-                  </p>
-
-                  <div className="mt-4 space-y-3">
-                    {selectedScheduleItems.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                        No coaching sessions selected for this day.
-                      </div>
-                    )}
-                    {selectedScheduleItems.map((s) => {
-                      const appearance = getSessionStatusAppearance(s.status)
-                      return (
-                        <div key={s.ptSessionId} className={`rounded-2xl border p-4 space-y-3 ${appearance.card}`}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h5 className="font-bold text-slate-900">{s.coachName}</h5>
-                              <p className="text-sm text-slate-600">
-                                Slot {s.slotIndex} | {String(s.startTime || '').slice(0, 5)} - {String(s.endTime || '').slice(0, 5)}
-                              </p>
-                            </div>
-                            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>
-                              <span className={`h-2 w-2 rounded-full ${appearance.dot}`} />
-                              {s.status}
-                            </span>
-                          </div>
-                          {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-700">Reschedule pending coach approval</div>}
-                          {s.reschedule?.status === 'DENIED' && <div className="text-xs text-red-700">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
-                          {String(s.status || '').toUpperCase() === 'CANCELLED' && s.cancelReason && (
-                            <div className="text-xs text-red-700">Cancellation reason: {s.cancelReason}</div>
-                          )}
-                          {s.replacementOffer?.status === 'PENDING_CUSTOMER' && (
-                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                              <p className="text-sm font-bold text-amber-900">Replacement coach offer</p>
-                              <p className="mt-1 text-sm text-amber-800">
-                                {s.replacementOffer.replacementCoachName} can cover this session for {s.replacementOffer.originalCoachName}.
-                              </p>
-                              {s.replacementOffer.note ? (
-                                <p className="mt-2 text-xs text-amber-700">Note: {s.replacementOffer.note}</p>
-                              ) : null}
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleReplacementDecision(s.ptSessionId, 'ACCEPT')}
-                                  disabled={loading}
-                                  className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                >
-                                  Accept replacement
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleReplacementDecision(s.ptSessionId, 'DECLINE')}
-                                  disabled={loading}
-                                  className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                                >
-                                  Decline replacement
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
-                            <div className="flex gap-2">
-                              <button onClick={() => openCancelModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
-                              <button
-                                onClick={() => openRescheduleModal(s)}
-                                disabled={s.replacementOffer?.status === 'PENDING_CUSTOMER'}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                Reschedule
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
                   </div>
                 </div>
               </section>
@@ -1532,7 +1495,7 @@ function CustomerCoachBookingPage() {
               type="button"
               aria-label="Close coach profile"
               onClick={closeCoachProfile}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
             >
               <X size={20} />
             </button>
@@ -1857,7 +1820,7 @@ function CustomerCoachBookingPage() {
               type="button"
               aria-label="Close PT booking popup"
               onClick={() => setPtBookingBlockedModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
             >
               <X size={20} />
             </button>
@@ -1869,17 +1832,11 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="gc-surface-soft mt-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current PT status</p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{ptBookingGateSummary.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{ptBookingGateSummary.detail}</p>
-                </div>
-                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
-                  {ptBookingGateSummary.badge}
-                </span>
-              </div>
+            <div className="mt-5 space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-50">Current PT status</p>
+              <div className="h-px w-40 bg-white/20" />
+              <p className="text-sm font-semibold text-slate-50">{ptBookingGateSummary.title}</p>
+              <p className="text-xs text-amber-700">{ptBookingGateSummary.detail}</p>
             </div>
 
             <div className="mt-5 flex flex-wrap justify-end gap-3">
@@ -1889,7 +1846,7 @@ function CustomerCoachBookingPage() {
                   setPtBookingBlockedModal(false)
                   setActiveTab('schedule')
                 }}
-                className="gc-button-neutral"
+                className="gc-button-primary-flat min-h-0 rounded-full px-5 py-2.5 text-sm font-semibold"
               >
                 Open My PT Schedule
               </button>
@@ -1905,7 +1862,7 @@ function CustomerCoachBookingPage() {
               type="button"
               aria-label="Close membership popup"
               onClick={() => setMembershipBlockedModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
             >
               <X size={20} />
             </button>
@@ -2067,7 +2024,7 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
           <button
             type="button"
             onClick={() => onShiftMonth(-1)}
-            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+            className="gc-hover-text-green rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition"
           >
             Prev
           </button>
@@ -2078,7 +2035,7 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
           <button
             type="button"
             onClick={() => onShiftMonth(1)}
-            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
+            className="gc-hover-text-green rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition"
           >
             Next
           </button>

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authApi } from '../../features/auth/api/authApi'
-import { persistSession } from '../../features/auth/session'
+import { persistSession, roleLandingPath } from '../../features/auth/session'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -20,7 +20,7 @@ function LoginPage() {
       }
 
       persistSession(data)
-      navigate('/', { replace: true })
+      navigate(roleLandingPath(data.user.role), { replace: true })
     },
     [navigate],
   )
@@ -108,7 +108,6 @@ function LoginPage() {
         <div className="mb-8 text-center">
           <p className="gc-section-kicker">Welcome Back</p>
           <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-white">Login</h1>
-          <p className="mt-2 text-sm text-slate-500">Sign in to manage your gym workspace</p>
         </div>
 
         <div className="gc-glass-panel p-8 shadow-2xl">
@@ -194,7 +193,6 @@ function LoginPage() {
         </div>
 
         <p className="mt-8 text-center text-xs tracking-wide text-slate-600">
-          GymCore Workspace &bull; v2.4.0
         </p>
       </div>
     </div>

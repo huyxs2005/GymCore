@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CalendarClock, CreditCard, Dumbbell, ShieldCheck, Sparkles, Ticket, Check } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CreditCard, Dumbbell, ShieldCheck, Sparkles, Ticket, Check, Diamond } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
 import { promotionApi } from '../../features/promotion/api/promotionApi'
-
+import { useSession } from '../../features/auth/useSession'
+import { useNavigate } from 'react-router-dom'
+import {
+  buildActiveWarningMessage,
+  checkoutModeLabel,
+  formatDurationLabel,
+  inferCheckoutMode,
+  normalizePlanType,
+} from '../../features/membership/utils/membershipCheckout'
 const planTypeMeta = {
   DAY_PASS: {
     label: 'Day Pass',
@@ -73,75 +81,11 @@ const planTypeMeta = {
   },
 }
 
-const checkoutModeLabel = {
-  PURCHASE: 'Purchase',
-  RENEW: 'Renew',
-  UPGRADE: 'Upgrade',
-}
-
-function normalizePlanType(planType) {
-  return String(planType || '')
-    .trim()
-    .toUpperCase()
-}
-
-function formatDurationLabel(durationDays) {
-  const days = Number(durationDays || 0)
-  if (days <= 1) return '1 day'
-  if (days >= 365 * 2) return '24 months'
-  if (days >= 365) return '12 months'
-  if (days >= 180) return '6 months'
-  if (days >= 30) return '1 month'
-  return `${days} days`
-}
-
-function inferCheckoutMode(selectedPlan, currentMembership) {
-  const membershipStatus = String(currentMembership?.status || '').toUpperCase()
-  const currentPlanId = Number(currentMembership?.plan?.planId || 0)
-  const selectedPlanId = Number(selectedPlan?.planId || 0)
-  if (membershipStatus === 'EXPIRED' && currentPlanId > 0 && currentPlanId === selectedPlanId) {
-    return 'RENEW'
-  }
-  if (membershipStatus !== 'ACTIVE') {
-    return 'PURCHASE'
-  }
-
-  const currentPlanType = normalizePlanType(currentMembership?.plan?.planType)
-  const selectedPlanType = normalizePlanType(selectedPlan?.planType)
-
-  if (currentPlanType === 'DAY_PASS') {
-    return 'RENEW'
-  }
-
-  if (currentPlanType && selectedPlanType && currentPlanType === selectedPlanType) {
-    return 'RENEW'
-  }
-
-  if (currentPlanType === 'GYM_ONLY' && selectedPlanType === 'GYM_PLUS_COACH') {
-    return 'UPGRADE'
-  }
-
-  return 'RENEW'
-}
-
-function buildActiveWarningMessage(mode, currentMembership, selectedPlan) {
-  const currentName = currentMembership?.plan?.name || 'current membership'
-  const selectedName = selectedPlan?.name || 'selected plan'
-  const currentPlanType = normalizePlanType(currentMembership?.plan?.planType)
-  const selectedPlanType = normalizePlanType(selectedPlan?.planType)
-
-  if (mode === 'RENEW' && currentPlanType === 'DAY_PASS' && selectedPlanType !== 'DAY_PASS') {
-    return `You currently have an ACTIVE Day Pass (${currentName}). If you continue, ${selectedName} will take effect after the Day Pass expires.`
-  }
-
-  if (mode === 'RENEW') {
-    return `You already have an ACTIVE membership (${currentName}). If you continue, ${selectedName} will be queued to start after your current membership ends (renew flow).`
-  }
-
-  return `You already have an ACTIVE membership (${currentName}). If you continue, your current membership will end today and ${selectedName} starts today (upgrade flow).`
-}
 
 function CustomerMembershipPage() {
+  const { user } = useSession()
+  const userId = user?.userId ?? null
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('DAY_PASS')
@@ -167,8 +111,9 @@ function CustomerMembershipPage() {
   })
 
   const claimsQuery = useQuery({
-    queryKey: ['myClaims'],
+    queryKey: ['myClaims', userId],
     queryFn: promotionApi.getMyClaims,
+    enabled: Boolean(userId),
   })
 
   const plans = useMemo(() => plansQuery.data?.data?.plans ?? [], [plansQuery.data])
@@ -314,19 +259,10 @@ function CustomerMembershipPage() {
     }
   }, [queryClient])
 
-  const handleCheckout = () => {
-    if (!selectedPlan) return
-
-    const mode = inferCheckoutMode(selectedPlan, currentMembership)
-    if (hasActiveMembership) {
-      setCheckoutWarning({
-        mode,
-        message: buildActiveWarningMessage(mode, currentMembership, selectedPlan),
-      })
-      return
-    }
-
-    checkoutMutation.mutate({ mode, planId: selectedPlan.planId, promoCode: selectedPromoCode })
+  const handleCheckout = (plan) => {
+    const targetPlan = plan || selectedPlan
+    if (!targetPlan) return
+    navigate(`/customer/membership/checkout?planId=${targetPlan.planId}`)
   }
 
   const confirmCheckoutAfterWarning = () => {
@@ -466,8 +402,7 @@ function CustomerMembershipPage() {
 
   return (
     <WorkspaceScaffold
-      title="Membership Space"
-      subtitle="Select a plan, manage your access, and keep your fitness journey active."
+      showHeader={false}
       links={customerNav}
     >
       {showSuccessMessage && (
@@ -489,41 +424,19 @@ function CustomerMembershipPage() {
         </div>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.1fr)]">
-        {/* LEFT COLUMN: PLANS */}
-        <section className="flex flex-col space-y-5">
-          <header className="flex items-center justify-between gap-4 pl-1">
-            <h2 className="text-xl font-bold tracking-tight text-slate-100">Membership Plans</h2>
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              <span className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]"></span>
-              <span className="text-xs font-bold text-slate-300">{plans.length} Available</span>
-            </div>
-          </header>
+      <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
+        {/* PLANS SECTION */}
+        <section className="flex flex-col">
 
-          {plansQuery.isLoading && (
-            <div className="flex h-[400px] items-center justify-center rounded-[2rem] border border-white/5 bg-white/5">
-              <p className="animate-pulse text-sm font-medium text-slate-500">Loading premium plans...</p>
-            </div>
-          )}
-          {plansQuery.isError && (
-            <div className="rounded-[2rem] border border-red-500/20 bg-red-500/5 p-8 text-center">
-              <AlertTriangle className="mx-auto mb-3 text-red-400" size={32} />
-              <p className="text-sm font-medium text-red-400">Unable to load plans at this time.</p>
-            </div>
-          )}
-          {!plansQuery.isLoading && plans.length === 0 && (
-            <div className="rounded-[2rem] border border-white/5 bg-white/5 p-8 text-center text-slate-400">
-              No active plans are currently listed.
-            </div>
-          )}
-
-          <div className="grid gap-5 xl:grid-cols-3">
+          <div className="grid gap-12 grid-cols-1 lg:grid-cols-3">
             {planColumns.map(({ key, meta, plans: categoryPlans, activePlan, selected }) => {
               const Icon = meta.icon
+              const currentMode = activePlan ? inferCheckoutMode(activePlan, currentMembership) : 'PURCHASE'
+              const isProcessing = checkoutMutation.isPending && selectedPlanId === activePlan?.planId
+
               return (
-                <button
+                <article
                   key={key}
-                  type="button"
                   disabled={!categoryPlans.length}
                   onClick={() => {
                     if (!categoryPlans.length) return
@@ -532,41 +445,61 @@ function CustomerMembershipPage() {
                     setSelectionTouched(true)
                     resetCouponSelection()
                   }}
-                  className={`group relative flex min-h-[460px] flex-col overflow-hidden rounded-[2rem] border p-6 text-left transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500 ${!categoryPlans.length ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'} ${
+                  className={`group relative flex min-h-[580px] flex-col overflow-hidden rounded-3xl border p-7 text-left transition-all duration-500 ease-out ${!categoryPlans.length ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'} ${
                     selected
-                      ? `${meta.colors.activeBorder} ${meta.colors.activeBg} scale-[1.02] shadow-ambient`
-                      : `${meta.colors.border} ${meta.colors.bg} scale-100 hover:scale-[1.01] hover:shadow-ambient`
+                      ? `${meta.colors.activeBorder} ${meta.colors.activeBg} scale-[1.01] z-10 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.4)] ring-1 ring-white/10`
+                      : `border-white/5 bg-[#14141c] hover:bg-[#181822] hover:border-white/20`
                   }`}
                 >
-                  {/* Card Background Glow */}
-                  {selected && (
-                    <div className={`absolute -right-20 -top-20 h-40 w-40 rounded-full blur-[80px] bg-${meta.colors.accent}-500/20`} />
-                  )}
-
-                  {/* Header Area */}
-                  <div className="relative flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-2xl font-black tracking-tight text-white">{meta.label}</h3>
-                      <p className="mt-2 text-[13px] font-medium leading-relaxed text-slate-400 line-clamp-2">{meta.headline}</p>
+                  {/* CARD HEADER (COMPACT FOR VISIBILITY) */}
+                  <div className="flex flex-col">
+                    <div className="flex items-start justify-between min-h-[60px] mb-4 gap-3">
+                      <h3 className="text-xl font-black tracking-tight text-white leading-tight pr-4">{meta.label}</h3>
+                      {key === 'GYM_PLUS_COACH' && (
+                        <span className="shrink-0 mt-1 flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-emerald-400 shadow-glow-sm h-fit">
+                          <Diamond size={8} className="fill-emerald-400" />
+                          Recommended
+                        </span>
+                      )}
                     </div>
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-colors duration-300 ${selected ? meta.colors.activeIconBox : meta.colors.iconBox}`}>
-                      <Icon size={24} strokeWidth={2.5} />
+
+                    <div className="min-h-[80px] flex items-center mb-4">
+                      {activePlan ? (
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-black tracking-tighter text-white flex items-start">
+                            <span className="text-lg font-bold text-slate-500 mt-1 mr-1">₫</span>
+                            {Number(activePlan.price || 0).toLocaleString('en-US')}
+                          </span>
+                          <div className="flex flex-col leading-none">
+                            <span className="text-[10px] font-bold text-slate-500 tracking-wide">VND /</span>
+                            <span className="text-[10px] font-bold text-slate-400">{formatDurationLabel(activePlan.durationDays)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-end gap-1 min-h-[50px]">
+                          <span className="text-3xl font-black tracking-tight text-slate-700 uppercase">N/A</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="min-h-[50px] mb-4">
+                      <p className="text-[12px] font-bold text-slate-300 leading-relaxed border-l-2 border-emerald-500/30 pl-3 py-0.5">
+                        {meta.headline}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Dropdown Selection Area */}
-                  <div className="relative mt-auto pt-6">
-                    <label
-                      htmlFor={`duration-${key}`}
-                      className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-slate-500"
-                    >
-                      Duration Option
-                    </label>
+                  {/* DURATION SELECTOR (COMPACT) */}
+                  <div className="min-h-[70px] mb-3 w-full">
                     <div onClick={(e) => e.stopPropagation()} className="relative">
                       <select
                         id={`duration-${key}`}
                         disabled={!categoryPlans.length}
-                        className="gc-input w-full appearance-none pr-10 text-sm font-semibold !text-slate-100 placeholder-slate-500"
+                        className={`w-full appearance-none rounded-lg px-4 py-3 text-left text-[13px] font-black transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/10 ${
+                          selected
+                            ? 'bg-white/10 text-white border-white/20'
+                            : 'bg-white/5 border border-white/10 text-slate-400 hover:border-white/20 hover:bg-white/10'
+                        }`}
                         value={activePlan?.planId ?? ''}
                         onChange={(e) => {
                           const nextPlanId = Number(e.target.value)
@@ -579,186 +512,71 @@ function CustomerMembershipPage() {
                         {!categoryPlans.length && <option value="">Currently Unavailable</option>}
                         {categoryPlans.map((plan) => (
                           <option key={plan.planId} value={plan.planId} className="bg-[#12121a] text-slate-100">
-                            {formatDurationLabel(plan.durationDays)} — {Number(plan.price || 0).toLocaleString('en-US')} VND
+                            {formatDurationLabel(plan.durationDays)} Access Plan
                           </option>
                         ))}
                       </select>
-                      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                      </div>
+                      {categoryPlans.length > 0 && (
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 opacity-70">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                      )}
                     </div>
+                  </div>
 
-                    {activePlan ? (
-                      <div className={`mt-4 overflow-hidden rounded-xl border border-white/5 bg-black/20 backdrop-blur-sm transition-all ${selected ? 'ring-1 ring-white/10' : ''}`}>
-                        <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3">
-                          <span className="truncate pr-4 text-[13px] font-bold text-slate-200">{activePlan.name}</span>
-                          {selected ? (
-                            <span className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${meta.colors.tag}`}>
-                              Selected
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="grid grid-cols-2 gap-px bg-white/5">
-                          <div className="bg-[#101017] p-4 group-hover:bg-[#12121a] transition-colors">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Cost</p>
-                            <p className={`mt-1 font-bold tracking-tight ${meta.colors.text}`}>
-                              {Number(activePlan.price || 0).toLocaleString('en-US')}₫
-                            </p>
-                          </div>
-                          <div className="bg-[#101017] p-4 group-hover:bg-[#12121a] transition-colors">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Access</p>
-                            <p className="mt-1 text-[13px] font-bold text-slate-300">
-                              {activePlan.allowsCoachBooking ? 'Full + Coach' : 'Gym Floor Only'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-[13px] text-slate-600">Please choose a different plan type. This option has no active configuration.</p>
+                  {/* MAIN ACTION BUTTON (COMPACT) */}
+                  <div className="min-h-[60px] mb-4">
+                    <button
+                      type="button"
+                      disabled={checkoutMutation.isPending || !activePlan || queueLimitReached}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedCategory(key)
+                        setSelectedPlanId(activePlan?.planId ?? null)
+                        handleCheckout(activePlan)
+                      }}
+                      className={`w-full py-3.5 rounded-lg font-black text-[13px] shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group/btn ${
+                        selected
+                          ? 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-500 hover:scale-[1.01] active:scale-[0.98]'
+                          : 'bg-white/10 text-slate-200 hover:bg-white/20 hover:text-white active:scale-[0.98]'
+                      } disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100`}
+                    >
+                      {isProcessing ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      ) : (
+                        <>
+                          <CreditCard size={16} className="transition-transform group-hover/btn:rotate-6" />
+                          <span>{checkoutModeLabel[currentMode]}</span>
+                        </>
+                      )}
+                    </button>
+                    {selected && queueLimitReached && (
+                      <p className="mt-2 text-[9px] text-center font-black text-amber-500/80 uppercase tracking-widest bg-amber-500/10 py-0.5 rounded-full border border-amber-500/10">
+                        Queue Limit
+                      </p>
                     )}
                   </div>
 
-                  {/* Benefits Area */}
-                  <div className="relative mt-6 pt-6 border-t border-white/10">
-                    <div className={`flex items-center gap-2 text-[13px] font-bold uppercase tracking-widest ${meta.colors.text}`}>
-                      <Sparkles size={14} className="opacity-80" />
-                      Key Features
-                    </div>
-                    <ul className="mt-4 space-y-3 px-1 text-[13px] text-slate-400">
+
+                  {/* BENEFITS LIST (COMPACT) */}
+                  <div className="border-t border-white/5 pt-5">
+                    <ul className="space-y-3.5">
                       {meta.benefits.map((benefit, i) => (
-                        <li key={i} className="flex gap-3 leading-relaxed">
-                          <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${meta.colors.check}`}>
-                            <Check size={10} strokeWidth={3} />
-                          </span>
-                          <span>{benefit}</span>
+                        <li key={i} className="flex gap-3 items-start">
+                          <div className={`mt-0.5 rounded-full p-0.5 shadow-sm ${selected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/30 text-slate-500'}`}>
+                            <Check size={14} strokeWidth={3} />
+                          </div>
+                          <span className={`text-[12px] font-bold leading-relaxed ${selected ? 'text-slate-100' : 'text-slate-400'}`}>{benefit}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
-                </button>
+                </article>
               )
             })}
           </div>
         </section>
 
-        {/* RIGHT COLUMN: STATUS & PAYMENT */}
-        <section className="flex flex-col space-y-5">
-          <header className="pl-1">
-            <h2 className="text-xl font-bold tracking-tight text-slate-100">Status & Payment</h2>
-            <p className="mt-0.5 text-xs font-medium text-slate-500">Manage your active subscription and checkout.</p>
-          </header>
-
-          <div className="gc-glass-panel p-6 shadow-ambient">
-            {renderCurrentMembershipCard()}
-            
-            <hr className="my-6 border-white/10" />
-
-            {/* Checkout Area */}
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-slate-300">
-              <CreditCard size={16} className="text-gym-400" />
-              Secure Checkout
-            </h3>
-
-            <div className="space-y-4">
-              {/* Selected Plan Summary */}
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Ready to Action</p>
-                {selectedPlan ? (
-                  <div className="mt-2 text-sm">
-                    <p className="font-bold text-slate-200">{selectedPlan.name}</p>
-                    <p className="mt-0.5 text-gym-400 font-bold">{Number(selectedPlan.price || 0).toLocaleString('en-US')} VND</p>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[13px] font-medium text-slate-500">No plan selected. Tap a plan on the left.</p>
-                )}
-                
-                {selectedPlan && checkoutModePreview && (
-                  <div className="mt-3 inline-flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-1 text-xs">
-                    <span className="font-medium text-slate-400">Mode:</span>
-                    <span className="font-bold text-slate-100 tracking-wide uppercase text-[10px]">{checkoutModeLabel[checkoutModePreview]}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Promo Code selector */}
-              <div className="space-y-2">
-                <label htmlFor="promo-code" className="block text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                  Wallet Coupons
-                </label>
-                <div className="relative">
-                  <select
-                    id="promo-code"
-                    disabled={!selectedPlan || queueLimitReached}
-                    value={selectedPromoCode}
-                    onChange={(e) => handlePromoCodeChange(e.target.value)}
-                    className="gc-input w-full appearance-none pr-10 text-[13px] font-semibold !text-slate-100 disabled:opacity-50"
-                  >
-                    <option value="" className="bg-[#12121a]">Optimize without coupon</option>
-                    {membershipCoupons.map((claim) => (
-                      <option key={claim.ClaimID} value={claim.PromoCode} className="bg-[#12121a]">
-                        {claim.PromoCode} • {formatClaimBenefit(claim)}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                  </div>
-                </div>
-                
-                {membershipCoupons.length === 0 && (
-                  <p className="pl-1 text-xs text-slate-600">No matching coupons in your wallet.</p>
-                )}
-                {previewCouponMutation.isPending && (
-                  <p className="pl-1 text-xs text-amber-500/80">Validating coupon conditions...</p>
-                )}
-                
-                {couponPreview && selectedPromoCode && (
-                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs">
-                    <p className="font-medium text-emerald-400">Verified Discount: {Number(couponPreview.estimatedDiscount || 0).toLocaleString('en-US')}₫</p>
-                    {Number(couponPreview.bonusDurationMonths || 0) > 0 && (
-                      <p className="mt-1 font-medium text-emerald-300">Bonus: +{Number(couponPreview.bonusDurationMonths)} month(s) extra</p>
-                    )}
-                    <hr className="my-2 border-emerald-500/20" />
-                    <p className="font-bold text-slate-100">Final Total: {Number(couponPreview.estimatedFinalAmount || selectedPlan?.price || 0).toLocaleString('en-US')}₫</p>
-                  </div>
-                )}
-                {couponPreviewError && (
-                  <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-500 font-medium">
-                    {couponPreviewError}
-                  </div>
-                )}
-              </div>
-
-              {/* Action Button */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  disabled={checkoutMutation.isPending || !selectedPlan || queueLimitReached}
-                  onClick={handleCheckout}
-                  className="gc-button-primary w-full shadow-amber-500/20 disabled:scale-100 disabled:opacity-50 disabled:shadow-none"
-                >
-                  {checkoutMutation.isPending ? (
-                    'Initializing Environment...'
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <CalendarClock size={16} className={!selectedPlan || queueLimitReached ? 'opacity-50' : 'opacity-100'} />
-                      <span className="text-sm font-bold tracking-wide">{checkoutActionLabel} Via PayOS</span>
-                    </span>
-                  )}
-                </button>
-
-                {queueLimitReached && (
-                  <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
-                    <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" />
-                    <p className="text-[11px] font-medium leading-relaxed text-amber-400">
-                      Your schedule is fully booked. You already hold maximum concurrent plans (1 Active + 1 Queued). Use what you have before unlocking more power.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
 
       {checkoutWarning && (

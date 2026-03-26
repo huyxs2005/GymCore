@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Clock, User, Zap, RefreshCw, AlertCircle, X, Info, Activity, CheckCircle2 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import WeekdayDropdown from '../../components/common/WeekdayDropdown'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
@@ -151,7 +150,6 @@ function CoachSchedulePage() {
   const [availability, setAvailability] = useState({})
   const [acceptingCustomerRequests, setAcceptingCustomerRequests] = useState(true)
   const [selectedAvailabilityDay, setSelectedAvailabilityDay] = useState(1)
-  const [selectedAvailabilitySummaryDay, setSelectedAvailabilitySummaryDay] = useState(1)
   const [scheduleMonthCursor, setScheduleMonthCursor] = useState('')
   const [selectedScheduleDate, setSelectedScheduleDate] = useState('')
   const [cancelModal, setCancelModal] = useState({
@@ -170,6 +168,7 @@ function CoachSchedulePage() {
   })
 
   const isFirstAvailabilityView = useRef(true)
+  const messageBannerRef = useRef(null)
 
   useEffect(() => {
     setActiveTab(getCoachScheduleTab(location.search))
@@ -404,6 +403,9 @@ function CoachSchedulePage() {
         acceptingCustomerRequests,
       })
       setMessage('Availability updated successfully. Selected slots stay visible so you can keep adjusting them.')
+      requestAnimationFrame(() => {
+        messageBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
       setTimeout(() => setMessage(''), 6000)
     } catch (err) {
       console.error('Error saving availability:', err)
@@ -450,17 +452,6 @@ function CoachSchedulePage() {
         endTime: slot.endTime,
       })))
   }, [availability, timeSlots])
-
-  const groupedAvailabilityEntries = useMemo(() => {
-    return DAYS.map((day) => ({
-      ...day,
-      slots: selectedAvailabilityEntries.filter((entry) => entry.dayOfWeek === day.dayOfWeek),
-    })).filter((day) => day.slots.length > 0)
-  }, [selectedAvailabilityEntries])
-
-  const selectedAvailabilitySummaryGroup = useMemo(() => {
-    return groupedAvailabilityEntries.find((day) => day.dayOfWeek === selectedAvailabilitySummaryDay) || groupedAvailabilityEntries[0] || null
-  }, [groupedAvailabilityEntries, selectedAvailabilitySummaryDay])
 
   const selectedAvailabilityDayName = useMemo(() => {
     return DAYS.find((day) => day.dayOfWeek === selectedAvailabilityDay)?.name || 'Monday'
@@ -511,54 +502,32 @@ function CoachSchedulePage() {
     setSelectedScheduleDate('')
   }, [mySchedule, sessionsByDate])
 
-  useEffect(() => {
-    if (groupedAvailabilityEntries.length === 0) {
-      return
-    }
-    if (!groupedAvailabilityEntries.some((day) => day.dayOfWeek === selectedAvailabilitySummaryDay)) {
-      setSelectedAvailabilitySummaryDay(groupedAvailabilityEntries[0].dayOfWeek)
-    }
-  }, [groupedAvailabilityEntries, selectedAvailabilitySummaryDay])
-
   return (
     <WorkspaceScaffold
       title="Performance Calendar"
       subtitle="Strategic management of your professional availability and training engagement pipeline."
+      showHeader={false}
     >
-      <div className="max-w-7xl space-y-8 pb-12">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex rounded-2xl bg-white/5 p-1.5 ring-1 ring-white/10 backdrop-blur-md">
+        <div className="max-w-7xl space-y-8 pb-12">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex rounded-2xl bg-white/5 p-1.5 ring-1 ring-white/10 backdrop-blur-md">
+            <span
+              className={`pointer-events-none absolute top-1.5 h-[calc(100%-12px)] w-[calc(50%-6px)] rounded-xl bg-gym-500 shadow-glow transition-all duration-300 ease-out ${
+                activeTab === 'availability' ? 'left-1.5' : 'left-[calc(50%+1.5px)]'
+              }`}
+            />
             <button
               onClick={() => setActiveTab('availability')}
-              className={`flex items-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'availability' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:text-slate-200'}`}
+              className={`relative z-10 flex w-1/2 items-center justify-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'availability' ? 'text-slate-950' : 'text-slate-500 hover:text-slate-200'}`}
             >
               <Activity className="h-4 w-4" /> Availability
             </button>
             <button
               onClick={() => setActiveTab('schedule')}
-              className={`flex items-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'schedule' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'text-slate-500 hover:text-slate-200'}`}
+              className={`relative z-10 flex w-1/2 items-center justify-center gap-3 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'schedule' ? 'text-slate-950' : 'text-slate-500 hover:text-slate-200'}`}
             >
-              <Calendar className="h-4 w-4" /> Agenda
+              <Calendar className="h-4 w-4" /> Timetable
             </button>
-          </div>
-          
-          <div className="hidden items-center gap-4 lg:flex">
-             <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Live Infrastructure Connected</span>
-          </div>
-        </div>
-
-        <div className="gc-glass-panel border-white/5 bg-white/[0.02] p-5">
-          <div className="flex items-start gap-4">
-            <div className="rounded-xl bg-gym-500/10 p-2.5 text-gym-500 ring-1 ring-gym-500/20">
-              <Info className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white uppercase tracking-tight mb-1">Operational Protocol</p>
-              <p className="text-[13px] leading-relaxed text-slate-500">
-                Current mode: <span className="text-slate-300 font-bold">{activeTab === 'availability' ? 'Synchronizing recurring slots to member booking flow' : 'Direct management of confirmed training engagements'}.</span> Ensure all time blocks are accurate to prevent scheduling conflicts.
-              </p>
-            </div>
           </div>
         </div>
 
@@ -575,9 +544,13 @@ function CoachSchedulePage() {
         )}
         
         {message && (
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-400 flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2">
+          <div ref={messageBannerRef} className={`rounded-2xl px-5 py-4 text-sm flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2 ${
+            acceptingCustomerRequests
+              ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+              : 'border border-rose-500/20 bg-rose-500/10 text-rose-400'
+          }`}>
             <div className="flex items-center gap-3 font-medium">
-              <CheckCircle2 className="h-5 w-5" />
+              {acceptingCustomerRequests ? <CheckCircle2 className="h-5 w-5" /> : <X className="h-5 w-5" />}
               {message}
             </div>
             <button onClick={() => setMessage('')} className="p-1 hover:bg-white/5 rounded-lg transition-colors">
@@ -591,45 +564,44 @@ function CoachSchedulePage() {
             <div className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
               <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Base Availability</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Define your recurring operational windows for automated member bookings.
+                  <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Set your availability</h2>
+                </div>
+                <div className="flex flex-col items-start gap-3 sm:items-end">
+                  <div className="flex items-center gap-2 px-1 py-1">
+                    <span className="h-2 w-2 rounded-full bg-gym-500 shadow-glow" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                      {selectedAvailabilityEntries.length} Slots Active
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white">
+                    Customer Acceptance
                   </p>
+                  <div className="flex flex-wrap items-center justify-end gap-4">
+                    <button
+                      type="button"
+                      onClick={() => openIntakeToggleDialog(!acceptingCustomerRequests)}
+                      className={`relative inline-flex h-12 min-w-[240px] items-center rounded-full border p-1.5 transition-all duration-300 ${
+                        acceptingCustomerRequests
+                          ? 'border-emerald-300/25 bg-[linear-gradient(135deg,rgba(16,185,129,0.3),rgba(52,211,153,0.78))] text-white shadow-[0_0_30px_rgba(74,222,128,0.16)]'
+                          : 'border-rose-300/25 bg-[linear-gradient(135deg,rgba(244,63,94,0.34),rgba(251,113,133,0.78))] text-white shadow-[0_0_30px_rgba(244,63,94,0.12)]'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1.5 h-9 w-[calc(50%-6px)] rounded-full bg-white shadow-[0_10px_22px_rgba(15,23,42,0.18)] transition-all duration-300 ${
+                          acceptingCustomerRequests ? 'left-[calc(50%+1.5px)]' : 'left-[6px]'
+                        }`}
+                      />
+                      <span className="relative z-10 grid w-full grid-cols-2 text-xs font-black uppercase tracking-[0.24em]">
+                        <span className={`flex items-center justify-center ${acceptingCustomerRequests ? 'text-white/55' : 'text-slate-950'}`}>
+                          Pause
+                        </span>
+                        <span className={`flex items-center justify-center ${acceptingCustomerRequests ? 'text-slate-950 translate-x-1' : 'text-white/55'}`}>
+                          Accepting
+                        </span>
+                      </span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 border border-white/5">
-                  <span className="h-2 w-2 rounded-full bg-gym-500 shadow-glow" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-                    {selectedAvailabilityEntries.length} Slots Active
-                  </span>
-                </div>
-              </div>
-
-              <div className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-white/[0.03] px-5 py-4">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Coach Intake</p>
-                  <p className="mt-1 text-sm text-slate-300">
-                    Choose whether you still want to appear in customer PT match results.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openIntakeToggleDialog(!acceptingCustomerRequests)}
-                  className={`relative inline-flex h-11 min-w-[214px] items-center rounded-full px-3 transition-all ${
-                    acceptingCustomerRequests
-                      ? 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30'
-                  }`}
-                >
-                  <span
-                    className={`absolute h-8 w-8 rounded-full transition-all ${
-                      acceptingCustomerRequests ? 'translate-x-[156px] bg-emerald-400' : 'translate-x-0 bg-rose-400'
-                    }`}
-                  />
-                  <span className="relative z-10 flex w-full items-center justify-between gap-6 text-[10px] font-black uppercase tracking-[0.2em]">
-                    <span>Pause intake</span>
-                    <span>{acceptingCustomerRequests ? 'Accepting customers' : 'Hidden from matches'}</span>
-                  </span>
-                </button>
               </div>
 
               {loading && timeSlots.length === 0 ? (
@@ -644,19 +616,19 @@ function CoachSchedulePage() {
                   <p className="mt-1 text-xs text-amber-500/80 italic">No operational time slots were retrieved from the core engine.</p>
                 </div>
               ) : (
-                <div className="grid gap-8 xl:grid-cols-[1.5fr_1fr]">
-                  <div className="space-y-6">
+                <div className="space-y-8">
+                  <div className="space-y-4">
                     <div className="flex items-center gap-2">
                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">Weekly Cycle Selector</p>
                        <div className="h-px flex-1 bg-white/5" />
                     </div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="flex gap-3 overflow-x-auto pb-2">
                       {DAYS.map((day) => (
                         <button
                           key={`availability-day-${day.dayOfWeek}`}
                           type="button"
                           onClick={() => setSelectedAvailabilityDay(day.dayOfWeek)}
-                          className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 ${selectedAvailabilityDay === day.dayOfWeek
+                          className={`group relative min-w-[148px] flex-1 overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 ${selectedAvailabilityDay === day.dayOfWeek
                             ? 'border-gym-500 bg-gym-500/5 text-white shadow-glow-sm'
                             : 'border-white/5 bg-white/[0.03] text-slate-500 hover:border-white/20 hover:bg-white/5'
                             }`}
@@ -674,14 +646,24 @@ function CoachSchedulePage() {
                     </div>
                   </div>
 
-                  <div className="gc-glass-panel border-white/10 bg-white/[0.03] p-6 ring-1 ring-white/5 flex flex-col min-h-[400px]">
-                    <div className="mb-6">
-                       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gym-500 mb-1">Active configuration</p>
-                       <h4 className="text-xl font-black text-white font-display uppercase tracking-tight">{selectedAvailabilityDayName}</h4>
-                       <p className="mt-1 text-xs text-slate-500 leading-relaxed">Toggle operational windows to finalize your public calendar visibility.</p>
+                  <div className="p-1">
+                    <div className="mb-6 flex items-start justify-between gap-4">
+                      <div>
+                         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gym-500 mb-1">Active configuration</p>
+                         <h4 className="text-xl font-black text-white font-display uppercase tracking-tight">{selectedAvailabilityDayName}</h4>
+                         <p className="mt-1 text-xs text-slate-500 leading-relaxed">Toggle your public calendar visibility.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveAvailability}
+                        disabled={loading}
+                        className="gc-button-primary !h-11 !px-6 !text-xs !font-black !tracking-[0.16em]"
+                      >
+                        {loading ? 'Saving...' : 'Save'}
+                      </button>
                     </div>
 
-                    <div className="mt-4 flex-1 space-y-2 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="mt-4 grid gap-2 xl:grid-cols-2">
                       {timeSlots.map((slot) => {
                         const selected = availability[`${selectedAvailabilityDay}-${slot.timeSlotId}`] === true
                         return (
@@ -696,14 +678,13 @@ function CoachSchedulePage() {
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-4">
-                                <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-black/10 font-black text-xs ${selected ? 'text-slate-900 bg-black/5' : 'text-slate-500'}`}>
-                                  T{slot.slotIndex}
+                                <div className={`flex h-10 min-w-[74px] items-center justify-center rounded-xl bg-black/10 px-2 font-black text-xs ${selected ? 'text-slate-900 bg-black/5' : 'text-slate-500'}`}>
+                                  Slot {slot.slotIndex}
                                 </div>
                                 <div>
                                   <p className={`text-sm font-black uppercase tracking-tight ${selected ? 'text-slate-900' : 'text-white'}`}>
                                     {String(slot.startTime || '').slice(0, 5)} — {String(slot.endTime || '').slice(0, 5)}
                                   </p>
-                                  <p className={`text-[10px] font-bold uppercase tracking-widest ${selected ? 'text-slate-800/60' : 'text-slate-600'}`}>Training Window</p>
                                 </div>
                               </div>
                               <div className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ring-1 ${selected ? 'bg-black/10 text-slate-900 ring-black/5' : 'bg-white/5 text-slate-600 ring-white/10'}`}>
@@ -718,99 +699,12 @@ function CoachSchedulePage() {
                 </div>
               )}
 
-              <div className="mt-12 rounded-[2rem] border border-white/5 bg-white/[0.01] p-8 ring-1 ring-white/5">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="max-w-xl">
-                    <p className="text-[10px] font-black tracking-[0.3em] text-slate-600 uppercase mb-2">Operational Commitment</p>
-                    <h3 className="text-xl font-bold text-white font-display uppercase tracking-tight">Review & Finalize Protocols</h3>
-                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-                      Confirm your weekly commitments before committing to the public infrastructure. 
-                      Changes are propagated immediately to the member booking ecosystem.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSaveAvailability}
-                    disabled={loading}
-                    className="gc-button-primary !h-14 !px-10 !text-sm !font-black !tracking-[0.1em] shadow-glow"
-                  >
-                    {loading ? 'Committing Changes...' : 'Synchronize Schedule'}
-                  </button>
-                </div>
-
-                {selectedAvailabilityEntries.length === 0 ? (
-                  <div className="mt-8 flex items-center gap-3 rounded-2xl border border-dashed border-white/10 p-6">
-                     <AlertCircle className="h-5 w-5 text-slate-700" />
-                     <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">No availability vectors established yet.</p>
-                  </div>
-                ) : (
-                  <div className="mt-10 space-y-8 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-                      <div className="w-full sm:max-w-md">
-                        <WeekdayDropdown
-                          id="availability-summary-day"
-                          label="Cycle Summary Review"
-                          value={selectedAvailabilitySummaryGroup?.dayOfWeek || ''}
-                          onChange={(nextValue) => setSelectedAvailabilitySummaryDay(Number(nextValue))}
-                          options={groupedAvailabilityEntries.map((day) => ({
-                            value: day.dayOfWeek,
-                            label: day.name,
-                            meta: `Reviewing ${day.slots.length} operational window${day.slots.length > 1 ? 's' : ''}`,
-                            badge: `${day.slots.length} Slots`,
-                          }))}
-                          summaryText="Analyze your established windows for each day of the recurring weekly cycle."
-                        />
-                      </div>
-                      {selectedAvailabilitySummaryGroup && (
-                        <div className="flex h-11 items-center gap-2 rounded-xl bg-white/5 px-4 border border-white/10">
-                           <span className="h-1.5 w-1.5 rounded-full bg-gym-500 shadow-glow" />
-                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedAvailabilitySummaryGroup.slots.length} Windows identified</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {selectedAvailabilitySummaryGroup && (
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {selectedAvailabilitySummaryGroup.slots.map((entry) => (
-                          <button
-                            key={`selected-${entry.dayOfWeek}-${entry.timeSlotId}`}
-                            type="button"
-                            onClick={() => toggleSlot(entry.dayOfWeek, entry.timeSlotId)}
-                            className="group flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3 transition-all hover:border-rose-500/30 hover:bg-rose-500/5"
-                            title="Decommission operational window"
-                          >
-                            <div className="min-w-0">
-                               <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-0.5 group-hover:text-rose-500/50">Vector {entry.slotIndex}</p>
-                               <p className="truncate text-xs font-bold text-white group-hover:text-rose-200">{String(entry.startTime || '').slice(0, 5)} – {String(entry.endTime || '').slice(0, 5)}</p>
-                            </div>
-                            <X className="h-3.5 w-3.5 text-slate-700 transition-colors group-hover:text-rose-500" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
-          </div>
         )}
 
         {activeTab === 'schedule' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Operational Agenda</h2>
-                <p className="mt-1 text-sm text-slate-500">Intelligent overview of your confirmed training engagements.</p>
-              </div>
-              <button
-                onClick={loadMySchedule}
-                className="group flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 border border-white/5 hover:bg-white/10 hover:text-white transition-all"
-              >
-                <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin text-gym-500' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
-                Synchronize
-              </button>
-            </div>
-
             {loading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-3xl bg-white/[0.02] border border-white/5" />)}</div>}
 
             {!loading && mySchedule.length === 0 && (
@@ -828,8 +722,7 @@ function CoachSchedulePage() {
                 <div className="gc-glass-panel border-white/10 bg-white/[0.01] p-6 shadow-2xl">
                   <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gym-500 mb-1">Temporal Grid</p>
-                      <h4 className="text-lg font-black text-white font-display uppercase tracking-tight">Engagement Matrix</h4>
+                      <h4 className="text-lg font-black text-white font-display uppercase tracking-tight">Weekly timetable</h4>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl bg-black/40 p-1.5 ring-1 ring-white/10">
                       <button
@@ -871,16 +764,16 @@ function CoachSchedulePage() {
                             type="button"
                             onClick={() => hasSessions && setSelectedScheduleDate(day.value)}
                             className={`group relative flex min-h-[100px] flex-col rounded-2xl border p-3 transition-all duration-300 ${hasSessions
-                              ? 'border-emerald-500/20 bg-emerald-500/5 text-white shadow-glow-sm hover:border-emerald-500/40'
+                              ? `${dayAppearance?.dayClass || 'border-emerald-500/20 bg-emerald-500/5 text-white shadow-glow-sm hover:border-emerald-500/40'} text-white`
                               : day.isCurrentMonth
                                 ? 'border-white/5 bg-white/[0.02] text-slate-500 hover:border-white/10'
-                                : 'border-transparent bg-transparent text-slate-800'
-                              } ${isSelected ? 'ring-2 ring-gym-500 ring-offset-4 ring-offset-[#0a0a0f]' : ''}`}
+                                : 'border-transparent bg-transparent text-slate-500'
+                              } ${isSelected ? `${dayAppearance?.dotClass?.includes('red') ? 'ring-2 ring-red-500' : 'ring-2 ring-gym-500'} ring-offset-4 ring-offset-[#0a0a0f]` : ''}`}
                           >
                             <div className="flex items-start justify-between">
-                              <span className={`text-xs font-black ${day.isCurrentMonth ? (hasSessions ? 'text-white' : 'text-slate-400') : 'text-slate-800'}`}>{day.dayNumber}</span>
+                              <span className={`text-xs font-black ${day.isCurrentMonth ? (hasSessions ? 'text-white' : 'text-slate-400') : 'text-slate-400'}`}>{day.dayNumber}</span>
                               {hasSessions && (
-                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 shadow-glow" />
+                                <span className={`h-1.5 w-1.5 animate-pulse rounded-full ${dayAppearance?.dotClass || 'bg-emerald-500 shadow-glow'}`} />
                               )}
                             </div>
                             
@@ -888,9 +781,9 @@ function CoachSchedulePage() {
                               <div className="mt-auto">
                                 <div className="flex flex-col gap-1">
                                    <div className="h-1 w-full rounded-full bg-white/10 overflow-hidden">
-                                      <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, daySessions.length * 20)}%` }} />
+                                      <div className={`h-full ${dayAppearance?.countClass?.includes('red') ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, daySessions.length * 20)}%` }} />
                                    </div>
-                                   <p className="text-[9px] font-black uppercase tracking-tighter text-emerald-500/80">
+                                   <p className={`text-[9px] font-black uppercase tracking-tighter ${dayAppearance?.countClass || 'text-emerald-700'}`}>
                                       {daySessions.length} {daySessions.length === 1 ? 'Slot' : 'Slots'}
                                    </p>
                                 </div>
@@ -1084,3 +977,4 @@ function CoachSchedulePage() {
 }
 
 export default CoachSchedulePage
+

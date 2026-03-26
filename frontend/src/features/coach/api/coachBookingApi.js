@@ -26,7 +26,7 @@ export const coachBookingApi = {
     return apiClient.patch(`/v1/coach-booking/sessions/${sessionId}/cancel`, body).then((response) => response.data)
   },
   deleteRequest(requestId) {
-    return apiClient.patch(`/v1/coach-booking/requests/${requestId}/delete`).then((response) => response.data)
+    return apiClient.patch(`/v1/coach-booking/requests/${requestId}/cancel`).then((response) => response.data)
   },
   rescheduleSession(sessionId, payload) {
     return apiClient

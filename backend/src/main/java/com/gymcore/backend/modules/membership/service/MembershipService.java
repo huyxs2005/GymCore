@@ -328,6 +328,20 @@ public class MembershipService {
         int paymentId = insertPaymentForMembership(customerMembershipId, claimId, subtotal, discount, totalAmount,
                 paymentMethod);
 
+        if (totalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return completeZeroAmountMembershipCheckout(
+                    paymentId,
+                    customerMembershipId,
+                    subtotal,
+                    discount,
+                    totalAmount,
+                    paymentMethod,
+                    mode,
+                    plan,
+                    startDate,
+                    endDate);
+        }
+
         List<PayOsService.PayOsItem> payOsItems = List.of(
                 new PayOsService.PayOsItem(
                         plan.planName(),
@@ -384,6 +398,60 @@ public class MembershipService {
                 startDate,
                 endDate,
                 false);
+    }
+
+    private Map<String, Object> completeZeroAmountMembershipCheckout(
+            int paymentId,
+            int customerMembershipId,
+            BigDecimal subtotal,
+            BigDecimal discount,
+            BigDecimal totalAmount,
+            String paymentMethod,
+            CheckoutMode mode,
+            MembershipPlan plan,
+            LocalDate startDate,
+            LocalDate endDate) {
+        try {
+            jdbcTemplate.update("""
+                    UPDATE dbo.Payments
+                    SET PayOS_Status = ?,
+                        PaymentMethod = ?
+                    WHERE PaymentID = ? AND Status = 'PENDING'
+                    """, "SUCCESS", paymentMethod, paymentId);
+            jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
+            applyImmediateUpgradeActivationIfNeeded(paymentId);
+            markMembershipClaimUsageIfNeeded(paymentId);
+            notifySuccessfulPayment(paymentId);
+        } catch (Exception exception) {
+            markCheckoutCreationFailed(customerMembershipId, paymentId);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to complete zero-amount membership checkout.",
+                    exception);
+        }
+
+        Map<String, Object> response = buildCheckoutResponse(
+                paymentId,
+                customerMembershipId,
+                null,
+                subtotal,
+                discount,
+                totalAmount.max(BigDecimal.ZERO),
+                paymentMethod,
+                mode,
+                plan,
+                startDate,
+                endDate,
+                false);
+        response.put("status", "SUCCESS");
+        response.put("completedWithoutPayment", true);
+        response.put("message", "Membership activated successfully.");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> membership = (Map<String, Object>) response.get("membership");
+        if (membership != null) {
+            membership.put("status", "ACTIVE");
+        }
+        return response;
     }
 
     private Map<String, Object> customerConfirmPaymentReturn(String authorizationHeader, Map<String, Object> payload) {

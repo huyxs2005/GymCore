@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import QRCode from 'qrcode'
-import { CheckCircle2, History, Activity, UserCog, ClipboardList, Plus, Scale, Ruler } from 'lucide-react'
+import { History, Activity, Plus, Scale, Ruler } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
-import { checkinApi } from '../../features/checkin/api/checkinApi'
 import { healthApi } from '../../features/health/api/healthApi'
 import { getBmiLevel } from '../../features/health/utils/bmi'
 
@@ -30,13 +27,6 @@ function resolveApiMessage(error, fallback) {
   return error?.response?.data?.message || fallback
 }
 
-function formatDateTime(value) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleString('en-GB')
-}
-
 function formatDate(value) {
   if (!value) return '-'
   const parsed = new Date(value)
@@ -49,37 +39,11 @@ function parseBmi(value) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function getBmiNeedleAngle(bmi) {
-  if (bmi == null) return -150
+function getBmiIndicatorPercent(bmi) {
+  if (bmi == null) return 0
   const clamped = Math.min(BMI_GAUGE_MAX, Math.max(BMI_GAUGE_MIN, bmi))
   const progress = (clamped - BMI_GAUGE_MIN) / (BMI_GAUGE_MAX - BMI_GAUGE_MIN)
-  return -90 + progress * 180
-}
-
-function getGaugePoint(cx, cy, radius, angleDegrees) {
-  const radians = (Math.PI / 180) * angleDegrees
-  return {
-    x: cx + radius * Math.cos(radians),
-    y: cy + radius * Math.sin(radians),
-  }
-}
-
-function getGaugeAngle(value) {
-  const progress = (value - BMI_GAUGE_MIN) / (BMI_GAUGE_MAX - BMI_GAUGE_MIN)
-  return 180 + progress * 180
-}
-
-function getGaugeArcPath(radius, startValue, endValue) {
-  const startAngle = getGaugeAngle(startValue)
-  const endAngle = getGaugeAngle(endValue)
-  const start = getGaugePoint(160, 176, radius, startAngle)
-  const end = getGaugePoint(160, 176, radius, endAngle)
-
-  return {
-    path: `M ${start.x} ${start.y} A ${radius} ${radius} 0 0 1 ${end.x} ${end.y}`,
-    startAngle,
-    endAngle,
-  }
+  return progress * 100
 }
 
 function describeBmiRange(min, max) {
@@ -121,11 +85,8 @@ function hasCurrentHealthData(currentHealth) {
 }
 
 function CustomerCheckinHealthPage() {
-  const [qrDataUrl, setQrDataUrl] = useState('')
-  const [checkinHistory, setCheckinHistory] = useState([])
   const [currentHealth, setCurrentHealth] = useState(null)
   const [healthHistory, setHealthHistory] = useState([])
-  const [coachNotes, setCoachNotes] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [submittingHealth, setSubmittingHealth] = useState(false)
@@ -138,31 +99,20 @@ function CustomerCheckinHealthPage() {
   const hasHealthData = hasCurrentHealthData(currentHealth)
   const currentBmi = parseBmi(currentHealth?.bmi)
   const bmiLevel = getBmiLevel(currentBmi)
-  const bmiNeedleAngle = getBmiNeedleAngle(currentBmi)
+  const bmiIndicatorPercent = getBmiIndicatorPercent(currentBmi)
   const healthyWeightRange = getHealthyWeightRange(currentHealth?.heightCm)
 
   async function loadData() {
     setLoading(true)
     setError('')
     try {
-      const [qrRes, checkinRes, healthCurrRes, healthHistRes, notesRes] = await Promise.all([
-        checkinApi.getQrToken(),
-        checkinApi.getHistory(),
+      const [healthCurrRes, healthHistRes] = await Promise.all([
         healthApi.getCurrent(),
         healthApi.getHistory(),
-        checkinApi.getCoachNotes(),
       ])
 
-      setCheckinHistory(checkinRes.data?.items || [])
       setCurrentHealth(healthCurrRes.data || null)
       setHealthHistory(healthHistRes.data?.items || [])
-      setCoachNotes(notesRes.data?.items || [])
-
-      if (qrRes.data?.qrCodeToken) {
-        QRCode.toDataURL(qrRes.data.qrCodeToken, { width: 400, margin: 2 }, (err, url) => {
-          if (!err) setQrDataUrl(url)
-        })
-      }
     } catch (err) {
       setError(resolveApiMessage(err, 'Failed to load data.'))
     } finally {
@@ -209,108 +159,11 @@ function CustomerCheckinHealthPage() {
       title="Check-in & Health Log"
       subtitle="Use this page for check-in QR, manual body metrics, and raw history. Progress Hub remains the main overview for follow-up."
       links={customerNav}
+      showHeader={false}
     >
-      <section className="mb-6 overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.1),_transparent_30%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.94)_45%,_rgba(24,26,38,0.94))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
-        <div className="grid gap-5 lg:grid-cols-[1.6fr,1fr]">
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gym-500">Action and logging workspace</p>
-            <div>
-              <h2 className="text-3xl font-black tracking-tight text-white">Capture check-ins and body metrics without losing sight of the bigger progress story.</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-                This page is built for actions you perform yourself: showing your QR, entering new measurements, and reviewing raw attendance and metric history.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400">
-                Manual metric entry
-              </span>
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">
-                QR check-in ready
-              </span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-400">
-                Raw history access
-              </span>
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-ambient-sm backdrop-blur-md">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current BMI</p>
-              <p className="mt-2 text-lg font-black text-white">{currentBmi == null ? '--' : currentBmi.toFixed(1)}</p>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-ambient-sm backdrop-blur-md">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current category</p>
-              <p className={`mt-2 text-lg font-black ${bmiLevel.textClass}`}>{currentBmi == null ? 'Awaiting metrics' : bmiLevel.label}</p>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-ambient-sm backdrop-blur-md">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Check-in records</p>
-              <p className="mt-2 text-lg font-black text-white">{checkinHistory.length}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="mb-6 flex flex-col gap-3 rounded-[2rem] border border-gym-500/20 bg-gym-500/10 p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gym-400">Progress-first destination</p>
-          <h2 className="mt-2 text-xl font-black text-slate-100">Use Progress Hub for the full health and PT follow-up story.</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            This page keeps your QR, check-in history, and manual metric entry available while the new hub becomes the main place to review progress.
-          </p>
-        </div>
-        <Link
-          to="/customer/progress-hub"
-          className="inline-flex items-center justify-center rounded-full bg-gym-600 px-5 py-3 text-sm font-bold text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.3)] transition hover:bg-gym-500"
-        >
-          Open Progress Hub
-        </Link>
-      </div>
-
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <article className="gc-glass-panel p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Use this page for</p>
-          <p className="mt-3 text-lg font-black text-slate-100">Scan, record, verify</p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Show your QR at arrival, add fresh body metrics, and inspect the raw records behind your follow-up view.
-          </p>
-        </article>
-        <article className="gc-glass-panel p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Progress Hub is for</p>
-          <p className="mt-3 text-lg font-black text-slate-100">Overview and next actions</p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Use the hub when you want the combined story: latest snapshot, PT context, coach notes, and follow-up focus.
-          </p>
-        </article>
-        <article className="gc-glass-panel p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">PT dashboard is for</p>
-          <p className="mt-3 text-lg font-black text-slate-100">Booking and schedule changes</p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            When you need coach matches, request status, or future PT sessions, switch to the dedicated PT workspace.
-          </p>
-        </article>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="lg:col-span-1">
-          <article className="gc-card flex flex-col items-center" style={{ background: 'linear-gradient(180deg, #ffffff, #f8fafc)' }}>
-            <div className="mb-4 flex items-center gap-2 self-start">
-              <CheckCircle2 className="h-5 w-5 text-gym-600" />
-              <h2 className="text-lg font-bold text-slate-800" style={{ color: '#1e293b' }}>Check-in QR Code</h2>
-            </div>
-            <div className="relative aspect-square w-full max-w-[240px] overflow-hidden rounded-xl border border-slate-100 p-2 shadow-inner" style={{ backgroundColor: '#f8fafc' }}>
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="Check-in QR" className="h-full w-full object-contain" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs" style={{ color: '#94a3b8' }}>
-                  Generating QR...
-                </div>
-              )}
-            </div>
-            <p className="mt-4 text-center text-sm" style={{ color: '#475569' }}>
-              Show this QR code at the front desk when you arrive to check in.
-            </p>
-          </article>
-
-          <article className="gc-glass-panel mt-6 p-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <section className="space-y-6">
+          <article className="gc-glass-panel p-6">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500/10 text-gym-500 border border-gym-500/20">
                 <Activity size={20} strokeWidth={2.5} />
@@ -338,93 +191,59 @@ function CustomerCheckinHealthPage() {
                 </div>
 
                 <div className="rounded-[2rem] border border-white/10 bg-black/30 px-5 py-6">
-                  <div className="mx-auto max-w-[360px]">
-                    <div className="relative">
-                      <svg viewBox="0 0 320 220" className="w-full overflow-visible">
-                        {BMI_SEGMENTS.map((segment) => {
-                          const { path, startAngle, endAngle } = getGaugeArcPath(118, segment.min, segment.max)
-                          const labelAngle = (startAngle + endAngle) / 2
-                          const labelPoint = getGaugePoint(160, 176, 92, labelAngle)
-                          return (
-                            <g key={segment.label}>
-                              <path
-                                d={path}
-                                fill="none"
-                                stroke={segment.color}
-                                strokeWidth="34"
-                                strokeLinecap="butt"
-                                opacity="0.8"
-                              />
-                              <text
-                                x={labelPoint.x}
-                                y={labelPoint.y}
-                                fill="#ffffff"
-                                fontSize="9"
-                                fontWeight="700"
-                                textAnchor="middle"
-                                transform={`rotate(${labelAngle - 270} ${labelPoint.x} ${labelPoint.y})`}
-                              >
-                                {segment.label}
-                              </text>
-                            </g>
-                          )
-                        })}
-
-                        {[16, 18.5, 25, 40].map((mark) => {
-                          const angle = getGaugeAngle(mark)
-                          const point = getGaugePoint(160, 176, 72, angle)
-                          return (
-                            <text
-                              key={mark}
-                              x={point.x}
-                              y={point.y}
-                              fill="#94A3B8"
-                              fontSize="7"
-                              fontWeight="700"
-                              textAnchor="middle"
-                              dominantBaseline="middle"
-                              transform={`rotate(${angle - 270} ${point.x} ${point.y})`}
-                            >
-                              {mark.toFixed(1)}
-                            </text>
-                          )
-                        })}
-
-                        {/* Background track for gauge */}
-                        <path
-                          d={getGaugeArcPath(98, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path}
-                          fill="none"
-                          stroke="#ffffff08"
-                          strokeWidth="30"
-                          strokeLinecap="round"
+                  <div className="mx-auto max-w-[460px]">
+                    <div className="relative px-1 pt-8">
+                      <div
+                        className="absolute top-0 -translate-x-1/2 transition-[left] duration-500 ease-out"
+                        style={{ left: `${bmiIndicatorPercent}%` }}
+                      >
+                        <div
+                          className="h-0 w-0 border-l-[10px] border-r-[10px] border-t-[16px] border-l-transparent border-r-transparent"
+                          style={{ borderTopColor: bmiLevel.accent }}
                         />
-                        <path
-                          d={getGaugeArcPath(98, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path}
-                          fill="none"
-                          stroke="#ffffff0a"
-                          strokeWidth="28"
-                          strokeLinecap="round"
-                        />
-
-                        {/* Needle */}
-                        <g
-                          transform={`rotate(${bmiNeedleAngle} 160 176)`}
-                          style={{ transition: 'transform 520ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-                        >
-                          <path d="M 160 176 L 151 78 L 169 78 Z" fill={bmiLevel.accent} opacity="1" />
-                        </g>
-
-                        {/* Needle joint */}
-                        <circle cx="160" cy="176" r="10" fill="#1E293B" />
-                        <circle cx="160" cy="176" r="4" fill="#ffffff" />
-
-                        <text x="160" y="135" fill="#64748b" fontSize="11" fontWeight="700" textAnchor="middle">
-                          BMI
-                        </text>
-                        <text x="160" y="160" fill={bmiLevel.accent} fontSize="24" fontWeight="800" textAnchor="middle">
-                          {currentBmi == null ? '--' : currentBmi.toFixed(1)}
-                        </text>
-                      </svg>
+                      </div>
+                      <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#11121a]">
+                        <div className="flex h-20">
+                          {BMI_SEGMENTS.map((segment) => (
+                            <div
+                              key={segment.label}
+                              className="h-full"
+                              style={{
+                                background: `linear-gradient(180deg, ${segment.color}22, ${segment.color}55)`,
+                                width: `${((segment.max - segment.min) / (BMI_GAUGE_MAX - BMI_GAUGE_MIN)) * 100}%`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                        <span>{BMI_GAUGE_MIN.toFixed(1)}</span>
+                        <span>18.5</span>
+                        <span>25.0</span>
+                        <span>{BMI_GAUGE_MAX.toFixed(1)}</span>
+                      </div>
+                      <div className="mt-5 flex items-end justify-between gap-4">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Current BMI</p>
+                          <p className="mt-2 text-4xl font-black" style={{ color: bmiLevel.accent }}>
+                            {currentBmi == null ? '--' : currentBmi.toFixed(1)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Target zone</p>
+                          <p className="mt-2 text-base font-bold text-emerald-400">
+                            {healthyWeightRange ? `${healthyWeightRange.min.toFixed(1)} - ${healthyWeightRange.max.toFixed(1)} kg` : '--'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                        {BMI_SEGMENTS.map((segment) => (
+                          <div key={segment.label} className="flex items-center justify-center gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-sm" style={{ backgroundColor: segment.color }} />
+                            <span className="leading-none text-xs font-bold uppercase tracking-[0.14em] text-slate-300">{segment.label}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -465,17 +284,9 @@ function CustomerCheckinHealthPage() {
                     })}
                   </div>
 
-                  <div className="mt-5 grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/5 bg-black/20 px-5 py-4">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Target Weight</p>
-                      <p className="mt-2 text-lg font-black text-emerald-400">
-                        {healthyWeightRange ? `${healthyWeightRange.min.toFixed(1)} - ${healthyWeightRange.max.toFixed(1)} kg` : '--'}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-white/5 bg-black/20 px-5 py-4">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Last Synced</p>
-                      <p className="mt-2 text-base font-bold text-slate-200">{formatDate(currentHealth.updatedAt)}</p>
-                    </div>
+                  <div className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-5 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Last Synced</p>
+                    <p className="mt-2 text-base font-bold text-slate-200">{formatDate(currentHealth.updatedAt)}</p>
                   </div>
                 </div>
               </div>
@@ -499,19 +310,43 @@ function CustomerCheckinHealthPage() {
                 </div>
 
                 <div className="rounded-[2rem] border border-white/10 bg-black/30 px-5 py-6">
-                  <div className="mx-auto max-w-[360px]">
-                    <div className="relative opacity-60 grayscale filter">
-                      <svg viewBox="0 0 320 220" className="w-full overflow-visible">
-                        <path d={getGaugeArcPath(98, BMI_GAUGE_MIN, BMI_GAUGE_MAX).path} fill="none" stroke="#ffffff0a" strokeWidth="30" strokeLinecap="round" />
-                        <circle cx="160" cy="176" r="10" fill="#1E293B" />
-                        <circle cx="160" cy="176" r="4" fill="#ffffff" />
-                        <text x="160" y="135" fill="#64748b" fontSize="11" fontWeight="700" textAnchor="middle">
-                          BMI
-                        </text>
-                        <text x="160" y="160" fill="#94A3B8" fontSize="24" fontWeight="800" textAnchor="middle">
-                          --
-                        </text>
-                      </svg>
+                  <div className="mx-auto max-w-[460px] opacity-65 grayscale">
+                    <div className="relative px-1 pt-8">
+                      <div className="absolute left-0 top-0 -translate-x-1/2">
+                        <div className="h-0 w-0 border-l-[10px] border-r-[10px] border-t-[16px] border-l-transparent border-r-transparent border-t-slate-500" />
+                      </div>
+                      <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#11121a]">
+                        <div className="flex h-20">
+                          {BMI_SEGMENTS.map((segment) => (
+                            <div
+                              key={segment.label}
+                              className="h-full"
+                              style={{
+                                background: `linear-gradient(180deg, ${segment.color}18, ${segment.color}40)`,
+                                width: `${((segment.max - segment.min) / (BMI_GAUGE_MAX - BMI_GAUGE_MIN)) * 100}%`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                        <span>{BMI_GAUGE_MIN.toFixed(1)}</span>
+                        <span>18.5</span>
+                        <span>25.0</span>
+                        <span>{BMI_GAUGE_MAX.toFixed(1)}</span>
+                      </div>
+                      <div className="mt-5">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Current BMI</p>
+                        <p className="mt-2 text-4xl font-black text-slate-500">--</p>
+                      </div>
+                      <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                        {BMI_SEGMENTS.map((segment) => (
+                          <div key={segment.label} className="flex items-center justify-center gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-sm" style={{ backgroundColor: segment.color }} />
+                            <span className="leading-none text-xs font-bold uppercase tracking-[0.14em] text-slate-300">{segment.label}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -537,13 +372,14 @@ function CustomerCheckinHealthPage() {
               </div>
             )}
           </article>
+
         </section>
 
-        <section className="space-y-6 lg:col-span-2">
+        <section className="space-y-6">
           <article className="gc-glass-panel p-6">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500/10 text-gym-500 border border-gym-500/20">
-                <UserCog size={20} strokeWidth={2.5} />
+                <Plus size={20} strokeWidth={2.5} />
               </div>
               <h2 className="text-lg font-bold text-slate-100">Update Body Metrics</h2>
             </div>
@@ -588,82 +424,6 @@ function CustomerCheckinHealthPage() {
             </form>
           </article>
 
-          <article className="gc-glass-panel p-6">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500/10 text-gym-500 border border-gym-500/20">
-                <ClipboardList size={20} strokeWidth={2.5} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-100">Coach Logbook</h2>
-            </div>
-            <div className="gc-scrollbar-hidden max-h-[320px] space-y-4 overflow-y-auto pr-2">
-              {coachNotes.length > 0 ? (
-                coachNotes.map((note) => (
-                  <div key={note.noteId} className="rounded-[1.25rem] border border-white/5 bg-white/5 p-5 transition hover:bg-white/10 hover:border-white/10">
-                    <div className="mb-3 flex items-start justify-between border-b border-white/5 pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400 border border-emerald-500/20">
-                          {note.coachName?.charAt(0) || 'C'}
-                        </div>
-                        <p className="text-sm font-bold text-slate-200">{note.coachName}</p>
-                      </div>
-                      <span className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {formatDate(note.sessionDate)}
-                      </span>
-                    </div>
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
-                      {note.noteContent}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-[1.25rem] border border-dashed border-white/10 bg-white/5 p-8 text-center">
-                  <p className="text-sm font-medium text-slate-500">No coach evaluations or logbook entries recorded yet.</p>
-                </div>
-              )}
-            </div>
-          </article>
-
-          <article className="gc-glass-panel p-6">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500/10 text-gym-500 border border-gym-500/20">
-                <History size={20} strokeWidth={2.5} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-100">Access History</h2>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-white/10 bg-black/40 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                  <tr>
-                    <th className="px-5 py-4">Timestamp</th>
-                    <th className="px-5 py-4">Active Plan Context</th>
-                    <th className="px-5 py-4">Verifier</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {checkinHistory.length > 0 ? (
-                    checkinHistory.map((item) => (
-                      <tr key={item.checkInId} className="transition-colors hover:bg-white/5">
-                        <td className="px-5 py-4 text-[13px] font-medium text-slate-300">{formatDateTime(item.checkInTime)}</td>
-                        <td className="px-5 py-4">
-                          <span className="inline-flex items-center rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                            {item.planName}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-[13px] text-slate-400">{item.checkedByName || 'System Auto'}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="3" className="px-5 py-10 text-center text-[13px] font-medium text-slate-500">
-                        Awaiting your first check-in log.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
           {healthHistory.length > 0 && (
             <article className="gc-glass-panel p-6">
               <div className="mb-6 flex items-center gap-3">
@@ -674,12 +434,12 @@ function CustomerCheckinHealthPage() {
               </div>
               <div className="space-y-4">
                 {healthHistory.map((item, index) => {
-                  const itemBmi = parseBmi(item.bmi);
-                  const itemBmiLevel = getBmiLevel(itemBmi);
+                  const itemBmi = parseBmi(item.bmi)
+                  const itemBmiLevel = getBmiLevel(itemBmi)
                   return (
                     <div key={`${item.recordedAt}-${index}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-5 transition hover:bg-white/10">
                       <div>
-                        <p className="text-sm font-bold text-slate-200">{formatDateTime(item.recordedAt)}</p>
+                        <p className="text-sm font-bold text-slate-200">{formatDate(item.recordedAt)}</p>
                         <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-widest">
                           <span>H: {item.heightCm} <span className="lowercase">cm</span></span>
                           <span className="text-slate-700">•</span>
@@ -693,7 +453,7 @@ function CustomerCheckinHealthPage() {
                         </div>
                       </div>
                     </div>
-                  );
+                  )
                 })}
               </div>
             </article>

@@ -27,7 +27,6 @@ $frontendArgs = @(
     '-ExecutionPolicy', 'Bypass',
     '-Command', 'npm run dev'
 )
-
 if ($DryRun) {
     Write-Host '[DryRun] Backend window command:'
     Write-Host "powershell $($backendArgs -join ' ')" -ForegroundColor Yellow

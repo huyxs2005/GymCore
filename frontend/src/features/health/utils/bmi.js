@@ -5,7 +5,7 @@ export function getBmiLevel(bmi) {
       textClass: 'text-slate-400',
       accent: '#94A3B8',
       summary: 'Add your latest body metrics',
-      guidance: 'Enter height and weight to generate your BMI trend and healthy-weight target.',
+      guidance: 'Add your latest height and weight to unlock a clearer starting point for your fitness journey.',
       bgClass: 'bg-white/5',
       borderClass: 'border-white/10',
     }
@@ -17,7 +17,7 @@ export function getBmiLevel(bmi) {
       textClass: 'text-sky-400',
       accent: '#38BDF8',
       summary: 'Needs gain',
-      guidance: 'You are below the normal BMI range. A gradual weight gain plan would move you toward the healthy zone.',
+      guidance: 'You have room to build more strength and body mass. Stay consistent with training, recovery, and nutrition to move toward a stronger baseline.',
       bgClass: 'bg-sky-500/10',
       borderClass: 'border-sky-500/20',
     }
@@ -29,7 +29,7 @@ export function getBmiLevel(bmi) {
       textClass: 'text-emerald-400',
       accent: '#34D399',
       summary: 'Healthy',
-      guidance: 'Your BMI is inside the normal range. Maintain this zone with steady training and nutrition.',
+      guidance: 'You are in a strong healthy zone. Keep the momentum going with steady workouts, solid meals, and disciplined recovery.',
       bgClass: 'bg-emerald-500/10',
       borderClass: 'border-emerald-500/20',
     }
@@ -40,7 +40,7 @@ export function getBmiLevel(bmi) {
     textClass: 'text-rose-400',
     accent: '#FB7185',
     summary: 'Needs reduction',
-    guidance: 'You are above the normal BMI range. Reducing body weight would move you back toward the healthy zone.',
+    guidance: 'You have a clear target to work toward. Consistent training and smarter nutrition choices can bring you back into the healthy range.',
     bgClass: 'bg-rose-500/10',
     borderClass: 'border-rose-500/20',
   }

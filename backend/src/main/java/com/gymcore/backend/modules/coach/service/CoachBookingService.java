@@ -57,6 +57,7 @@ public class CoachBookingService {
             case "customer-get-my-schedule" -> customerGetMySchedule(request);
             case "customer-get-current-phase" -> customerGetCurrentPhase(request);
             case "customer-get-progress-context" -> customerGetProgressContext(request);
+            case "customer-cancel-booking-request" -> customerCancelBookingRequest(request);
             case "customer-delete-session" -> customerDeleteSession(request);
             case "coach-get-pt-requests" -> coachGetPtRequests(request);
             case "coach-approve-pt-request" -> coachApprovePtRequest(request);
@@ -533,6 +534,84 @@ public class CoachBookingService {
     private Map<String, Object> customerGetProgressContext(Map<String, Object> payload) {
         AuthService.AuthContext customer = requireCustomer(payload);
         return buildCustomerProgressContext(customer.userId());
+    }
+
+    @Transactional
+    private Map<String, Object> customerCancelBookingRequest(Map<String, Object> payload) {
+        AuthService.AuthContext customer = requireCustomer(payload);
+        int requestId = requireInteger(payload, "requestId");
+
+        Map<String, Object> request = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    r.PTRequestID,
+                    r.CoachID,
+                    r.Status,
+                    r.CreatedAt,
+                    u.FullName AS CoachName
+                FROM dbo.PTRecurringRequests r
+                JOIN dbo.Users u ON u.UserID = r.CoachID
+                WHERE r.PTRequestID = ?
+                  AND r.CustomerID = ?
+                """, (rs, i) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ptRequestId", rs.getInt("PTRequestID"));
+            item.put("coachId", rs.getInt("CoachID"));
+            item.put("coachName", rs.getString("CoachName"));
+            item.put("status", rs.getString("Status"));
+            item.put("createdAt", rs.getTimestamp("CreatedAt"));
+            return item;
+        }, requestId, customer.userId()).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PT request not found."));
+
+        String status = asText(request.get("status")).toUpperCase();
+        if (!"PENDING".equals(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only pending PT requests can be cancelled.");
+        }
+
+        Timestamp createdAt = (Timestamp) request.get("createdAt");
+        if (createdAt == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Request creation time is missing.");
+        }
+
+        LocalDateTime cancelDeadline = createdAt.toLocalDateTime().plusMinutes(5);
+        if (LocalDateTime.now().isAfter(cancelDeadline)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This PT request can only be cancelled within 5 minutes after booking.");
+        }
+
+        jdbcTemplate.update("DELETE FROM dbo.PTRequestSlots WHERE PTRequestID = ?", requestId);
+        jdbcTemplate.update(
+                "DELETE FROM dbo.PTRecurringRequests WHERE PTRequestID = ? AND CustomerID = ? AND Status = 'PENDING'",
+                requestId, customer.userId());
+
+        Integer coachId = (Integer) request.get("coachId");
+        if (coachId != null) {
+            String customerName = loadUserFullName(customer.userId());
+            notificationService.notifyUser(
+                    coachId,
+                    "PT_REQUEST_CANCELLED_BY_CUSTOMER",
+                    "PT booking request cancelled",
+                    customerName + " cancelled the PT booking request before coach approval.",
+                    "/coach/booking-requests",
+                    requestId,
+                    "PT_REQUEST_CANCELLED_BY_CUSTOMER_" + requestId);
+        }
+
+        notificationService.notifyUser(
+                customer.userId(),
+                "PT_REQUEST_CANCELLED",
+                "PT booking request cancelled",
+                "Your PT booking request was cancelled successfully.",
+                "/customer/coach-booking",
+                requestId,
+                "PT_REQUEST_CANCELLED_" + requestId);
+
+        return Map.of(
+                "ptRequestId", requestId,
+                "status", "CANCELLED",
+                "message", "PT booking request cancelled successfully.");
     }
 
     public Map<String, Object> getCustomerProgressContext(int customerId) {
@@ -1596,7 +1675,7 @@ public class CoachBookingService {
                 String.class,
                 coachId);
         jdbcTemplate.update(
-                "UPDATE dbo.Coaches SET Bio = ?, UpdatedAt = SYSDATETIME() WHERE CoachID = ?",
+                "UPDATE dbo.Coaches SET Bio = ? WHERE CoachID = ?",
                 mergeCoachAvailabilityFlagIntoBio(existingBio, acceptingCustomerRequests),
                 coachId);
         return Map.of(

@@ -1,11 +1,11 @@
 export const customerNav = [
-  { to: '/customer/checkin-health', label: 'Check-in & Health' },
   { to: '/customer/progress-hub', label: 'Progress Hub' },
-  { to: '/customer/coach-booking', label: 'Book PT' },
-  { to: '/customer/promotions', label: 'Promotions' },
-  { to: '/customer/membership', label: 'Membership' },
-  { to: '/customer/shop', label: 'Product Shop' },
+  { to: '/customer/checkin-health', label: 'Health Status' },
+  { to: '/customer/coach-booking', label: 'Personal Trainer' },
   { to: '/customer/knowledge', label: 'Workout/Food/AI' },
+  { to: '/customer/membership', label: 'Membership' },
+  { to: '/customer/promotions', label: 'Promotions' },
+  { to: '/customer/shop', label: 'Product Shop' },
 ]
 
 export const coachNav = [
