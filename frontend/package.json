@@ -10,15 +10,13 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run",
-    "test:coverage:bmi": "vitest run src/features/health/utils/bmi.test.js --coverage --coverage.include=src/features/health/utils/bmi.js"
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.20",
     "axios": "^1.13.4",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.563.0",
-    "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

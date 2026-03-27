@@ -7,7 +7,6 @@ import { customerNav } from '../../config/navigation'
 import { useSession } from '../../features/auth/useSession'
 import { orderApi } from '../../features/product/api/orderApi'
 import { productApi } from '../../features/product/api/productApi'
-import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
 
 const PICKUP_FILTERS = [
   { value: 'all', label: 'All pickup states' },
@@ -264,8 +263,10 @@ function CustomerOrderHistoryPage() {
                   return (
                   <div key={`${order.orderId}-${item.productId}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-14 w-14 overflow-hidden rounded-2xl bg-slate-200 border border-slate-200">
-                        <img src={getDynamicProductImage(item.name)} alt={item.name} className="h-full w-full object-cover" />
+                      <div className="h-14 w-14 overflow-hidden rounded-2xl bg-slate-200">
+                        {item.thumbnailUrl ? (
+                          <img src={item.thumbnailUrl} alt={item.name} className="h-full w-full object-cover" />
+                        ) : null}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>

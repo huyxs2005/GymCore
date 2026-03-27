@@ -1,11 +1,11 @@
-import { Component, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, BadgeCheck, ChevronDown, Search, UserCircle2, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import WeekdayDropdown from '../../components/common/WeekdayDropdown'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
-import { GLOBAL_MUTATION_SYNC_EVENT } from '../../features/dataSync/mutationSync'
 import { membershipApi } from '../../features/membership/api/membershipApi'
 
 const DAYS = [
@@ -17,43 +17,6 @@ const DAYS = [
   { id: 6, label: 'Saturday', shortLabel: 'Sat' },
   { id: 7, label: 'Sunday', shortLabel: 'Sun' },
 ]
-
-class CoachBookingPageErrorBoundary extends Component {
-  constructor(props) {
-    super(props)
-    this.state = { hasError: false }
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-
-  componentDidCatch(error) {
-    console.error('Coach booking page crashed:', error)
-  }
-
-  componentDidUpdate(prevProps) {
-    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
-      this.setState({ hasError: false })
-    }
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="mx-auto max-w-3xl rounded-3xl border border-amber-300 bg-amber-50 px-6 py-8 text-slate-900 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700">Coach Booking</p>
-          <h3 className="mt-2 text-2xl font-bold">This screen hit a temporary rendering problem.</h3>
-          <p className="mt-3 text-sm leading-relaxed text-slate-700">
-            The page stayed alive so you can keep working. Change the selected schedule or search again to reload the match view.
-          </p>
-        </div>
-      )
-    }
-
-    return this.props.children
-  }
-}
 
 function formatDateValue(date) {
   const year = date.getFullYear()
@@ -87,18 +50,6 @@ function getMinimumBookingStartDate(baseDate = new Date()) {
 
 function getDayMeta(dayOfWeek) {
   return DAYS.find((day) => day.id === dayOfWeek) || null
-}
-
-function getUnavailableReason(reason) {
-  if (reason === 'BOOKED_IN_RANGE') return 'Already booked in selected date range'
-  if (reason === 'NO_WEEKLY_AVAILABILITY') return 'Not in coach weekly availability'
-  return 'Unavailable'
-}
-
-function getAdjustedReason(reason) {
-  if (reason === 'BOOKED_IN_RANGE') return 'Chosen time is occupied, but this weekday still has another free slot'
-  if (reason === 'DIFFERENT_SLOT_AVAILABLE') return 'This weekday is still compatible with another free slot'
-  return 'Alternative slot available on this weekday'
 }
 
 function buildMonthGrid(monthCursor) {
@@ -149,32 +100,6 @@ function formatDateTimeLabel(value) {
   })
 }
 
-function formatApprovalEta(value) {
-  if (!value) return 'Approve ETA: Pending'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Approve ETA: Pending'
-  }
-  const eta = addDays(parsed, 7)
-  return `Approve ETA: ${eta.toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })}`
-}
-
-function canCancelPendingRequest(createdAt) {
-  if (!createdAt) return false
-  const created = new Date(createdAt)
-  if (Number.isNaN(created.getTime())) return false
-  return Date.now() <= created.getTime() + 5 * 60 * 1000
-}
-
-function isCoachEnabledPlanType(planType) {
-  const normalizedPlanType = String(planType || '').toUpperCase()
-  return normalizedPlanType === 'GYM_PLUS_COACH' || normalizedPlanType === 'GYM_COACH'
-}
-
 function buildCoachBookingMembershipGate(response) {
   const payload = response?.data ?? response ?? {}
   const membership = payload?.membership ?? {}
@@ -182,7 +107,7 @@ function buildCoachBookingMembershipGate(response) {
   const status = String(membership?.status || '').toUpperCase()
   const planType = String(plan?.planType || '').toUpperCase()
   const allowsCoachBooking = Boolean(plan?.allowsCoachBooking)
-  const eligible = status === 'ACTIVE' && allowsCoachBooking && isCoachEnabledPlanType(planType)
+  const eligible = status === 'ACTIVE' && allowsCoachBooking && planType === 'GYM_PLUS_COACH'
 
   let reason = payload?.reason || ''
   if (!eligible) {
@@ -190,7 +115,7 @@ function buildCoachBookingMembershipGate(response) {
       reason = 'You need an active Gym + Coach membership before you can book a coach.'
     } else if (status !== 'ACTIVE') {
       reason = 'Your membership is not active yet. Coach booking becomes available only when your Gym + Coach plan is active.'
-    } else if (!allowsCoachBooking || !isCoachEnabledPlanType(planType)) {
+    } else if (!allowsCoachBooking || planType !== 'GYM_PLUS_COACH') {
       reason = 'Your current membership does not include coach booking. Upgrade to a Gym + Coach plan to continue.'
     }
   }
@@ -212,7 +137,7 @@ function buildPtBookingGate(schedule) {
       loaded: true,
       blocked: true,
       type: 'PENDING',
-      reason: 'Please wait for the coach response before booking again.',
+      reason: 'You already have a PT request pending coach approval. Please wait for the coach response before booking again.',
       pendingRequest: pendingRequests[0],
       activeSession: null,
     }
@@ -248,193 +173,36 @@ function buildPtBookingGate(schedule) {
   }
 }
 
-function renderMembershipStatusIndicator(membershipGate) {
-  if (membershipGate.loading) {
-    return {
-      label: 'Checking coach plan',
-      tone: 'bg-slate-100 text-slate-600',
-      dot: 'bg-slate-400',
-      Icon: UserCircle2,
-    }
-  }
-
-  if (membershipGate.eligible) {
-    return {
-      label: 'Coach plan active',
-      tone: 'bg-emerald-50 text-emerald-700',
-      dot: 'bg-emerald-500',
-      Icon: BadgeCheck,
-    }
-  }
-
-  return {
-    label: 'Coach plan missing',
-    tone: 'bg-rose-50 text-rose-700',
-    dot: 'bg-rose-500',
-    Icon: AlertTriangle,
-  }
-}
-
-function countCoachConflicts(coach) {
-  return Array.isArray(coach?.unavailableSlots) ? coach.unavailableSlots.length : 0
-}
-
-function normalizeUnavailableSlot(slot) {
-  return {
-    dayOfWeek: Number(slot?.dayOfWeek || 0),
-    timeSlotId: Number(slot?.timeSlotId || 0),
-    reason: typeof slot?.reason === 'string' ? slot.reason : 'NO_WEEKLY_AVAILABILITY',
-  }
-}
-
-function normalizeAlternativeSlot(slot) {
-  return {
-    dayOfWeek: Number(slot?.dayOfWeek || 0),
-    requestedTimeSlotId: Number(slot?.requestedTimeSlotId || 0),
-    timeSlotId: Number(slot?.timeSlotId || 0),
-    freeTimeSlotIds: Array.isArray(slot?.freeTimeSlotIds)
-      ? slot.freeTimeSlotIds.map((value) => Number(value || 0)).filter((value) => value > 0)
-      : [],
-    reason: typeof slot?.reason === 'string' ? slot.reason : 'DIFFERENT_SLOT_AVAILABLE',
-  }
-}
-
-function normalizeResolvedSlot(slot) {
-  return {
-    dayOfWeek: Number(slot?.dayOfWeek || 0),
-    timeSlotId: Number(slot?.timeSlotId || 0),
-    requestedTimeSlotId: Number(slot?.requestedTimeSlotId || 0),
-    exactMatch: slot?.exactMatch === true,
-  }
-}
-
-function normalizeCoachMatch(coach, fallbackType) {
-  const unavailableSlots = Array.isArray(coach?.unavailableSlots)
-    ? coach.unavailableSlots.map(normalizeUnavailableSlot).filter((slot) => slot.dayOfWeek > 0 && slot.timeSlotId > 0)
-    : []
-  const alternativeSlots = Array.isArray(coach?.alternativeSlots)
-    ? coach.alternativeSlots.map(normalizeAlternativeSlot).filter((slot) => slot.dayOfWeek > 0 && slot.timeSlotId > 0)
-    : []
-  const resolvedSlots = Array.isArray(coach?.resolvedSlots)
-    ? coach.resolvedSlots.map(normalizeResolvedSlot).filter((slot) => slot.dayOfWeek > 0 && slot.timeSlotId > 0)
-    : []
-
-  return {
-    ...coach,
-    coachId: Number(coach?.coachId || 0),
-    fullName: typeof coach?.fullName === 'string' ? coach.fullName : 'Coach',
-    email: typeof coach?.email === 'string' ? coach.email : '',
-    bio: typeof coach?.bio === 'string' ? coach.bio : '',
-    avatarUrl: coach?.avatarUrl || '',
-    matchType: String(coach?.matchType || fallbackType || '').toUpperCase(),
-    matchedSlots: Number(coach?.matchedSlots || 0),
-    exactMatchedSlots: Number(coach?.exactMatchedSlots || 0),
-    requestedSlots: Number(coach?.requestedSlots || 0),
-    unavailableSlots,
-    alternativeSlots,
-    resolvedSlots,
-  }
-}
-
-function normalizeMatchResults(payload) {
-  const fullMatches = Array.isArray(payload?.fullMatches)
-    ? payload.fullMatches.map((coach) => normalizeCoachMatch(coach, 'FULL')).filter((coach) => coach.coachId > 0)
-    : []
-  const partialMatches = Array.isArray(payload?.partialMatches)
-    ? payload.partialMatches.map((coach) => normalizeCoachMatch(coach, 'PARTIAL')).filter((coach) => coach.coachId > 0)
-    : []
-
-  return {
-    fullMatches,
-    partialMatches: sortPartialMatchesByLeastConflict(partialMatches),
-  }
-}
-
-function buildSlotsSignature(slots) {
-  return slots
-    .map((slot) => `${slot.dayOfWeek}:${slot.timeSlotId}`)
-    .sort()
-    .join('|')
-}
-
-function buildPairKey(dayOfWeek, timeSlotId) {
-  return `${Number(dayOfWeek)}-${Number(timeSlotId)}`
-}
-
-function groupAvailabilityByDay(availability) {
-  return DAYS.map((day) => ({
-    ...day,
-    slots: Array.isArray(availability)
-      ? availability
-          .filter((slot) => Number(slot?.dayOfWeek) === day.id)
-          .sort((left, right) => Number(left?.timeSlotId || 0) - Number(right?.timeSlotId || 0))
-      : [],
-  })).filter((day) => day.slots.length > 0)
-}
-
-function sortPartialMatchesByLeastConflict(items) {
-  return [...items].sort((left, right) => {
-    const leftConflicts = countCoachConflicts(left)
-    const rightConflicts = countCoachConflicts(right)
-
-    if (leftConflicts !== rightConflicts) {
-      return leftConflicts - rightConflicts
-    }
-
-    const leftMatched = Number(left?.matchedSlots || 0)
-    const rightMatched = Number(right?.matchedSlots || 0)
-    if (leftMatched !== rightMatched) {
-      return rightMatched - leftMatched
-    }
-
-    return String(left?.fullName || '').localeCompare(String(right?.fullName || ''))
-  })
-}
-
 function CustomerCoachBookingPage() {
-  const [activeTab, setActiveTab] = useState('schedule')
+  const [activeTab, setActiveTab] = useState('match')
   const [timeSlots, setTimeSlots] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
+  const [form, setForm] = useState({
+    endDate: '',
+  })
   const [requestedWeeklySlots, setRequestedWeeklySlots] = useState([])
   const [plannerModal, setPlannerModal] = useState({
     open: false,
     focusDay: 1,
   })
+  const [selectedWeeklySummaryDay, setSelectedWeeklySummaryDay] = useState(1)
+  const [datePicker, setDatePicker] = useState({
+    field: '',
+    monthCursor: '',
+  })
   const [coachReviewModal, setCoachReviewModal] = useState({
     open: false,
     coach: null,
-    selectedAlternativeSlots: {},
-  })
-  const [coachProfileModal, setCoachProfileModal] = useState({
-    open: false,
-    loading: false,
-    coach: null,
-  })
-  const [coachBookingModal, setCoachBookingModal] = useState({
-    open: false,
-    loading: false,
-    coach: null,
-    focusDay: 1,
-    weeklyAvailability: [],
-    bookedSlots: [],
-    availableSlots: [],
-    selectedSlots: [],
-    fromDate: '',
-    toDate: '',
   })
 
   const [matches, setMatches] = useState({
     fullMatches: [],
     partialMatches: [],
   })
-  const [coachDirectory, setCoachDirectory] = useState([])
-  const [coachDirectoryLoading, setCoachDirectoryLoading] = useState(false)
   const [hasPreviewedMatches, setHasPreviewedMatches] = useState(false)
-  const [expandedSummaryDays, setExpandedSummaryDays] = useState({})
-  const [expandedPlannerDays, setExpandedPlannerDays] = useState({})
 
   const [scheduleData, setScheduleData] = useState({
     items: [],
@@ -476,7 +244,6 @@ function CustomerCoachBookingPage() {
     reason: '',
   })
   const [membershipBlockedModal, setMembershipBlockedModal] = useState(false)
-  const [noCoachMatchModal, setNoCoachMatchModal] = useState(false)
   const [ptBookingGate, setPtBookingGate] = useState({
     loaded: false,
     blocked: false,
@@ -488,13 +255,13 @@ function CustomerCoachBookingPage() {
   const [ptBookingBlockedModal, setPtBookingBlockedModal] = useState(false)
   const [scheduleMonthCursor, setScheduleMonthCursor] = useState('')
   const [selectedScheduleDate, setSelectedScheduleDate] = useState('')
-  const minimumBookingStartValue = useMemo(() => formatDateValue(getMinimumBookingStartDate(new Date())), [])
+  const minimumBookingStartDate = useMemo(() => getMinimumBookingStartDate(new Date()), [])
+  const minimumBookingStartValue = useMemo(() => formatDateValue(minimumBookingStartDate), [minimumBookingStartDate])
 
   useEffect(() => {
     void loadTimeSlots()
     void loadMembershipGate()
     void loadMySchedule({ silent: true })
-    void loadCoachDirectory()
   }, [])
 
   useEffect(() => {
@@ -549,35 +316,6 @@ function CustomerCoachBookingPage() {
     }
   }
 
-  async function loadCoachDirectory() {
-    try {
-      setCoachDirectoryLoading(true)
-      const response = await coachApi.getCoaches()
-      const payload = response?.data ?? response
-      setCoachDirectory(Array.isArray(payload?.items) ? payload.items : [])
-    } catch (err) {
-      setCoachDirectory([])
-      setError(err?.response?.data?.message || 'Cannot load coach directory')
-    } finally {
-      setCoachDirectoryLoading(false)
-    }
-  }
-
-  async function cancelPendingRequest(requestId) {
-    try {
-      setLoading(true)
-      setError('')
-      setMessage('')
-      const response = await coachBookingApi.deleteRequest(requestId)
-      setMessage(response?.message || 'PT booking request cancelled successfully.')
-      await loadMySchedule({ silent: true })
-    } catch (err) {
-      setError(err?.response?.data?.message || 'Cannot cancel PT booking request')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const timeSlotById = useMemo(() => {
     const map = new Map()
     timeSlots.forEach((slot) => {
@@ -610,90 +348,33 @@ function CustomerCoachBookingPage() {
     })).filter((day) => day.slots.length > 0)
   }, [weeklySlots])
 
-  function isGroupExpanded(state, dayId) {
-    return state[dayId] ?? false
-  }
-
-  function toggleExpandedSummaryDay(dayId) {
-    setExpandedSummaryDays((prev) => ({
-      ...prev,
-      [dayId]: !(prev[dayId] ?? true),
-    }))
-  }
-
-  function toggleExpandedPlannerDay(dayId) {
-    setExpandedPlannerDays((prev) => ({
-      ...prev,
-      [dayId]: !(prev[dayId] ?? true),
-    }))
-  }
+  const selectedWeeklySummaryGroup = useMemo(() => {
+    return groupedWeeklySlots.find((day) => day.id === selectedWeeklySummaryDay) || groupedWeeklySlots[0] || null
+  }, [groupedWeeklySlots, selectedWeeklySummaryDay])
 
   const coachReviewRows = useMemo(() => {
     if (!coachReviewModal.coach) return []
     const unavailable = Array.isArray(coachReviewModal.coach.unavailableSlots) ? coachReviewModal.coach.unavailableSlots : []
-    const alternatives = Array.isArray(coachReviewModal.coach.alternativeSlots) ? coachReviewModal.coach.alternativeSlots : []
     return weeklySlots.map((item) => {
       const blocked = unavailable.find((slot) => slot.dayOfWeek === item.dayOfWeek && slot.timeSlotId === item.timeSlotId)
-      const alternative = alternatives.find((slot) => slot.dayOfWeek === item.dayOfWeek && slot.requestedTimeSlotId === item.timeSlotId)
-      const chosenAlternativeTimeSlotId = Number(coachReviewModal.selectedAlternativeSlots?.[item.dayOfWeek] || 0)
       return {
         ...item,
         dayLabel: getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`,
         unavailable: Boolean(blocked),
-        adjusted: Boolean(alternative),
-        suggestedTimeSlotIds: Array.isArray(alternative?.freeTimeSlotIds) && alternative.freeTimeSlotIds.length > 0
-          ? alternative.freeTimeSlotIds
-          : alternative?.timeSlotId
-            ? [alternative.timeSlotId]
-            : [],
-        chosenAlternativeTimeSlotId: chosenAlternativeTimeSlotId > 0 ? chosenAlternativeTimeSlotId : null,
         reason: blocked?.reason || null,
-        adjustedReason: alternative?.reason || null,
       }
     }).sort((a, b) => {
       if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek
       return a.timeSlotId - b.timeSlotId
     })
-  }, [coachReviewModal.coach, coachReviewModal.selectedAlternativeSlots, weeklySlots])
+  }, [coachReviewModal.coach, weeklySlots])
 
   const unresolvedReviewCount = useMemo(
-    () => coachReviewRows.filter((item) => item.unavailable || (item.adjusted && !item.chosenAlternativeTimeSlotId)).length,
+    () => coachReviewRows.filter((item) => item.unavailable).length,
     [coachReviewRows],
   )
-  const coachBookingAvailablePairs = useMemo(() => {
-    const pairs = new Set()
-    coachBookingModal.availableSlots.forEach((slot) => {
-      pairs.add(buildPairKey(slot.dayOfWeek, slot.timeSlotId))
-    })
-    return pairs
-  }, [coachBookingModal.availableSlots])
-  const coachBookingBookedPairs = useMemo(() => {
-    const pairs = new Set()
-    coachBookingModal.bookedSlots.forEach((slot) => {
-      pairs.add(buildPairKey(slot.dayOfWeek, slot.timeSlotId))
-    })
-    return pairs
-  }, [coachBookingModal.bookedSlots])
-  const coachBookingWeeklyPairs = useMemo(() => {
-    const pairs = new Set()
-    coachBookingModal.weeklyAvailability.forEach((slot) => {
-      pairs.add(buildPairKey(slot.dayOfWeek, slot.timeSlotId))
-    })
-    return pairs
-  }, [coachBookingModal.weeklyAvailability])
-  const coachBookingSelectedCountByDay = useMemo(() => {
-    const counts = new Map()
-    coachBookingModal.selectedSlots.forEach((slot) => {
-      counts.set(slot.dayOfWeek, (counts.get(slot.dayOfWeek) || 0) + 1)
-    })
-    return counts
-  }, [coachBookingModal.selectedSlots])
+  const datePickerDays = useMemo(() => buildMonthGrid(datePicker.monthCursor), [datePicker.monthCursor])
   const currentMembershipPlan = membershipGate.membership?.plan ?? {}
-  const membershipStatusIndicator = useMemo(
-    () => renderMembershipStatusIndicator(membershipGate),
-    [membershipGate],
-  )
-  const weeklySlotsSignature = useMemo(() => buildSlotsSignature(weeklySlots), [weeklySlots])
 
   function requireCoachBookingMembership() {
     if (membershipGate.loading) {
@@ -726,6 +407,13 @@ function CustomerCoachBookingPage() {
     if (!requireNoExistingPtBooking()) {
       return
     }
+    if (!form.endDate) {
+      setForm((prev) => ({
+        ...prev,
+        endDate: formatDateValue(addDays(minimumBookingStartDate, 28)),
+      }))
+    }
+
     setPlannerModal({
       open: true,
       focusDay: weeklySlots[0]?.dayOfWeek || 1,
@@ -733,7 +421,36 @@ function CustomerCoachBookingPage() {
   }
 
   function closePlannerModal() {
+    closeDatePicker()
     setPlannerModal({ open: false, focusDay: 1 })
+  }
+
+  function openDatePicker(field) {
+    const baseDate = parseDateValue(form[field]) || minimumBookingStartDate
+    setDatePicker({
+      field,
+      monthCursor: formatDateValue(new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)),
+    })
+  }
+
+  function closeDatePicker() {
+    setDatePicker({ field: '', monthCursor: '' })
+  }
+
+  function setPlannerRange(patch) {
+    setHasPreviewedMatches(false)
+    setForm((prev) => {
+      const next = { ...prev, ...patch }
+      if (next.endDate && next.endDate < minimumBookingStartValue) {
+        return { ...next, endDate: minimumBookingStartValue }
+      }
+      return next
+    })
+  }
+
+  function pickPlannerDate(field, value) {
+    setPlannerRange({ [field]: value })
+    closeDatePicker()
   }
 
   function selectPlannerDay(dayOfWeek) {
@@ -751,14 +468,7 @@ function CustomerCoachBookingPage() {
       setRequestedWeeklySlots((prev) => prev.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)))
       return
     }
-    setRequestedWeeklySlots((prev) => {
-      const sameDaySelection = prev.find((slot) => slot.dayOfWeek === dayOfWeek)
-      const next = prev.filter((slot) => slot.dayOfWeek !== dayOfWeek)
-      if (sameDaySelection && sameDaySelection.timeSlotId !== timeSlotId) {
-        setMessage(`Only one recurring slot is allowed on ${getDayMeta(dayOfWeek)?.label || 'that day'}. The previous slot was replaced.`)
-      }
-      return [...next, { dayOfWeek, timeSlotId }]
-    })
+    setRequestedWeeklySlots((prev) => [...prev, { dayOfWeek, timeSlotId }])
   }
 
   function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
@@ -776,8 +486,8 @@ function CustomerCoachBookingPage() {
     if (ptBookingGate.type === 'PENDING' && ptBookingGate.pendingRequest) {
       return {
         title: ptBookingGate.pendingRequest.coachName || 'Pending PT request',
-        detail: formatApprovalEta(ptBookingGate.pendingRequest.createdAt),
-        badge: '',
+        detail: `Request window: ${ptBookingGate.pendingRequest.startDate || '-'} to ${ptBookingGate.pendingRequest.endDate || '-'}`,
+        badge: 'Pending approval',
       }
     }
     if (ptBookingGate.type === 'ACTIVE' && ptBookingGate.activeSession) {
@@ -793,6 +503,12 @@ function CustomerCoachBookingPage() {
       badge: 'Available',
     }
   }, [ptBookingGate, formatSlotLabel])
+
+  function getUnavailableReason(reason) {
+    if (reason === 'BOOKED_IN_RANGE') return 'Already booked in selected date range'
+    if (reason === 'NO_WEEKLY_AVAILABILITY') return 'Not in coach weekly availability'
+    return 'Unavailable'
+  }
 
   function getSessionStatusAppearance(status) {
     const normalized = String(status || '').toUpperCase()
@@ -843,56 +559,13 @@ function CustomerCoachBookingPage() {
   }
 
   function openCoachReview(coach) {
-    if (weeklySlots.length === 0) {
+    if (!form.endDate || weeklySlots.length === 0) {
       setError('Please set desired schedule first.')
       return
     }
     setCoachReviewModal({
       open: true,
       coach,
-      selectedAlternativeSlots: {},
-    })
-  }
-
-  function chooseReviewAlternativeSlot(dayOfWeek, timeSlotId) {
-    setCoachReviewModal((prev) => ({
-      ...prev,
-      selectedAlternativeSlots: {
-        ...(prev.selectedAlternativeSlots || {}),
-        [dayOfWeek]: timeSlotId,
-      },
-    }))
-  }
-
-  async function openCoachProfile(coachId) {
-    try {
-      setCoachProfileModal({
-        open: true,
-        loading: true,
-        coach: null,
-      })
-      const response = await coachApi.getCoachById(coachId)
-      const payload = response?.data ?? response
-      setCoachProfileModal({
-        open: true,
-        loading: false,
-        coach: payload,
-      })
-    } catch (err) {
-      setCoachProfileModal({
-        open: false,
-        loading: false,
-        coach: null,
-      })
-      setError(err?.response?.data?.message || 'Cannot load coach profile')
-    }
-  }
-
-  function closeCoachProfile() {
-    setCoachProfileModal({
-      open: false,
-      loading: false,
-      coach: null,
     })
   }
 
@@ -903,8 +576,12 @@ function CustomerCoachBookingPage() {
     if (!requireNoExistingPtBooking()) {
       return
     }
-    if (weeklySlots.length === 0) {
-      setError('Please pick at least one recurring slot in the planner.')
+    if (!form.endDate || weeklySlots.length === 0) {
+      setError('Please set the booking end date and pick at least one recurring slot in the planner.')
+      return
+    }
+    if (form.endDate < minimumBookingStartValue) {
+      setError('The booking end date must be on or after the earliest possible coaching start date.')
       return
     }
 
@@ -912,13 +589,15 @@ function CustomerCoachBookingPage() {
       setLoading(true)
       setError('')
       const response = await coachBookingApi.matchCoaches({
+        endDate: form.endDate,
         slots: weeklySlots,
       })
       const payload = response?.data ?? response
-      const normalizedMatches = normalizeMatchResults(payload)
-      setMatches(normalizedMatches)
+      setMatches({
+        fullMatches: Array.isArray(payload?.fullMatches) ? payload.fullMatches : [],
+        partialMatches: Array.isArray(payload?.partialMatches) ? payload.partialMatches : [],
+      })
       setHasPreviewedMatches(true)
-      setNoCoachMatchModal(normalizedMatches.fullMatches.length === 0 && normalizedMatches.partialMatches.length === 0)
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot preview coach matches')
     } finally {
@@ -1011,8 +690,8 @@ function CustomerCoachBookingPage() {
   }
 
   async function savePlannerAndSearch() {
-    if (weeklySlots.length === 0) {
-      setError('Please pick at least one recurring slot in the planner.')
+    if (!form.endDate || weeklySlots.length === 0) {
+      setError('Please set the booking end date and pick at least one recurring slot in the planner.')
       return
     }
 
@@ -1020,262 +699,25 @@ function CustomerCoachBookingPage() {
     await previewMatches()
   }
 
-  async function openCoachBookingModal(coach) {
-    if (!requireCoachBookingMembership()) {
-      return
-    }
-    if (!requireNoExistingPtBooking()) {
-      return
-    }
-
-    setCoachBookingModal({
-      open: true,
-      loading: true,
-      coach,
-      focusDay: 1,
-      weeklyAvailability: [],
-      bookedSlots: [],
-      availableSlots: [],
-      selectedSlots: [],
-      fromDate: '',
-      toDate: '',
-    })
-
-    try {
-      const response = await coachApi.getCoachSchedule(coach.coachId)
-      const payload = response?.data ?? response ?? {}
-      const weeklyAvailability = Array.isArray(payload.weeklyAvailability) ? payload.weeklyAvailability : []
-      const bookedSlots = Array.isArray(payload.bookedSlots) ? payload.bookedSlots : []
-      const availableSlots = Array.isArray(payload.availableSlots) ? payload.availableSlots : []
-      const firstAvailableDay = availableSlots.length > 0
-        ? Number(availableSlots[0]?.dayOfWeek || 1)
-        : Number(weeklyAvailability[0]?.dayOfWeek || 1)
-      setCoachBookingModal((prev) => ({
-        ...prev,
-        loading: false,
-        focusDay: firstAvailableDay,
-        weeklyAvailability,
-        bookedSlots,
-        availableSlots,
-        selectedSlots: [],
-        fromDate: payload.fromDate || '',
-        toDate: payload.toDate || '',
-      }))
-    } catch (err) {
-      setCoachBookingModal({
-        open: false,
-        loading: false,
-        coach: null,
-        focusDay: 1,
-        weeklyAvailability: [],
-        bookedSlots: [],
-        availableSlots: [],
-        selectedSlots: [],
-        fromDate: '',
-        toDate: '',
-      })
-      setError(err?.response?.data?.message || 'Cannot load coach availability')
-    }
-  }
-
-  function closeCoachBookingModal() {
-    setCoachBookingModal({
-      open: false,
-      loading: false,
-      coach: null,
-      focusDay: 1,
-      weeklyAvailability: [],
-      bookedSlots: [],
-      availableSlots: [],
-      selectedSlots: [],
-      fromDate: '',
-      toDate: '',
-    })
-  }
-
-  function isCoachBookingSlotSelected(dayOfWeek, timeSlotId) {
-    return coachBookingModal.selectedSlots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
-  }
-
-  function getCoachBookingSlotStatus(dayOfWeek, timeSlotId) {
-    const key = buildPairKey(dayOfWeek, timeSlotId)
-    if (coachBookingAvailablePairs.has(key)) return 'AVAILABLE'
-    if (coachBookingBookedPairs.has(key)) return 'BOOKED'
-    if (coachBookingWeeklyPairs.has(key)) return 'UNAVAILABLE'
-    return 'UNAVAILABLE'
-  }
-
-  function toggleCoachBookingSlot(dayOfWeek, timeSlotId) {
-    const status = getCoachBookingSlotStatus(dayOfWeek, timeSlotId)
-    if (status !== 'AVAILABLE') {
-      return
-    }
-
-    setCoachBookingModal((prev) => {
-      const exists = prev.selectedSlots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
-      if (exists) {
-        return {
-          ...prev,
-          selectedSlots: prev.selectedSlots.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)),
-        }
-      }
-
-      const next = prev.selectedSlots.filter((slot) => slot.dayOfWeek !== dayOfWeek)
-      return {
-        ...prev,
-        selectedSlots: [...next, { dayOfWeek, timeSlotId }],
-      }
-    })
-  }
-
-  async function submitCoachSpecificBooking() {
-    if (!requireCoachBookingMembership()) {
-      return
-    }
-    if (!requireNoExistingPtBooking()) {
-      return
-    }
-    if (!coachBookingModal.coach?.coachId) {
-      return
-    }
-    if (coachBookingModal.selectedSlots.length === 0) {
-      setError('Please choose at least one free recurring slot for this coach.')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError('')
-      await coachBookingApi.createRequest({
-        coachId: coachBookingModal.coach.coachId,
-        slots: coachBookingModal.selectedSlots
-          .slice()
-          .sort((left, right) => {
-            if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
-            return left.timeSlotId - right.timeSlotId
-          }),
-      })
-      setRequestedWeeklySlots(coachBookingModal.selectedSlots)
-      closeCoachBookingModal()
-      setMessage('Booking request sent. Coach will approve or deny your request.')
-      setActiveTab('schedule')
-      await loadMySchedule()
-    } catch (err) {
-      setError(err?.response?.data?.message || 'Cannot create PT booking request for this coach')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab !== 'match' || !hasPreviewedMatches || weeklySlots.length === 0) {
-      return undefined
-    }
-
-    let cancelled = false
-
-    const refreshPreviewMatches = async () => {
-      if (cancelled || membershipGate.loading || !membershipGate.eligible || !ptBookingGate.loaded || ptBookingGate.blocked) {
-        return
-      }
-
-      try {
-        const response = await coachBookingApi.matchCoaches({ slots: weeklySlots })
-        if (cancelled) {
-          return
-        }
-        const payload = response?.data ?? response
-        setMatches(normalizeMatchResults(payload))
-      } catch (err) {
-        if (!cancelled) {
-          setError(err?.response?.data?.message || 'Cannot refresh coach matches')
-        }
-      }
-    }
-
-    const handleVisibilityRefresh = () => {
-      if (!document.hidden) {
-        void refreshPreviewMatches()
-      }
-    }
-
-    const handleAvailabilityRefresh = () => {
-      void refreshPreviewMatches()
-    }
-
-    const handleStorage = (event) => {
-      if (event.key === 'gymcore:mutation-sync') {
-        void refreshPreviewMatches()
-      }
-    }
-
-    const intervalId = window.setInterval(() => {
-      void refreshPreviewMatches()
-    }, 10000)
-
-    window.addEventListener('focus', handleAvailabilityRefresh)
-    window.addEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleAvailabilityRefresh)
-    window.addEventListener('storage', handleStorage)
-    document.addEventListener('visibilitychange', handleVisibilityRefresh)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-      window.removeEventListener('focus', handleAvailabilityRefresh)
-      window.removeEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleAvailabilityRefresh)
-      window.removeEventListener('storage', handleStorage)
-      document.removeEventListener('visibilitychange', handleVisibilityRefresh)
-    }
-  }, [
-    activeTab,
-    hasPreviewedMatches,
-    membershipGate.eligible,
-    membershipGate.loading,
-    ptBookingGate.blocked,
-    ptBookingGate.loaded,
-    weeklySlots,
-  ])
-
   async function requestCoach(coachId) {
     if (!requireNoExistingPtBooking()) {
       return
     }
-    if (weeklySlots.length === 0) {
+    if (!form.endDate || weeklySlots.length === 0) {
       setError('Please set desired schedule first.')
       return
     }
     try {
       setLoading(true)
       setError('')
-      const adjustedRowsMissingChoice = coachReviewRows.filter((row) => row.adjusted && !row.chosenAlternativeTimeSlotId)
-      if (adjustedRowsMissingChoice.length > 0) {
-        setError('Please choose a specific coach slot for every weekday that needs adjusting.')
-        setLoading(false)
-        return
-      }
-      const resolvedByDay = new Map()
-      weeklySlots.forEach((slot) => {
-        const chosenAlternativeTimeSlotId = Number(coachReviewModal.selectedAlternativeSlots?.[slot.dayOfWeek] || 0)
-        if (chosenAlternativeTimeSlotId > 0) {
-          resolvedByDay.set(slot.dayOfWeek, { dayOfWeek: slot.dayOfWeek, timeSlotId: chosenAlternativeTimeSlotId })
-        } else {
-          resolvedByDay.set(slot.dayOfWeek, { dayOfWeek: slot.dayOfWeek, timeSlotId: slot.timeSlotId })
-        }
-      })
-      const requestSlots = weeklySlots
-        .map((slot) => resolvedByDay.get(slot.dayOfWeek) || slot)
-        .sort((left, right) => {
-          if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
-          return left.timeSlotId - right.timeSlotId
-        })
       await coachBookingApi.createRequest({
         coachId,
-        slots: requestSlots,
+        endDate: form.endDate,
+        slots: weeklySlots,
       })
-      setRequestedWeeklySlots(requestSlots)
       setMessage('Booking request sent. Coach will approve or deny your request.')
       setActiveTab('schedule')
-      setCoachReviewModal({ open: false, coach: null, selectedAlternativeSlots: {} })
+      setCoachReviewModal({ open: false, coach: null })
       await loadMySchedule()
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot create booking request')
@@ -1424,6 +866,31 @@ function CustomerCoachBookingPage() {
         })
       : []
   }, [activePhase])
+  const coachPreviewCount = matches.fullMatches.length + matches.partialMatches.length
+  const plannerStatusSummary = useMemo(
+    () => [
+      {
+        id: 'window',
+        label: 'Booking window',
+        value: form.endDate || minimumBookingStartValue,
+        detail: form.endDate ? 'Recurring plan end date selected' : 'Earliest eligible PT start is applied as the baseline',
+      },
+      {
+        id: 'slots',
+        label: 'Recurring slots',
+        value: weeklySlots.length,
+        detail: weeklySlots.length ? `${selectedSlotsByDay.size} weekday(s) currently selected` : 'Open the planner to build your recurring week',
+      },
+      {
+        id: 'preview',
+        label: 'Coach preview',
+        value: coachPreviewCount,
+        detail: hasPreviewedMatches ? 'Real PT match preview ready below' : 'Run Preview Matches after saving your recurring plan',
+      },
+    ],
+    [coachPreviewCount, form.endDate, hasPreviewedMatches, minimumBookingStartValue, selectedSlotsByDay.size, weeklySlots.length],
+  )
+
   useEffect(() => {
     const firstSessionDate = scheduleData.items
       .map((item) => item.sessionDate)
@@ -1445,17 +912,211 @@ function CustomerCoachBookingPage() {
     setSelectedScheduleDate('')
   }, [scheduleData.items])
 
+  useEffect(() => {
+    if (groupedWeeklySlots.length === 0) {
+      return
+    }
+    if (!groupedWeeklySlots.some((day) => day.id === selectedWeeklySummaryDay)) {
+      setSelectedWeeklySummaryDay(groupedWeeklySlots[0].id)
+    }
+  }, [groupedWeeklySlots, selectedWeeklySummaryDay])
+
   return (
-    <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav} showHeader={false}>
-      <CoachBookingPageErrorBoundary resetKey={`${activeTab}|${hasPreviewedMatches ? 'previewed' : 'idle'}|${weeklySlotsSignature}`}>
+    <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
-          <div className="flex justify-center">
-            <div className="flex flex-wrap justify-center gap-2">
-            <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition duration-200 ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-[#0ea773]'}`}>My PT Schedule</button>
-              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition duration-200 ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-[#0ea773]'}`}>Find PT</button>
-              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition duration-200 ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-[#0ea773]'}`}>Feedback your PT</button>
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(22,163,74,0.18),_transparent_40%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.94))] p-6 text-white shadow-xl">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">PT Dashboard</p>
+              <h3 className="text-3xl font-bold">{
+                activePhase ? 'Active PT phase' : 'Plan your next coaching phase'
+              }</h3>
+              {activePhase ? (
+                <p className="text-sm leading-relaxed text-slate-200">
+                  Primary coach <strong className="text-white">{activePhase.coachName}</strong> • {activePhase.startDate} to {activePhase.endDate}
+                </p>
+              ) : (
+                <p className="text-sm leading-relaxed text-slate-200">
+                  Review membership eligibility, keep your weekly PT context visible, and jump straight into booking when you are ready.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {activePhase ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('schedule')}
+                    className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                  >
+                    Open My PT Schedule
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openSeriesModal}
+                    className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+                  >
+                    Change recurring plan
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('match')}
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+                >
+                  Book PT Plan
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+
+          {activePhase ? (
+            <div className="mt-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Next session</p>
+                  <p className="mt-2 text-lg font-bold text-white">{nextSession.sessionDate || 'No future session'}</p>
+                  <p className="mt-1 text-sm text-slate-200">
+                    {nextSession.timeSlotId ? formatSlotLabel(nextSession.timeSlotId) : 'Wait for a confirmed schedule.'}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-300">{nextSession.coachName || activePhase.coachName || 'Primary coach'}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Latest coach note</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{latestNote.noteContent || 'No coaching note recorded yet.'}</p>
+                  <p className="mt-2 text-xs text-slate-300">{formatDateTimeLabel(latestNote.updatedAt || latestNote.createdAt)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Latest progress</p>
+                  <p className="mt-2 text-sm font-semibold text-white">
+                    {latestProgress.weightKg ? `${latestProgress.weightKg} kg` : 'No progress update recorded yet.'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-300">
+                    {latestProgress.heightCm ? `${latestProgress.heightCm} cm` : 'Height pending'} • {latestProgress.bmi ? `BMI ${latestProgress.bmi}` : 'BMI pending'}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-300">{formatDateTimeLabel(latestProgress.recordedAt)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">This week</p>
+                    <p className="mt-1 text-lg font-bold text-white">
+                      {ptDashboard.completedSessions || 0} completed / {ptDashboard.remainingSessions || 0} remaining PT sessions
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
+                    {activePhase.bookingMode || 'REQUEST'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  {weeklyDashboardSchedule.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-black/10 p-4 text-sm text-slate-300">
+                      No PT sessions are scheduled for the current week yet.
+                    </div>
+                  )}
+                  {weeklyDashboardSchedule.map((session) => (
+                    <div key={`dashboard-session-${session.ptSessionId}`} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{getDayMeta(session.dayOfWeek)?.label || session.sessionDate}</p>
+                          <p className="mt-1 text-xs text-slate-300">{session.sessionDate} • {formatSlotLabel(session.timeSlotId)}</p>
+                        </div>
+                        <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200">{session.status}</span>
+                      </div>
+                      {session.replacementOffer?.status === 'PENDING_CUSTOMER' && (
+                        <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-4">
+                          <p className="text-sm font-bold text-amber-100">Replacement coach offer</p>
+                          <p className="mt-1 text-sm text-amber-50">
+                            {session.replacementOffer.replacementCoachName} can cover this exception session for {session.replacementOffer.originalCoachName}.
+                          </p>
+                          {session.replacementOffer.note ? (
+                            <p className="mt-2 text-xs text-amber-100/90">Note: {session.replacementOffer.note}</p>
+                          ) : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleReplacementDecision(session.ptSessionId, 'ACCEPT')}
+                              disabled={loading}
+                              className="rounded-full bg-emerald-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50"
+                            >
+                              Accept replacement
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReplacementDecision(session.ptSessionId, 'DECLINE')}
+                              disabled={loading}
+                              className="rounded-full border border-amber-100/30 bg-transparent px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-white/10 disabled:opacity-50"
+                            >
+                              Decline replacement
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {dashboardTemplateSlots.length > 0 && (
+                  <div className="mt-4 border-t border-white/10 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Recurring template</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {dashboardTemplateSlots.map((slot) => (
+                        <span key={`template-slot-${slot.dayOfWeek}-${slot.timeSlotId}`} className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-100">
+                          {getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`} • {formatSlotLabel(slot.timeSlotId)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Membership</p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {membershipGate.eligible ? 'Gym + Coach active' : (membershipGate.reason || 'Needs Gym + Coach plan')}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Current PT state</p>
+                <p className="mt-2 text-sm font-semibold text-white">{ptBookingGateSummary.title}</p>
+                <p className="mt-1 text-xs text-slate-300">{ptBookingGateSummary.detail}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Next step</p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {membershipGate.eligible && !ptBookingGate.blocked
+                    ? 'Open the planner and run a real coach match preview.'
+                    : 'Resolve the blocker, then book your recurring PT plan.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setActiveTab('match')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'match' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Match Coaches</button>
+              <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'schedule' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>My PT Schedule</button>
+              <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-xl font-semibold transition ${activeTab === 'feedback' ? 'bg-gym-600 text-white shadow-sm shadow-gym-600/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Feedback Coach</button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3 xl:min-w-[52rem]">
+              {plannerStatusSummary.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900">{item.value}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {(error || message) && (
           <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -1466,106 +1127,117 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'match' && (
           <div className="space-y-6">
-            <div className="space-y-5 px-2 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-2xl font-bold text-slate-50 md:text-3xl">Find suitable personal trainer</h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className={`inline-flex items-center gap-2 px-1 py-1 text-xs font-semibold ${membershipStatusIndicator.tone.replace('rounded-full', '').replace('bg-slate-100', 'bg-transparent').replace('bg-emerald-50', 'bg-transparent').replace('bg-rose-50', 'bg-transparent')}`}>
-                    <span className={`h-2.5 w-2.5 rounded-full ${membershipStatusIndicator.dot}`} />
-                    <membershipStatusIndicator.Icon size={14} />
-                    <span>{membershipStatusIndicator.label}</span>
+            <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+              <div className="bg-white border border-slate-200 rounded-[30px] p-5 space-y-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-gym-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-gym-700">1. Plan</span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">2. Preview</span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">3. Request</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900">1) Set Desired PT Schedule</h3>
+                    <p className="text-sm text-slate-600">Set your recurring PT schedule first, then preview coach matches with the same rules used by live booking.</p>
                   </div>
-                    <button
-                      onClick={openPlannerModal}
-                      className="gc-button-primary-flat min-h-0 rounded-full px-5 py-2.5 text-sm font-semibold"
-                    >
-                      Set schedule
-                    </button>
+                  <button
+                    onClick={openPlannerModal}
+                    className="px-4 py-2 rounded-xl bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700"
+                  >
+                    Open Schedule Planner
+                  </button>
                 </div>
-              </div>
 
-              <div className="space-y-3 pt-1">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 space-y-2">
                   <div className="flex flex-wrap gap-5 text-xs text-slate-600">
+                    <span>Earliest possible start: <strong className="text-slate-800">{minimumBookingStartValue}</strong></span>
+                    <span>Repeat end date: <strong className="text-slate-800">{form.endDate || '-'}</strong></span>
                     <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
                     <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
                   </div>
-                  <button
-                    onClick={previewMatches}
-                    disabled={loading}
-                    className="gc-button-primary-flat min-h-0 gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span>{loading ? 'Loading...' : 'Search Coaches'}</span>
-                    <Search size={16} className="shrink-0" />
-                  </button>
-                </div>
-                {weeklySlots.length > 0 && (
-                  <div className="space-y-3">
-                    {groupedWeeklySlots.map((group) => (
-                      <div key={`summary-group-${group.id}`} className="border-b border-slate-200/80 pb-3 last:border-b-0 last:pb-0">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpandedSummaryDay(group.id)}
-                          className="flex w-full items-center justify-between gap-3 py-1 text-left"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900">{group.label}</p>
-                            <p className="text-[11px] font-semibold text-slate-500">
-                              {group.slots.length} recurring slot(s) selected
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                              {group.slots.length} slot{group.slots.length > 1 ? 's' : ''}
-                            </div>
-                            <ChevronDown
-                              size={16}
-                              className={`text-slate-500 transition-transform duration-300 ${isGroupExpanded(expandedSummaryDays, group.id) ? 'rotate-180' : 'rotate-0'}`}
-                            />
-                          </div>
-                        </button>
-                        <div
-                          className={`grid overflow-hidden transition-all duration-300 ease-out ${isGroupExpanded(expandedSummaryDays, group.id) ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'}`}
-                        >
-                          <div className="overflow-hidden">
-                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                              {group.slots.map((item) => (
-                                <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                                  {formatSlotLabel(item.timeSlotId)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+                  <p className="text-sm text-slate-600">
+                    The booking preview follows the live PT rule: coaches can take up to 1 week to approve, and approved schedules begin on the next eligible Monday.
+                  </p>
+                  {weeklySlots.length === 0 && (
+                    <p className="text-sm text-slate-500">No recurring slots selected yet.</p>
+                  )}
+                  {weeklySlots.length > 0 && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <WeekdayDropdown
+                            id="customer-summary-day"
+                            label="Weekday"
+                            value={selectedWeeklySummaryGroup?.id || ''}
+                            onChange={(nextValue) => setSelectedWeeklySummaryDay(Number(nextValue))}
+                            options={groupedWeeklySlots.map((day) => ({
+                              value: day.id,
+                              label: day.label,
+                              meta: `${day.slots.length} recurring slot(s) selected`,
+                              badge: `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''}`,
+                            }))}
+                            summaryText="Browse each weekday without expanding all selected slots."
+                          />
                         </div>
+                        {selectedWeeklySummaryGroup ? (
+                          <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                            {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
+                          </div>
+                        ) : null}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {selectedWeeklySummaryGroup ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {selectedWeeklySummaryGroup.slots.map((item) => (
+                            <span key={`${item.dayOfWeek}-${item.timeSlotId}`} className="inline-flex w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                              {formatSlotLabel(item.timeSlotId)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={previewMatches} disabled={loading} className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 disabled:opacity-50">
+                  {loading ? 'Loading...' : '2) Preview Matches'}
+                </button>
               </div>
+
+      <aside className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,_rgba(26,26,36,0.94),_rgba(18,18,26,0.84))] p-5 shadow-ambient-sm backdrop-blur-md">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Booking guide</p>
+                <h4 className="mt-3 text-xl font-bold text-slate-900">What happens next</h4>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Step 1</p>
+                    <p className="mt-1 text-sm text-slate-600">Open the planner, pick weekdays, and set the recurring slots you want the coach to cover each week.</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Step 2</p>
+                    <p className="mt-1 text-sm text-slate-600">Preview coach matches to see which coaches fully or partially fit the exact recurring template you saved.</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Step 3</p>
+                    <p className="mt-1 text-sm text-slate-600">Review a coach calendar match, remove any unresolved conflicts, and then send the booking request.</p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-900">Current blocker check</p>
+                  <p className="mt-2 text-sm text-amber-800">{membershipGate.eligible ? ptBookingGateSummary.detail : membershipGate.reason}</p>
+                </div>
+              </aside>
             </div>
 
             {hasPreviewedMatches && (
               <div className="space-y-4">
-                {matches.fullMatches.length > 0 && (
-                  <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
-                    <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
-                    <p className="text-sm text-emerald-700">These coaches can cover your recurring slot pattern through the membership-backed PT booking window.</p>
-                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {matches.fullMatches.map((coach) => (
-                        <CoachCard
-                          key={`full-${coach.coachId}`}
-                          coach={coach}
-                          onReview={openCoachReview}
-                          onOpenProfile={openCoachProfile}
-                          onRemoveSlot={removeRequestedWeeklySlot}
-                          formatSlotLabel={formatSlotLabel}
-                        />
-                      ))}
-                    </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
+                  <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
+                  <p className="text-sm text-emerald-700">These coaches can cover every requested recurring slot through your selected booking end date.</p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {matches.fullMatches.length === 0 && <p className="text-sm text-slate-600">No fully matched coach yet.</p>}
+                    {matches.fullMatches.map((coach) => (
+                      <CoachCard key={`full-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
+                    ))}
                   </div>
-                )}
+                </div>
 
                 <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
                   <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
@@ -1573,92 +1245,40 @@ function CustomerCoachBookingPage() {
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                     {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
                     {matches.partialMatches.map((coach) => (
-                      <CoachCard
-                        key={`partial-${coach.coachId}`}
-                        coach={coach}
-                        onReview={openCoachReview}
-                        onOpenProfile={openCoachProfile}
-                        onRemoveSlot={removeRequestedWeeklySlot}
-                        formatSlotLabel={formatSlotLabel}
-                      />
+                      <CoachCard key={`partial-${coach.coachId}`} coach={coach} onReview={openCoachReview} />
                     ))}
                   </div>
                 </div>
               </div>
             )}
-
-            <section className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4 backdrop-blur-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">PT directory</p>
-                  <h4 className="mt-1 text-lg font-bold text-white">Browse coaches and check weekly availability</h4>
-                </div>
-                <button
-                  type="button"
-                  onClick={loadCoachDirectory}
-                  disabled={coachDirectoryLoading}
-                  className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
-                >
-                  {coachDirectoryLoading ? 'Refreshing...' : 'Refresh list'}
-                </button>
-              </div>
-
-              <div className="mt-4 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10">
-                {coachDirectoryLoading && coachDirectory.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-slate-300">Loading coach directory...</div>
-                ) : coachDirectory.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-slate-300">No PT is available right now.</div>
-                ) : (
-                  coachDirectory.map((coach) => (
-                    <CoachDirectoryRow
-                      key={`directory-${coach.coachId}`}
-                      coach={coach}
-                      formatSlotLabel={formatSlotLabel}
-                      onBook={openCoachBookingModal}
-                      onOpenProfile={openCoachProfile}
-                    />
-                  ))
-                )}
-              </div>
-            </section>
           </div>
         )}
 
         {activeTab === 'schedule' && (
-            <div className="space-y-6">
-              <h3 className="text-xl font-bold text-slate-900">My PT Schedule</h3>
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold text-slate-900">My PT Schedule</h3>
 
-              {scheduleData.pendingRequests.length > 0 && (
-                <section className="space-y-3">
-                  <h4 className="font-bold text-rose-500">Pending Requests</h4>
-                  <div className="space-y-2">
-                    {scheduleData.pendingRequests.map((r) => (
-                      <div key={r.ptRequestId} className="rounded-xl bg-amber-100 px-4 py-3 text-sm text-amber-950">
-                        <div className="font-semibold text-slate-50">{r.coachName}</div>
-                        <div className="text-amber-700">{formatApprovalEta(r.createdAt)}</div>
-                        {canCancelPendingRequest(r.createdAt) ? (
-                          <div className="mt-3">
-                            <button
-                              type="button"
-                              onClick={() => void cancelPendingRequest(r.ptRequestId)}
-                              className="rounded-full border border-rose-300 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
-                            >
-                              Cancel request
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+            {scheduleData.pendingRequests.length > 0 && (
+              <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <h4 className="font-bold text-amber-800 mb-2">Pending Requests</h4>
+                <div className="space-y-2">
+                  {scheduleData.pendingRequests.map((r) => (
+                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-amber-200 px-3 py-2 text-sm">
+                      <div className="font-semibold text-slate-800">{r.coachName}</div>
+                      <div className="text-slate-600">Window: {r.startDate} to {r.endDate}</div>
+                      <div className="text-xs text-amber-700">If approved, this recurring PT plan starts from the next eligible Monday.</div>
+                    </div>
+                  ))}
                 </div>
               </section>
             )}
 
             {scheduleData.deniedRequests.length > 0 && (
-              <section className="space-y-3">
-                <h4 className="font-bold text-red-800">Denied Requests</h4>
+              <section className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                <h4 className="font-bold text-red-800 mb-2">Denied Requests</h4>
                 <div className="space-y-2">
                   {scheduleData.deniedRequests.map((r) => (
-                    <div key={r.ptRequestId} className="border-b border-red-200 pb-3 text-sm last:border-b-0">
+                    <div key={r.ptRequestId} className="bg-white rounded-xl border border-red-200 px-3 py-2 text-sm">
                       <div className="font-semibold text-slate-800">{r.coachName}: {r.startDate} to {r.endDate}</div>
                       <div className="text-red-700">Reason: {r.denyReason || 'No reason provided'}</div>
                     </div>
@@ -1667,13 +1287,13 @@ function CustomerCoachBookingPage() {
               </section>
             )}
 
-            {!loading && scheduleData.items.length === 0 && scheduleData.pendingRequests.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-500">
+            {!loading && scheduleData.items.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-12 text-center text-sm text-slate-500">
                 No PT sessions yet.
               </div>
             ) : (
-              <section className="space-y-4">
-                <div className="p-1">
+              <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Monthly view</p>
@@ -1683,7 +1303,7 @@ function CustomerCoachBookingPage() {
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
-                        className="gc-hover-text-green rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
                       >
                         Prev
                       </button>
@@ -1693,14 +1313,14 @@ function CustomerCoachBookingPage() {
                       <button
                         type="button"
                         onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
-                        className="gc-hover-text-green rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
                       >
                         Next
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-4 p-1">
+                  <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
                     <div className="grid grid-cols-7 gap-1">
                       {DAYS.map((day) => (
                         <div key={`schedule-header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1745,6 +1365,89 @@ function CustomerCoachBookingPage() {
                     </div>
                   </div>
                 </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Selected date</p>
+                  <h4 className="mt-2 text-lg font-bold text-slate-900">
+                    {selectedScheduleDate ? formatHumanDate(selectedScheduleDate) : 'Pick a green-marked day'}
+                  </h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Dates with coaching sessions are marked with a green signal in the calendar.
+                  </p>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedScheduleItems.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                        No coaching sessions selected for this day.
+                      </div>
+                    )}
+                    {selectedScheduleItems.map((s) => {
+                      const appearance = getSessionStatusAppearance(s.status)
+                      return (
+                        <div key={s.ptSessionId} className={`rounded-2xl border p-4 space-y-3 ${appearance.card}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h5 className="font-bold text-slate-900">{s.coachName}</h5>
+                              <p className="text-sm text-slate-600">
+                                Slot {s.slotIndex} | {String(s.startTime || '').slice(0, 5)} - {String(s.endTime || '').slice(0, 5)}
+                              </p>
+                            </div>
+                            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>
+                              <span className={`h-2 w-2 rounded-full ${appearance.dot}`} />
+                              {s.status}
+                            </span>
+                          </div>
+                          {s.reschedule?.status === 'PENDING' && <div className="text-xs text-amber-700">Reschedule pending coach approval</div>}
+                          {s.reschedule?.status === 'DENIED' && <div className="text-xs text-red-700">Reschedule denied: {s.reschedule.note || 'No reason provided'}</div>}
+                          {String(s.status || '').toUpperCase() === 'CANCELLED' && s.cancelReason && (
+                            <div className="text-xs text-red-700">Cancellation reason: {s.cancelReason}</div>
+                          )}
+                          {s.replacementOffer?.status === 'PENDING_CUSTOMER' && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                              <p className="text-sm font-bold text-amber-900">Replacement coach offer</p>
+                              <p className="mt-1 text-sm text-amber-800">
+                                {s.replacementOffer.replacementCoachName} can cover this session for {s.replacementOffer.originalCoachName}.
+                              </p>
+                              {s.replacementOffer.note ? (
+                                <p className="mt-2 text-xs text-amber-700">Note: {s.replacementOffer.note}</p>
+                              ) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleReplacementDecision(s.ptSessionId, 'ACCEPT')}
+                                  disabled={loading}
+                                  className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                  Accept replacement
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReplacementDecision(s.ptSessionId, 'DECLINE')}
+                                  disabled={loading}
+                                  className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                                >
+                                  Decline replacement
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {String(s.status || '').toUpperCase() === 'SCHEDULED' && (
+                            <div className="flex gap-2">
+                              <button onClick={() => openCancelModal(s)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200">Cancel</button>
+                              <button
+                                onClick={() => openRescheduleModal(s)}
+                                disabled={s.replacementOffer?.status === 'PENDING_CUSTOMER'}
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Reschedule
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               </section>
             )}
           </div>
@@ -1752,7 +1455,7 @@ function CustomerCoachBookingPage() {
 
         {activeTab === 'feedback' && (
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-slate-900">Feedback your PT</h3>
+            <h3 className="text-xl font-bold text-slate-900">Feedback Coach</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {completedSessions.map((s) => (
                 <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4">
@@ -1771,7 +1474,7 @@ function CustomerCoachBookingPage() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-visible rounded-2xl bg-white p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="text-xl font-bold text-slate-50 md:text-2xl">Find suitable personal trainer</h4>
+              <h4 className="text-lg font-bold text-slate-900">Set Desired PT Schedule</h4>
               <button
                 onClick={closePlannerModal}
                 className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
@@ -1781,6 +1484,53 @@ function CustomerCoachBookingPage() {
             </div>
 
             <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+              <div className="relative z-10 grid gap-3 xl:grid-cols-[0.72fr_0.92fr_1fr]">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approval rule</p>
+                  <div className="mt-1.5 text-sm font-semibold text-slate-900">{minimumBookingStartValue}</div>
+                  <div className="mt-1 text-[11px] leading-relaxed text-slate-500">Earliest eligible start date when the coach uses the full 1-week approval window.</div>
+                </div>
+                </div>
+                <div className="relative rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat end date for booking</p>
+                  <button
+                    type="button"
+                    aria-label="Repeat end date for booking"
+                    onClick={() => openDatePicker('endDate')}
+                    className="mt-2 flex w-full items-center justify-between rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-left transition hover:border-gym-400 hover:bg-gym-50"
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{formatHumanDate(form.endDate)}</div>
+                      <div className="text-[11px] text-slate-500">Choose when the recurring booking should stop</div>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">Edit</span>
+                  </button>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                    Once approved, the recurring PT plan starts from the next eligible Monday and continues until this end date.
+                  </p>
+                  {datePicker.field === 'endDate' && (
+                    <DatePickerPopover
+                      title="Repeat end date"
+                      monthCursor={datePicker.monthCursor}
+                      selectedValue={form.endDate}
+                      minValue={minimumBookingStartValue}
+                      onShiftMonth={(delta) => setDatePicker((prev) => ({ ...prev, monthCursor: shiftMonth(prev.monthCursor, delta) }))}
+                      onSelect={(value) => pickPlannerDate('endDate', value)}
+                      onClose={closeDatePicker}
+                      days={datePickerDays}
+                    />
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planner guide</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                    Choose weekdays and recurring time slots first. The match preview and the final booking request both use this exact schedule template.
+                  </p>
+                </div>
+              </div>
+
               <div className="grid min-h-0 grid-cols-1 gap-3 lg:grid-cols-[1.7fr_0.9fr]">
                 <div className="min-h-0 rounded-xl border border-slate-200 p-3">
                   <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -1835,7 +1585,7 @@ function CustomerCoachBookingPage() {
                 </div>
               </div>
 
-              <div className="pt-1">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-slate-600">Selected recurring slots</p>
@@ -1860,50 +1610,44 @@ function CustomerCoachBookingPage() {
                 {weeklySlots.length === 0 ? (
                   <p className="mt-3 text-sm text-slate-500">No slots selected.</p>
                 ) : (
-                  <div className="mt-3 overflow-x-auto pb-2">
-                    <div className="flex min-w-max gap-3">
-                      {groupedWeeklySlots.map((group) => (
-                        <div key={`picked-group-${group.id}`} className="w-72 shrink-0 rounded-2xl border border-slate-200 bg-white p-3">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpandedPlannerDay(group.id)}
-                            className="flex w-full items-center justify-between gap-3 text-left"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-900">{group.label}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                                {group.slots.length} slot{group.slots.length > 1 ? 's' : ''}
-                              </span>
-                              <ChevronDown
-                                size={16}
-                                className={`text-slate-500 transition-transform duration-300 ${isGroupExpanded(expandedPlannerDays, group.id) ? 'rotate-180' : 'rotate-0'}`}
-                              />
-                            </div>
-                          </button>
-                          <div
-                            className={`grid overflow-hidden transition-all duration-300 ease-out ${isGroupExpanded(expandedPlannerDays, group.id) ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'}`}
-                          >
-                            <div className="overflow-hidden">
-                              <div className="space-y-2">
-                                {group.slots.map((item) => (
-                                  <button
-                                    key={`picked-${item.dayOfWeek}-${item.timeSlotId}`}
-                                    onClick={() => removeRequestedWeeklySlot(item.dayOfWeek, item.timeSlotId)}
-                                    className="inline-flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-                                    title="Remove slot"
-                                  >
-                                    <span className="min-w-0 flex-1 truncate">{formatSlotLabel(item.timeSlotId)}</span>
-                                    <span className="shrink-0 font-bold">x</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div className="min-w-0">
+                        <WeekdayDropdown
+                          id="planner-summary-day"
+                          label="Weekday"
+                          value={selectedWeeklySummaryGroup?.id || ''}
+                          onChange={(nextValue) => setSelectedWeeklySummaryDay(Number(nextValue))}
+                          options={groupedWeeklySlots.map((day) => ({
+                            value: day.id,
+                            label: day.label,
+                            meta: `${day.slots.length} slot(s) ready to keep or remove`,
+                            badge: `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''}`,
+                          }))}
+                          summaryText="Switch weekdays and remove slots directly from this planner summary."
+                        />
+                      </div>
+                      {selectedWeeklySummaryGroup ? (
+                        <span className="text-[11px] font-semibold text-slate-500">
+                          {selectedWeeklySummaryGroup.slots.length} slot(s) selected for {selectedWeeklySummaryGroup.label}
+                        </span>
+                      ) : null}
                     </div>
+                    {selectedWeeklySummaryGroup ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {selectedWeeklySummaryGroup.slots.map((item) => (
+                          <button
+                            key={`picked-${item.dayOfWeek}-${item.timeSlotId}`}
+                            onClick={() => removeRequestedWeeklySlot(item.dayOfWeek, item.timeSlotId)}
+                            className="inline-flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                            title="Remove slot"
+                          >
+                            <span className="min-w-0 flex-1 truncate">{formatSlotLabel(item.timeSlotId)}</span>
+                            <span className="shrink-0 font-bold">x</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1921,7 +1665,7 @@ function CustomerCoachBookingPage() {
                 <p className="text-sm text-slate-600">{coachReviewModal.coach.fullName}  |  {coachReviewModal.coach.email}</p>
               </div>
               <button
-                onClick={() => setCoachReviewModal({ open: false, coach: null, selectedAlternativeSlots: {} })}
+                onClick={() => setCoachReviewModal({ open: false, coach: null })}
                 className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
               >
                 Close
@@ -1937,52 +1681,15 @@ function CustomerCoachBookingPage() {
               {coachReviewRows.map((row) => (
                 <div
                   key={`review-${row.dayOfWeek}-${row.timeSlotId}`}
-                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${
-                    row.unavailable
-                      ? 'border-red-500/30 bg-red-500/10'
-                      : row.adjusted
-                        ? 'border-amber-500/30 bg-amber-500/10'
-                        : 'border-emerald-500/30 bg-emerald-500/10'
-                  }`}
+                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${row.unavailable ? 'border-red-500/30 bg-red-500/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
                 >
                   <div>
-                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : row.adjusted ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : 'text-emerald-800'}`}>
                       {row.dayLabel} | {formatSlotLabel(row.timeSlotId)}
                     </div>
-                    <div className={`text-xs ${row.unavailable ? 'text-red-700' : row.adjusted ? 'text-amber-700' : 'text-emerald-700'}`}>
-                      {row.unavailable ? getUnavailableReason(row.reason) : row.adjusted ? getAdjustedReason(row.adjustedReason) : 'Matched'}
+                    <div className={`text-xs ${row.unavailable ? 'text-red-700' : 'text-emerald-700'}`}>
+                      {row.unavailable ? getUnavailableReason(row.reason) : 'Matched'}
                     </div>
-                    {row.adjusted && row.suggestedTimeSlotIds?.length > 0 ? (
-                      <div className="mt-2 space-y-2">
-                        <div className="text-xs font-semibold text-amber-800">
-                          Coach free on this weekday at:
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {row.suggestedTimeSlotIds.map((timeSlotId) => {
-                            const selected = row.chosenAlternativeTimeSlotId === timeSlotId
-                            return (
-                              <button
-                                key={`adjust-choice-${row.dayOfWeek}-${timeSlotId}`}
-                                type="button"
-                                onClick={() => chooseReviewAlternativeSlot(row.dayOfWeek, timeSlotId)}
-                                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                                  selected
-                                    ? 'border-amber-600 bg-amber-600 text-white'
-                                    : 'border-amber-300 bg-white text-amber-800 hover:bg-amber-50'
-                                }`}
-                              >
-                                {formatSlotLabel(timeSlotId)}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {!row.chosenAlternativeTimeSlotId ? (
-                          <div className="text-xs font-semibold text-amber-700">
-                            Choose one slot to continue.
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </div>
                   {row.unavailable ? (
                     <button
@@ -1992,9 +1699,7 @@ function CustomerCoachBookingPage() {
                       Remove
                     </button>
                   ) : (
-                    <span className={`text-xs font-semibold ${row.adjusted ? 'text-amber-700' : 'text-emerald-700'}`}>
-                      {row.adjusted ? 'Adjusting' : 'OK'}
-                    </span>
+                    <span className="text-xs font-semibold text-emerald-700">OK</span>
                   )}
                 </div>
               ))}
@@ -2002,13 +1707,13 @@ function CustomerCoachBookingPage() {
 
             <div className={`rounded-lg px-3 py-2 text-sm ${unresolvedReviewCount > 0 ? 'bg-red-500/10 text-red-700' : 'bg-emerald-500/10 text-emerald-700'}`}>
               {unresolvedReviewCount > 0
-                ? `${unresolvedReviewCount} slot(s) still need action before requesting this coach.`
-                : 'All selected weekdays can be covered by this coach.'}
+                ? `${unresolvedReviewCount} unmatched slot(s) must be removed before requesting this coach.`
+                : 'All selected slots match this coach.'}
             </div>
 
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setCoachReviewModal({ open: false, coach: null, selectedAlternativeSlots: {} })}
+                onClick={() => setCoachReviewModal({ open: false, coach: null })}
                 className="px-4 py-2 rounded-xl border border-slate-300"
               >
                 Cancel
@@ -2025,258 +1730,6 @@ function CustomerCoachBookingPage() {
         </div>
       )}
 
-      {coachProfileModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-            <button
-              type="button"
-              aria-label="Close coach profile"
-              onClick={closeCoachProfile}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
-            >
-              <X size={20} />
-            </button>
-            {coachProfileModal.loading ? (
-              <div className="py-16 text-center text-sm text-slate-500">Loading coach profile...</div>
-            ) : coachProfileModal.coach ? (
-              <div className="space-y-5">
-                <div className="flex items-start gap-4">
-                  {coachProfileModal.coach.avatarUrl ? (
-                    <img
-                      src={coachProfileModal.coach.avatarUrl}
-                      alt={coachProfileModal.coach.fullName || 'Coach avatar'}
-                      className="h-20 w-20 rounded-2xl object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                      <UserCircle2 size={40} />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Coach profile</p>
-                    <h4 className="mt-2 text-2xl font-bold text-slate-900">{coachProfileModal.coach.fullName || 'Coach'}</h4>
-                    <p className="mt-1 text-sm text-slate-500">{coachProfileModal.coach.email || 'No email'}</p>
-                    <p className="mt-1 text-sm text-slate-500">{coachProfileModal.coach.phone || 'No phone'}</p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="gc-surface-soft">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Experience</p>
-                    <p className="mt-2 text-lg font-bold text-slate-900">{coachProfileModal.coach.experienceYears || 0} years</p>
-                  </div>
-                  <div className="gc-surface-soft">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Average rating</p>
-                    <p className="mt-2 text-lg font-bold text-slate-900">{coachProfileModal.coach.avgRating || coachProfileModal.coach.averageRating || 0}</p>
-                  </div>
-                  <div className="gc-surface-soft">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reviews</p>
-                    <p className="mt-2 text-lg font-bold text-slate-900">{coachProfileModal.coach.reviewCount || 0}</p>
-                  </div>
-                </div>
-
-                <div className="gc-surface-plain">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Bio</p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-700">{coachProfileModal.coach.bio || 'No bio available.'}</p>
-                </div>
-
-                <div className="gc-surface-plain">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Weekly availability</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {groupAvailabilityByDay(coachProfileModal.coach.availability).length === 0 ? (
-                      <p className="text-sm text-slate-500">No weekly availability published yet.</p>
-                    ) : (
-                      groupAvailabilityByDay(coachProfileModal.coach.availability).map((day) => (
-                        <div key={`profile-availability-${day.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                          <span className="font-semibold text-slate-900">{day.label}</span>
-                          <span className="mx-2 text-slate-300">•</span>
-                          <span>{day.slots.map((slot) => formatSlotLabel(Number(slot.timeSlotId))).join(', ')}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="gc-surface-plain">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Recent feedback</p>
-                  <div className="mt-3 space-y-3">
-                    {Array.isArray(coachProfileModal.coach.recentFeedback) && coachProfileModal.coach.recentFeedback.length > 0 ? (
-                      coachProfileModal.coach.recentFeedback.map((item, index) => (
-                        <div key={`feedback-${index}`} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{item.customerName || 'Customer'}</p>
-                            <p className="text-xs font-semibold text-amber-600">Rating {Number(item.rating || 0).toFixed(1)}</p>
-                          </div>
-                          <p className="mt-1 text-sm text-slate-600">{item.comment || 'No comment left.'}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">No feedback yet.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {coachBookingModal.open && coachBookingModal.coach && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gym-600">Coach-first booking</p>
-                <h4 className="text-2xl font-bold text-slate-900">{coachBookingModal.coach.fullName || 'Coach'} availability</h4>
-                <p className="text-sm leading-relaxed text-slate-600">
-                  Choose only the free recurring weekday slots. Occupied slots already have PT sessions in your booking window.
-                </p>
-                {(coachBookingModal.fromDate || coachBookingModal.toDate) && (
-                  <p className="text-xs font-semibold text-slate-500">
-                    Booking window: {coachBookingModal.fromDate || '-'} to {coachBookingModal.toDate || '-'}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={closeCoachBookingModal}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Close
-              </button>
-            </div>
-
-            {coachBookingModal.loading ? (
-              <div className="py-16 text-center text-sm text-slate-500">Loading coach schedule...</div>
-            ) : (
-              <div className="mt-5 grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
-                <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.16em]">
-                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">Free</span>
-                    <span className="rounded-full bg-rose-100 px-3 py-1 text-rose-700">Occupied</span>
-                    <span className="rounded-full bg-slate-200 px-3 py-1 text-slate-600">Not available</span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {DAYS.map((day) => (
-                      <button
-                        key={`coach-booking-day-${day.id}`}
-                        type="button"
-                        onClick={() => setCoachBookingModal((prev) => ({ ...prev, focusDay: day.id }))}
-                        className={`rounded-2xl px-4 py-3 text-left transition ${coachBookingModal.focusDay === day.id ? 'bg-slate-950 text-white shadow-lg shadow-slate-950/15' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
-                      >
-                        <div className="text-sm font-bold">{day.label}</div>
-                        <div className="mt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">
-                          {coachBookingSelectedCountByDay.get(day.id) || 0} selected
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Selected weekday</p>
-                    <p className="mt-1 text-lg font-bold text-slate-900">{getDayMeta(coachBookingModal.focusDay)?.label || '-'}</p>
-
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      {timeSlots.map((slot) => {
-                        const status = getCoachBookingSlotStatus(coachBookingModal.focusDay, slot.timeSlotId)
-                        const selected = isCoachBookingSlotSelected(coachBookingModal.focusDay, slot.timeSlotId)
-                        const statusStyles = status === 'AVAILABLE'
-                          ? selected
-                            ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
-                            : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400 hover:bg-emerald-100'
-                          : status === 'BOOKED'
-                            ? 'border-rose-200 bg-rose-50 text-rose-700 cursor-not-allowed'
-                            : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                        return (
-                          <button
-                            key={`coach-booking-slot-${coachBookingModal.focusDay}-${slot.timeSlotId}`}
-                            type="button"
-                            onClick={() => toggleCoachBookingSlot(coachBookingModal.focusDay, slot.timeSlotId)}
-                            disabled={status !== 'AVAILABLE'}
-                            className={`rounded-2xl border px-4 py-3 text-left transition ${statusStyles}`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <div className="font-semibold">Slot {slot.slotIndex}</div>
-                                <div className="mt-1 text-xs opacity-80">
-                                  {String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}
-                                </div>
-                              </div>
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em]">
-                                {status === 'AVAILABLE' ? (selected ? 'Selected' : 'Free') : status === 'BOOKED' ? 'Occupied' : 'Unavailable'}
-                              </div>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Selected recurring slots</p>
-                    <p className="mt-1 text-sm text-slate-600">No need to set a match schedule first. Pick directly from this coach&apos;s free slots. One slot per weekday.</p>
-                  </div>
-
-                  {coachBookingModal.selectedSlots.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                      No slot selected yet.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {coachBookingModal.selectedSlots
-                        .slice()
-                        .sort((left, right) => {
-                          if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
-                          return left.timeSlotId - right.timeSlotId
-                        })
-                        .map((slot) => (
-                          <button
-                            key={`coach-booking-picked-${slot.dayOfWeek}-${slot.timeSlotId}`}
-                            type="button"
-                            onClick={() => toggleCoachBookingSlot(slot.dayOfWeek, slot.timeSlotId)}
-                            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
-                          >
-                            <div>
-                              <div className="font-semibold text-slate-900">{getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`}</div>
-                              <div className="mt-1 text-xs text-slate-500">{formatSlotLabel(slot.timeSlotId)}</div>
-                            </div>
-                            <span className="text-xs font-semibold uppercase tracking-[0.16em]">Remove</span>
-                          </button>
-                        ))}
-                    </div>
-                  )}
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                    This coach-first flow uses the coach&apos;s own availability. It does not depend on the schedule from Find suitable personal trainer.
-                  </div>
-
-                  <div className="flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={closeCoachBookingModal}
-                      className="gc-button-neutral"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={submitCoachSpecificBooking}
-                      disabled={loading || coachBookingModal.loading || coachBookingModal.selectedSlots.length === 0}
-                      className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:opacity-50"
-                    >
-                      Request this coach
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {rescheduleModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
@@ -2288,7 +1741,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="gc-surface-soft mt-5">
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">{rescheduleModal.session?.coachName || 'Assigned coach'}</p>
               <p className="mt-1 text-xs text-slate-500">
                 Current session: {rescheduleModal.session?.sessionDate || '-'} | {formatSlotLabel(rescheduleModal.session?.timeSlotId)}
@@ -2337,7 +1790,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeRescheduleModal}
-                className="gc-button-neutral"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Keep current session
               </button>
@@ -2436,11 +1889,13 @@ function CustomerCoachBookingPage() {
                   })}
                 </div>
 
-                <div className="gc-surface-soft">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New recurring template</p>
-                    {groupedSeriesSlots.length === 0 ? null : (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {groupedSeriesSlots.flatMap((day) =>
+                  {groupedSeriesSlots.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500">No recurring slots selected yet.</p>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {groupedSeriesSlots.flatMap((day) =>
                         day.slots.map((slot) => (
                           <span key={`series-preview-${day.id}-${slot.timeSlotId}`} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
                             {day.label} • {formatSlotLabel(slot.timeSlotId)}
@@ -2457,7 +1912,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeSeriesModal}
-                className="gc-button-neutral"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Keep current template
               </button>
@@ -2503,7 +1958,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="gc-surface-soft mt-5">
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">{cancelModal.session.coachName || 'Assigned coach'}</p>
               <p className="mt-1 text-xs text-slate-500">
                 {cancelModal.session.sessionDate || '-'} | {formatSlotLabel(cancelModal.session.timeSlotId)}
@@ -2525,7 +1980,7 @@ function CustomerCoachBookingPage() {
               <button
                 type="button"
                 onClick={closeCancelModal}
-                className="gc-button-neutral"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Keep session
               </button>
@@ -2549,7 +2004,7 @@ function CustomerCoachBookingPage() {
               type="button"
               aria-label="Close PT booking popup"
               onClick={() => setPtBookingBlockedModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             >
               <X size={20} />
             </button>
@@ -2561,11 +2016,17 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="mt-5 space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-50">Current PT status</p>
-              <div className="h-px w-40 bg-white/20" />
-              <p className="text-sm font-semibold text-slate-50">{ptBookingGateSummary.title}</p>
-              <p className="text-xs text-amber-700">{ptBookingGateSummary.detail}</p>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current PT status</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{ptBookingGateSummary.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{ptBookingGateSummary.detail}</p>
+                </div>
+                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                  {ptBookingGateSummary.badge}
+                </span>
+              </div>
             </div>
 
             <div className="mt-5 flex flex-wrap justify-end gap-3">
@@ -2575,7 +2036,7 @@ function CustomerCoachBookingPage() {
                   setPtBookingBlockedModal(false)
                   setActiveTab('schedule')
                 }}
-                className="gc-button-primary-flat min-h-0 rounded-full px-5 py-2.5 text-sm font-semibold"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Open My PT Schedule
               </button>
@@ -2591,7 +2052,7 @@ function CustomerCoachBookingPage() {
               type="button"
               aria-label="Close membership popup"
               onClick={() => setMembershipBlockedModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             >
               <X size={20} />
             </button>
@@ -2603,7 +2064,7 @@ function CustomerCoachBookingPage() {
               </p>
             </div>
 
-            <div className="gc-surface-soft mt-5">
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Current membership</p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div>
@@ -2622,7 +2083,7 @@ function CustomerCoachBookingPage() {
               <Link
                 to="/customer/current-membership"
                 onClick={() => setMembershipBlockedModal(false)}
-                className="gc-button-neutral"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 View my membership
               </Link>
@@ -2637,228 +2098,36 @@ function CustomerCoachBookingPage() {
           </div>
         </div>
       )}
-
-      {noCoachMatchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
-          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-            <button
-              type="button"
-              aria-label="Close no match popup"
-              onClick={() => setNoCoachMatchModal(false)}
-              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
-            >
-              <X size={20} />
-            </button>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">PT match result</p>
-              <h4 className="text-2xl font-bold text-slate-900">No coach matched this schedule.</h4>
-              <p className="text-sm leading-relaxed text-slate-600">
-                Please change your recurring weekday slots and search again. Try fewer weekdays or different time slots to improve the chance of finding a matching PT.
-              </p>
-            </div>
-
-            <div className="mt-5 flex flex-wrap justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setNoCoachMatchModal(false)}
-                className="gc-button-neutral"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNoCoachMatchModal(false)
-                  openPlannerModal()
-                }}
-                className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700"
-              >
-                Change schedule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      </CoachBookingPageErrorBoundary>
     </WorkspaceScaffold>
   )
 }
 
-function CoachCard({ coach, onReview, onOpenProfile, onRemoveSlot, formatSlotLabel }) {
+function CoachCard({ coach, onReview }) {
   const unavailableSlots = Array.isArray(coach.unavailableSlots) ? coach.unavailableSlots : []
-  const alternativeSlots = Array.isArray(coach.alternativeSlots) ? coach.alternativeSlots : []
   const bookedCount = unavailableSlots.filter((s) => s.reason === 'BOOKED_IN_RANGE').length
   const weeklyUnavailableCount = unavailableSlots.filter((s) => s.reason === 'NO_WEEKLY_AVAILABILITY').length
-  const alternativeCount = alternativeSlots.length
   const isFullMatch = String(coach.matchType || '').toUpperCase() === 'FULL'
 
   return (
     <article className={`rounded-xl border p-4 space-y-2 ${isFullMatch ? 'border-emerald-200 bg-white' : 'border-red-200 bg-red-50/35'}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <button
-            type="button"
-            onClick={() => onOpenProfile(coach.coachId)}
-            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 hover:border-gym-300 hover:text-gym-700"
-            aria-label={`Open ${coach.fullName} profile`}
-          >
-            {coach.avatarUrl ? (
-              <img src={coach.avatarUrl} alt={coach.fullName || 'Coach avatar'} className="h-full w-full object-cover" />
-            ) : (
-              <UserCircle2 size={26} />
-            )}
-          </button>
-          <div>
-            <h5 className="font-bold text-slate-900">{coach.fullName}</h5>
-            <p className="text-xs text-slate-500">{coach.email}</p>
-          </div>
+        <div>
+          <h5 className="font-bold text-slate-900">{coach.fullName}</h5>
+          <p className="text-xs text-slate-500">{coach.email}</p>
         </div>
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isFullMatch ? 'bg-emerald-500/15 text-emerald-700' : 'bg-red-500/15 text-red-700'}`}>
           {coach.matchedSlots}/{coach.requestedSlots} slots
         </span>
       </div>
       <p className="text-sm text-slate-600">{coach.bio || 'No bio'}</p>
-      {!isFullMatch && alternativeSlots.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
-            <AlertTriangle size={16} />
-            <span>Some weekdays still work, but the coach needs a different slot on those days.</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {alternativeSlots.map((slot) => (
-              <div key={`${coach.coachId}-alt-${slot.dayOfWeek}-${slot.requestedTimeSlotId}`} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
-                <div className="text-sm font-semibold text-amber-800">{getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`}</div>
-                <div className="mt-1 text-xs text-slate-600">Picked: {formatSlotLabel(slot.requestedTimeSlotId)}</div>
-                <div className="text-xs font-semibold text-amber-700">
-                  Coach free at: {(Array.isArray(slot.freeTimeSlotIds) && slot.freeTimeSlotIds.length > 0 ? slot.freeTimeSlotIds : [slot.timeSlotId])
-                    .map((timeSlotId) => formatSlotLabel(timeSlotId))
-                    .join(', ')}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {!isFullMatch && unavailableSlots.length > 0 && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
-            <AlertTriangle size={16} />
-            <span>Some selected slots conflict with this coach&apos;s schedule.</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {unavailableSlots.map((slot) => (
-              <div key={`${coach.coachId}-${slot.dayOfWeek}-${slot.timeSlotId}`} className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-white px-3 py-2">
-                <div>
-                  <div className="text-sm font-semibold text-red-700">{getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`}</div>
-                  <div className="text-xs text-slate-600">{formatSlotLabel(slot.timeSlotId)}</div>
-                  <div className="text-[11px] text-red-600">{getUnavailableReason(slot.reason)}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onRemoveSlot(slot.dayOfWeek, slot.timeSlotId)}
-                  className="rounded-full border border-red-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-red-700 hover:bg-red-50"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="text-xs text-slate-600">
-        {alternativeCount > 0 && <div>{alternativeCount} weekday(s) need a different coach slot.</div>}
         {bookedCount > 0 && <div>{bookedCount} slot(s) already booked in selected range.</div>}
         {weeklyUnavailableCount > 0 && <div>{weeklyUnavailableCount} slot(s) not in coach weekly availability.</div>}
       </div>
-      <div className="mt-2 flex gap-2">
-        <button
-          type="button"
-          onClick={() => onOpenProfile(coach.coachId)}
-          className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          View Profile
-        </button>
-        <button onClick={() => onReview(coach)} className="flex-1 rounded-lg bg-gym-600 px-3 py-2 text-sm font-semibold text-white hover:bg-gym-700">
-          Review Calendar Match
-        </button>
-      </div>
+      <button onClick={() => onReview(coach)} className="w-full mt-2 px-3 py-2 rounded-lg bg-gym-600 text-white text-sm font-semibold hover:bg-gym-700">
+        Review Calendar Match
+      </button>
     </article>
-  )
-}
-
-function CoachDirectoryRow({ coach, onBook, onOpenProfile, formatSlotLabel }) {
-  const availabilityGroups = groupAvailabilityByDay(coach.availability)
-
-  return (
-    <div className="px-4 py-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-3">
-            <button
-              type="button"
-              onClick={() => onOpenProfile(coach.coachId)}
-              className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-slate-300 transition hover:border-gym-300 hover:text-white"
-              aria-label={`Open ${coach.fullName} profile`}
-            >
-              {coach.avatarUrl ? (
-                <img src={coach.avatarUrl} alt={coach.fullName || 'Coach avatar'} className="h-full w-full object-cover" />
-              ) : (
-                <UserCircle2 size={26} />
-              )}
-            </button>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h5 className="truncate text-base font-bold text-white">{coach.fullName || 'Coach'}</h5>
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
-                  {Number(coach.experienceYears || 0)} year{Number(coach.experienceYears || 0) === 1 ? '' : 's'}
-                </span>
-                <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
-                  Rating {Number(coach.avgRating || coach.averageRating || 0).toFixed(1)}
-                </span>
-              </div>
-              <p className="mt-1 truncate text-xs text-slate-400">{coach.email || 'No email'}</p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">{coach.bio || 'No bio available yet.'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-3">
-          <div className="text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reviews</p>
-            <p className="mt-1 text-sm font-semibold text-white">{Number(coach.reviewCount || 0)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onBook(coach)}
-            className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
-          >
-            Book coach
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenProfile(coach.coachId)}
-            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-          >
-            View details
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {availabilityGroups.length > 0 ? (
-          availabilityGroups.map((day) => (
-            <div key={`directory-availability-${coach.coachId}-${day.id}`} className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
-              <span className="font-semibold text-white">{day.label}</span>
-              <span className="text-slate-400">•</span>
-              <span className="text-slate-300">
-                {day.slots.map((slot) => formatSlotLabel(Number(slot.timeSlotId))).join(', ')}
-              </span>
-            </div>
-          ))
-        ) : null}
-      </div>
-    </div>
   )
 }
 
@@ -2896,7 +2165,7 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
           <button
             type="button"
             onClick={() => onShiftMonth(-1)}
-            className="gc-hover-text-green rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition"
+            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
           >
             Prev
           </button>
@@ -2907,7 +2176,7 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
           <button
             type="button"
             onClick={() => onShiftMonth(1)}
-            className="gc-hover-text-green rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition"
+            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-gym-300 hover:bg-gym-50 hover:text-gym-700"
           >
             Next
           </button>
@@ -2953,5 +2222,4 @@ function DatePickerPopover({ title, monthCursor, selectedValue, minValue, onShif
 }
 
 export default CustomerCoachBookingPage
-
 

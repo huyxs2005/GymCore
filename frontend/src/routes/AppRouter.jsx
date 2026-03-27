@@ -1,7 +1,6 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Suspense, lazy } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { useSession } from '../features/auth/useSession'
-import { GLOBAL_MUTATION_SYNC_EVENT } from '../features/dataSync/mutationSync'
 
 const LandingPage = lazy(() => import('../pages/public/LandingPage'))
 const LoginPage = lazy(() => import('../pages/public/LoginPage'))
@@ -12,7 +11,6 @@ const ChangePasswordPage = lazy(() => import('../pages/public/ChangePasswordPage
 const ProfilePage = lazy(() => import('../pages/common/ProfilePage'))
 const NotificationsPage = lazy(() => import('../pages/common/NotificationsPage'))
 const CustomerMembershipPage = lazy(() => import('../pages/customer/CustomerMembershipPage'))
-const CustomerMembershipCheckoutPage = lazy(() => import('../pages/customer/CustomerMembershipCheckoutPage'))
 const CustomerCurrentMembershipPage = lazy(() => import('../pages/customer/CustomerCurrentMembershipPage'))
 const CustomerProgressHubPage = lazy(() => import('../pages/customer/CustomerProgressHubPage'))
 const CustomerCheckinHealthPage = lazy(() => import('../pages/customer/CustomerCheckinHealthPage'))
@@ -38,6 +36,7 @@ const AdminProductsPage = lazy(() => import('../pages/admin/AdminProductsPage'))
 const AdminGoalsPage = lazy(() => import('../pages/admin/AdminGoalsPage'))
 const AdminWorkoutsPage = lazy(() => import('../pages/admin/AdminWorkoutsPage'))
 const AdminFoodsPage = lazy(() => import('../pages/admin/AdminFoodsPage'))
+const AdminFoodCategoriesPage = lazy(() => import('../pages/admin/AdminFoodCategoriesPage'))
 const AdminCoachInsightsPage = lazy(() => import('../pages/admin/AdminCoachInsightsPage'))
 const AdminInvoicesPage = lazy(() => import('../pages/admin/AdminInvoicesPage'))
 const AdminPromotionsPage = lazy(() => import('../pages/admin/AdminPromotionsPage'))
@@ -76,34 +75,12 @@ function RequireRole({ roles, children }) {
 }
 
 function AppRouter() {
-  const location = useLocation()
-  const [mutationVersion, setMutationVersion] = useState(0)
   const withAuth = (element) => <RequireAuth>{element}</RequireAuth>
   const withRole = (roles, element) => <RequireRole roles={roles}>{element}</RequireRole>
 
-  useEffect(() => {
-    const handleMutationSync = () => {
-      setMutationVersion((prev) => prev + 1)
-    }
-
-    const handleStorageSync = (event) => {
-      if (event.key === 'gymcore:mutation-sync') {
-        setMutationVersion((prev) => prev + 1)
-      }
-    }
-
-    window.addEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleMutationSync)
-    window.addEventListener('storage', handleStorageSync)
-
-    return () => {
-      window.removeEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleMutationSync)
-      window.removeEventListener('storage', handleStorageSync)
-    }
-  }, [])
-
   return (
     <Suspense fallback={<RouteFallback />}>
-      <Routes key={`${location.pathname}|${location.search}|${mutationVersion}`}>
+      <Routes>
         <Route path="/" element={<LandingPage />} />
 
         <Route path="/auth/login" element={<LoginPage />} />
@@ -115,7 +92,6 @@ function AppRouter() {
         <Route path="/notifications" element={withAuth(<NotificationsPage />)} />
 
         <Route path="/customer/membership" element={withRole(['CUSTOMER'], <CustomerMembershipPage />)} />
-        <Route path="/customer/membership/checkout" element={withRole(['CUSTOMER'], <CustomerMembershipCheckoutPage />)} />
         <Route path="/customer/current-membership" element={withRole(['CUSTOMER'], <CustomerCurrentMembershipPage />)} />
         <Route path="/customer/progress-hub" element={withRole(['CUSTOMER'], <CustomerProgressHubPage />)} />
         <Route path="/customer/checkin-health" element={withRole(['CUSTOMER'], <CustomerCheckinHealthPage />)} />
@@ -145,6 +121,7 @@ function AppRouter() {
         <Route path="/admin/goals" element={withRole(['ADMIN'], <AdminGoalsPage />)} />
         <Route path="/admin/workouts" element={withRole(['ADMIN'], <AdminWorkoutsPage />)} />
         <Route path="/admin/foods" element={withRole(['ADMIN'], <AdminFoodsPage />)} />
+        <Route path="/admin/food-categories" element={withRole(['ADMIN'], <AdminFoodCategoriesPage />)} />
         <Route path="/admin/coach-insights" element={withRole(['ADMIN'], <AdminCoachInsightsPage />)} />
         <Route path="/admin/invoices" element={withRole(['ADMIN'], <AdminInvoicesPage />)} />
         <Route path="/admin/promotions" element={withRole(['ADMIN'], <AdminPromotionsPage />)} />

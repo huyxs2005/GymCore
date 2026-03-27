@@ -2,7 +2,7 @@ import { apiClient } from '../../../api/client'
 
 export const coachBookingApi = {
   matchCoaches(payload) {
-    return apiClient.post('/v1/coach-booking/match', payload, { skipMutationSync: true }).then((response) => response.data)
+    return apiClient.post('/v1/coach-booking/match', payload).then((response) => response.data)
   },
   createInstantBooking(payload) {
     return apiClient.post('/v1/coach-booking/bookings', payload).then((response) => response.data)
@@ -26,7 +26,7 @@ export const coachBookingApi = {
     return apiClient.patch(`/v1/coach-booking/sessions/${sessionId}/cancel`, body).then((response) => response.data)
   },
   deleteRequest(requestId) {
-    return apiClient.patch(`/v1/coach-booking/requests/${requestId}/cancel`).then((response) => response.data)
+    return apiClient.patch(`/v1/coach-booking/requests/${requestId}/delete`).then((response) => response.data)
   },
   rescheduleSession(sessionId, payload) {
     return apiClient

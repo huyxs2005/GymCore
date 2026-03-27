@@ -52,21 +52,20 @@ function NotificationDropdown() {
   const dropdownData = notifData?.data
   const unreadCount = dropdownData?.unreadCount || 0
   const notifications = useMemo(() => dropdownData?.notifications || [], [dropdownData])
-  const unreadNotifications = useMemo(
-    () => notifications.filter((notification) => !notification.isRead),
-    [notifications],
-  )
   const reminderCenter = useMemo(() => {
-    const fallback = partitionReminderCenter(unreadNotifications)
+    if (dropdownData?.reminderCenter) {
+      return dropdownData.reminderCenter
+    }
+    const fallback = partitionReminderCenter(notifications)
     return {
       ...fallback,
       counts: {
-        total: unreadNotifications.length,
+        total: notifications.length,
         actionable: fallback.actionable.length,
         history: fallback.history.length,
       },
     }
-  }, [unreadNotifications])
+  }, [dropdownData, notifications])
   const actionableItems = useMemo(() => reminderCenter?.actionable || [], [reminderCenter])
   const historyItems = useMemo(() => reminderCenter?.history || [], [reminderCenter])
   const previewActionable = useMemo(() => actionableItems.slice(0, 3), [actionableItems])
@@ -143,7 +142,7 @@ function NotificationDropdown() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen((value) => !value)}
-        className="relative p-1 text-slate-50 transition hover:text-gym-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+        className="relative rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 shadow-ambient-sm backdrop-blur-md transition hover:border-gym-300 hover:bg-gym-50 hover:text-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
         aria-label="Open notifications"
       >
         <Bell size={20} />
@@ -156,11 +155,11 @@ function NotificationDropdown() {
 
       {isOpen ? (
         <div className="absolute right-0 mt-2 w-[24rem] overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(18,18,26,0.94)] shadow-[0_28px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl">
-          <div className="bg-[linear-gradient(135deg,rgba(245,158,11,0.16),rgba(18,18,26,0.92)_52%)] px-4 py-3">
+          <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(245,158,11,0.16),rgba(18,18,26,0.92)_52%)] px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-display text-[1.05rem] font-semibold tracking-tight text-slate-50">Notification</h3>
-                <p className="mt-1 text-xs text-slate-200">
+                <h3 className="font-display text-[1.05rem] font-semibold tracking-tight text-slate-50">Reminder Center</h3>
+                <p className="mt-1 text-xs text-slate-500">
                   {actionableCount > 0
                     ? `${actionableCount} active reminder${actionableCount === 1 ? '' : 's'} waiting for review`
                     : 'No active reminders right now'}
@@ -178,7 +177,7 @@ function NotificationDropdown() {
             {totalVisible > 0 ? (
               <div>
                 {previewActionable.length > 0 ? (
-                  <section>
+                  <section className="border-b border-white/10">
                     <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-gym-700">
                       Act now
                     </div>
@@ -190,7 +189,7 @@ function NotificationDropdown() {
                           data-testid={`dropdown-notification-${notification.notificationId}`}
                           data-notification-bucket="actionable"
                           data-notification-tone="primary"
-                          className="bg-gym-50/60 px-4 py-3 transition hover:bg-gym-50"
+                          className="border-t border-white/10 bg-gym-50/60 px-4 py-3 transition hover:bg-gym-50"
                         >
                           <div className="flex gap-3">
                             <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gym-400 to-gym-600 text-xs font-black text-slate-950 shadow-glow">
@@ -198,10 +197,10 @@ function NotificationDropdown() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-sm leading-5 text-slate-200">
-                                <span className="font-bold text-slate-50">{notification.title}</span>{' '}
-                                <span className="text-slate-200">{notification.message}</span>
+                                <span className="font-semibold text-gym-700">{notification.title}</span>{' '}
+                                <span className="text-slate-500">{notification.message}</span>
                               </p>
-                              <div className="mt-1 flex items-center gap-2 text-xs text-slate-200">
+                              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                                 <span>{formatNotificationTimestamp(notification.createdAt)}</span>
                                 <span>&bull;</span>
                                 <span className="font-medium text-gym-700">
@@ -213,7 +212,7 @@ function NotificationDropdown() {
                                   <button
                                     type="button"
                                     onClick={() => markReadMutation.mutate(notification.notificationId)}
-                                    className="text-xs font-medium text-slate-200 transition hover:text-gym-500"
+                                    className="text-xs font-medium text-gym-700 transition hover:text-gym-800"
                                   >
                                     Mark read
                                   </button>
@@ -222,7 +221,7 @@ function NotificationDropdown() {
                                   <button
                                     type="button"
                                     onClick={() => handleOpenNotification(notification)}
-                                    className="text-xs font-medium text-slate-200 transition hover:text-gym-500"
+                                    className="text-xs font-medium text-gym-700 transition hover:text-gym-800"
                                   >
                                     {destination?.label || 'Open'}
                                   </button>
@@ -238,8 +237,8 @@ function NotificationDropdown() {
 
                 {previewHistory.length > 0 ? (
                   <section>
-                    <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200">
-                      History
+                    <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Recent history
                     </div>
                     {previewHistory.map((notification) => {
                       const destination = getDestination(notification)
@@ -249,25 +248,25 @@ function NotificationDropdown() {
                           data-testid={`dropdown-notification-${notification.notificationId}`}
                           data-notification-bucket="history"
                           data-notification-tone={notification.isRead ? 'muted' : 'secondary'}
-                          className="px-4 py-3 transition hover:bg-white/5"
+                          className={`border-t border-white/10 px-4 py-3 transition hover:bg-white/5 ${notification.isRead ? 'bg-slate-50/90 opacity-80' : 'bg-white'}`}
                         >
                           <div className="flex gap-3">
                             <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-black text-slate-50 shadow-ambient-sm">
                               {getNotificationAvatarText(notification)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm leading-5 text-slate-200">
-                                <span className="font-bold text-slate-50">
+                              <p className="text-sm leading-5 text-slate-500">
+                                <span className={notification.isRead ? 'font-medium text-slate-300' : 'font-semibold text-slate-50'}>
                                   {notification.title}
                                 </span>{' '}
-                                <span className="text-slate-200">
+                                <span className={notification.isRead ? 'text-slate-500' : 'text-slate-400'}>
                                   {notification.message}
                                 </span>
                               </p>
-                              <div className="mt-1 flex items-center gap-2 text-xs text-slate-200">
+                              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                                 <span>{formatNotificationTimestamp(notification.createdAt)}</span>
                                 <span>&bull;</span>
-                                <span className={notification.isRead ? 'font-medium text-slate-200' : 'font-medium text-gym-700'}>
+                                <span className={notification.isRead ? 'font-medium text-slate-500' : 'font-medium text-gym-700'}>
                                   {notification.isRead ? 'Read' : 'Unread history'}
                                 </span>
                               </div>
@@ -276,7 +275,7 @@ function NotificationDropdown() {
                                   <button
                                     type="button"
                                     onClick={() => markReadMutation.mutate(notification.notificationId)}
-                                    className="text-xs font-medium text-slate-200 transition hover:text-gym-500"
+                                    className="text-xs font-medium text-gym-700 transition hover:text-gym-800"
                                   >
                                     Mark read
                                   </button>
@@ -285,7 +284,7 @@ function NotificationDropdown() {
                                   <button
                                     type="button"
                                     onClick={() => handleOpenNotification(notification)}
-                                    className="text-xs font-medium text-slate-200 transition hover:text-gym-500"
+                                    className="text-xs font-medium text-slate-700 transition hover:text-slate-900"
                                   >
                                     {destination?.label || 'Open'}
                                   </button>
@@ -305,24 +304,24 @@ function NotificationDropdown() {
                   <Bell size={18} />
                 </div>
                 <p className="text-sm font-medium text-slate-50">No reminders yet</p>
-                <p className="mt-1 text-xs text-slate-200">Successful actions and coach updates will show up here.</p>
+                <p className="mt-1 text-xs text-slate-500">Successful actions and coach updates will show up here.</p>
               </div>
             )}
           </div>
 
-          <div className="flex items-center justify-between bg-slate-50/70 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between border-t border-white/10 bg-slate-50/70 px-4 py-3 text-sm">
             <button
               type="button"
               onClick={handleShowAllNotifications}
-              className="font-medium text-white transition hover:text-gym-500"
+              className="font-medium text-gym-700 transition hover:text-gym-800"
             >
-              Show all
+              Open reminder center
             </button>
             <button
               type="button"
               onClick={() => markAllReadMutation.mutate()}
               disabled={unreadCount === 0}
-              className="inline-flex items-center gap-2 font-medium text-white transition hover:text-gym-500 disabled:cursor-not-allowed disabled:text-slate-400"
+              className="inline-flex items-center gap-2 font-medium text-gym-700 transition hover:text-gym-800 disabled:cursor-not-allowed disabled:text-slate-400"
             >
               <CheckCheck size={14} />
               Mark Read

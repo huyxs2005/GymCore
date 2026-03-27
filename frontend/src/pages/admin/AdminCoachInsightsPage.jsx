@@ -29,12 +29,12 @@ function StarRating({ value }) {
   )
 }
 
-function SummaryCard({ label, value, detail, tone = 'border-white/10 bg-white/5' }) {
+function SummaryCard({ label, value, detail, tone = 'bg-white' }) {
   return (
-    <article className={`rounded-[28px] border p-5 shadow-sm ${tone}`}>
+    <article className={`rounded-[28px] border border-slate-200 p-5 shadow-sm ${tone}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-3 text-3xl font-black text-white">{value}</p>
-      <p className="mt-3 text-sm text-slate-400">{detail}</p>
+      <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
+      <p className="mt-3 text-sm text-slate-600">{detail}</p>
     </article>
   )
 }
@@ -239,9 +239,9 @@ function AdminCoachInsightsPage() {
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard label="Tracked coaches" value={summary.totalCoaches} detail="Combined from coach student and feedback endpoints." />
-          <SummaryCard label="Top performers" value={summary.topPerformerCount} detail="Coaches with 4.5+ rating and real review coverage." tone="border-emerald-500/20 bg-emerald-500/10" />
-          <SummaryCard label="Need attention" value={summary.needsAttentionCount} detail="Low-satisfaction high-load coaches or coaches with no active students." tone="border-rose-500/20 bg-rose-500/10" />
-          <SummaryCard label="Student relationships" value={summary.totalStudents} detail={`${summary.feedbackGapCount} coach(es) still need stronger feedback coverage.`} tone="border-sky-500/20 bg-sky-500/10" />
+          <SummaryCard label="Top performers" value={summary.topPerformerCount} detail="Coaches with 4.5+ rating and real review coverage." tone="bg-emerald-50/80" />
+          <SummaryCard label="Need attention" value={summary.needsAttentionCount} detail="Low-satisfaction high-load coaches or coaches with no active students." tone="bg-rose-50/80" />
+          <SummaryCard label="Student relationships" value={summary.totalStudents} detail={`${summary.feedbackGapCount} coach(es) still need stronger feedback coverage.`} tone="bg-sky-50/80" />
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">

@@ -10,7 +10,6 @@ import { cartApi } from '../../features/product/api/cartApi'
 import { orderApi } from '../../features/product/api/orderApi'
 import { productApi } from '../../features/product/api/productApi'
 import { triggerAddToCartAnimation } from '../../features/product/utils/cartAnimation'
-import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
 
 function CustomerShopPage() {
   const queryClient = useQueryClient()
@@ -205,11 +204,13 @@ function CustomerShopPage() {
               <article key={product.productId} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                 <Link to={`/customer/shop/${product.productId}`} className="block">
                   <div className="aspect-[4/3] overflow-hidden bg-slate-100">
-                    <img
-                      src={getDynamicProductImage(product.name)}
-                      alt={product.name}
-                      className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]"
-                    />
+                    {product.thumbnailUrl || product.imageUrl ? (
+                      <img
+                        src={product.thumbnailUrl || product.imageUrl}
+                        alt={product.name}
+                        className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]"
+                      />
+                    ) : null}
                   </div>
                 </Link>
                 <div className="space-y-4 p-4">

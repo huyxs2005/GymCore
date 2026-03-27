@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   ShieldCheck,
   Target,
+  Tags,
   UtensilsCrossed,
   UserSquare2,
   Users,
@@ -27,6 +28,7 @@ const adminNavIcons = {
   '/admin/goals': Target,
   '/admin/workouts': Dumbbell,
   '/admin/foods': UtensilsCrossed,
+  '/admin/food-categories': Tags,
   '/admin/coach-insights': Activity,
   '/admin/invoices': FileText,
   '/admin/promotions': BadgePercent,
@@ -40,7 +42,7 @@ const adminNavGroups = [
   },
   {
     title: 'Catalog',
-    match: ['/admin/goals', '/admin/workouts', '/admin/foods', '/admin/products'],
+    match: ['/admin/goals', '/admin/workouts', '/admin/foods', '/admin/food-categories', '/admin/products'],
   },
   {
     title: 'Commerce',
@@ -73,7 +75,7 @@ function groupAdminLinks(links) {
   return grouped
 }
 
-function WorkspaceScaffold({ title, subtitle, links = [], children, showHeader = true }) {
+function WorkspaceScaffold({ title, subtitle, links = [], children }) {
   const location = useLocation()
   const isAdminShell = location.pathname.startsWith('/admin/') && links.length > 0
   const [isAdminSidebarOpen, setIsAdminSidebarOpen] = useState(true)
@@ -164,17 +166,11 @@ function WorkspaceScaffold({ title, subtitle, links = [], children, showHeader =
         </main>
       ) : (
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-          {showHeader ? (
-            <section className="relative mb-10 overflow-hidden rounded-[32px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,18,26,0.8),rgba(10,10,15,0.75))] p-8 shadow-[0_24px_60px_rgba(0,0,0,0.34)] backdrop-blur-2xl">
-              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gym-500/5 blur-[100px]" />
-              <div className="relative">
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gym-500/60 font-display">Workspace Protocol</p>
-                <h1 className="mt-4 font-display text-4xl font-black tracking-tight text-white uppercase">{title}</h1>
-                <div className="mt-4 h-1 w-12 rounded-full bg-gym-500 shadow-glow" />
-                <p className="mt-6 max-w-2xl text-sm leading-relaxed text-slate-500 font-medium">{subtitle}</p>
-              </div>
-            </section>
-          ) : null}
+          <section className="mb-6 overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(26,26,36,0.9),rgba(18,18,26,0.82))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+            <p className="gc-section-kicker">Workspace</p>
+            <h1 className="mt-3 font-display text-2xl font-bold tracking-tight text-slate-50">{title}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">{subtitle}</p>
+          </section>
           {children}
         </main>
       )}

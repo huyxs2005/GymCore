@@ -150,56 +150,6 @@ describe('CustomerCoachBookingPage', () => {
     expect(screen.getByText(/Coach Alex/i)).toBeInTheDocument()
   }, 20000)
 
-  it('shows partial matches even when full matches also exist', async () => {
-    coachBookingApi.matchCoaches.mockResolvedValue({
-      data: {
-        fullMatches: [
-          {
-            coachId: 3,
-            fullName: 'Coach Alex',
-            email: 'coach@gymcore.local',
-            bio: 'Strength coach',
-            matchedSlots: 2,
-            requestedSlots: 2,
-            unavailableSlots: [],
-          },
-        ],
-        partialMatches: [
-          {
-            coachId: 4,
-            fullName: 'Coach Taylor',
-            email: 'coach2@gymcore.local',
-            bio: 'PT coach',
-            matchedSlots: 1,
-            requestedSlots: 2,
-            unavailableSlots: [
-              {
-                dayOfWeek: 1,
-                timeSlotId: 1,
-                reason: 'BOOKED',
-              },
-            ],
-          },
-        ],
-      },
-    })
-
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /Open Schedule Planner/i }))
-    await user.click(screen.getByRole('button', { name: /Monday/i }))
-    await user.click(await screen.findByRole('button', { name: /Slot 1/i }))
-    await user.click(screen.getByRole('button', { name: /Tuesday/i }))
-    await user.click(screen.getByRole('button', { name: /Slot 1/i }))
-    await user.click(screen.getByRole('button', { name: /Save and Search/i }))
-
-    expect(await screen.findByText(/Fully Match/i)).toBeInTheDocument()
-    expect(await screen.findByText(/Partial Match/i)).toBeInTheDocument()
-    expect(screen.getByText(/Coach Alex/i)).toBeInTheDocument()
-    expect(screen.getByText(/Coach Taylor/i)).toBeInTheDocument()
-  })
-
   it('shows denied request reason in schedule tab', async () => {
     coachBookingApi.getMySchedule.mockResolvedValue({
       data: {

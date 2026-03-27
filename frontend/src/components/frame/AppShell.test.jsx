@@ -169,7 +169,7 @@ describe('AppShell cart button', () => {
     expect(labels).toEqual([
       'Check-in & Health',
       'Progress Hub',
-      'Personal Trainer',
+      'Coach Booking',
       'Promotions',
       'Membership',
       'Product Shop',
@@ -178,7 +178,7 @@ describe('AppShell cart button', () => {
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Progress Hub$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Check-in & Health$/i })).toBeInTheDocument()
-    expect(within(headerNav).getByRole('link', { name: /^Personal Trainer$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Coach Booking$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Promotions$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Workout\/Food\/AI$/i })).toBeInTheDocument()
@@ -190,7 +190,7 @@ describe('AppShell cart button', () => {
 
     let headerNav = screen.getAllByRole('navigation')[0]
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
-    expect(within(headerNav).getByRole('link', { name: /^Personal Trainer$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Coach Booking$/i })).toBeInTheDocument()
 
     unmount()
 

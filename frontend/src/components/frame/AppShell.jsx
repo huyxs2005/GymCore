@@ -169,7 +169,7 @@ function CustomerShopCartButton({ visible, onOpenCart }) {
       type="button"
       aria-label="Open cart"
       onClick={onOpenCart}
-      className={`relative p-1 text-slate-50 transition duration-200 hover:text-gym-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${pulse ? 'scale-110 shadow-glow' : 'scale-100'}`}
+      className={`relative rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 shadow-ambient-sm backdrop-blur-md transition duration-200 hover:border-white/15 hover:bg-white/10 hover:text-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gym-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${pulse ? 'scale-110 shadow-glow' : 'scale-100'}`}
     >
       <ShoppingCart size={20} />
       {itemCount > 0 && (
@@ -199,7 +199,7 @@ function AppShell({ children }) {
   const [mobileOverflow, setMobileOverflow] = useState({ left: false, right: false })
   const quickLinks = getQuickLinks(pathname, userRole)
   const aiQuickActions = getAiQuickActions(pathname, userRole)
-  const showAiChatWidget = isAuthenticated && userRole === 'CUSTOMER'
+  const showAiChatWidget = isAuthenticated
 
   function jumpToTop() {
     window.scrollTo(0, 0)
@@ -307,16 +307,16 @@ function AppShell({ children }) {
   return (
     <div className="flex min-h-screen flex-col bg-transparent text-slate-50">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[rgba(10,10,15,0.82)] backdrop-blur-xl">
-        <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6">
-            <Link to="/" onClick={() => handleRouteClick('/')} className="group inline-flex items-center gap-4 text-slate-200">
-              <div className="relative">
-                <div className="absolute -inset-2 rounded-full bg-gym-500/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity" />
-                <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gym-500 text-slate-950 shadow-glow transition-transform group-hover:scale-105">
-                  <Dumbbell size={20} strokeWidth={2.5} />
-                </span>
-              </div>
-              <span className="font-display text-xl font-black tracking-tight text-slate-50 group-hover:text-gym-500 transition-colors">GymCore</span>
-            </Link>
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-4 px-4 py-3 sm:px-6">
+          <Link to="/" onClick={() => handleRouteClick('/')} className="inline-flex items-center gap-3 text-slate-50">
+            <span className="rounded-xl bg-gym-500 p-2 text-slate-950 shadow-glow">
+              <Dumbbell size={16} />
+            </span>
+            <span>
+              <span className="block font-display text-lg font-bold tracking-tight">GymCore</span>
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300">Atmospheric fitness workspace</span>
+            </span>
+          </Link>
 
           {showWorkspaceNav ? (
             <div className="relative hidden min-w-0 flex-1 sm:block">
@@ -332,36 +332,27 @@ function AppShell({ children }) {
               ) : null}
               <nav
                 ref={desktopNavRef}
-                className="gc-scrollbar-hidden flex min-w-0 select-none items-center justify-center gap-0.5 overflow-x-auto px-1 whitespace-nowrap text-xs font-medium sm:text-sm"
+                className="gc-scrollbar-hidden flex min-w-0 select-none items-center gap-1 overflow-x-auto px-2 whitespace-nowrap text-xs font-medium sm:text-sm"
                 onMouseDown={onDesktopMouseDown}
                 onMouseUp={onDesktopMouseUp}
                 onMouseLeave={onDesktopMouseLeave}
                 onMouseMove={onDesktopMouseMove}
                 aria-label="Workspace navigation"
               >
-                  {headerLinks.map((link) => (
-                    <NavLink
-                      key={link.to}
-                      to={link.to}
-                      onClick={() => handleRouteClick(link.to)}
-                      className={({ isActive }) =>
-                        `relative px-3 py-2 text-[11px] font-black uppercase tracking-[0.13em] transition-all duration-300 ${
-                          isActive
-                            ? 'text-[#0ea773]'
-                            : 'text-slate-200 hover:text-[#0ea773]'
-                        }`
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          {link.label}
-                          {isActive && (
-                            <span className="absolute -bottom-1 left-4 right-4 h-0.5 rounded-full bg-[#0ea773] shadow-glow animate-in fade-in zoom-in-50 duration-500" />
-                          )}
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
+                {headerLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => handleRouteClick(link.to)}
+                    className={({ isActive }) =>
+                      isActive
+                        ? 'rounded-full px-3 py-2 text-sm font-semibold text-gym-500'
+                        : 'rounded-full px-3 py-2 text-sm text-slate-200 transition hover:!text-emerald-400'
+                    }
+                  >
+                    {link.label}
+                  </NavLink>
+                ))}
               </nav>
             </div>
           ) : (
@@ -382,7 +373,7 @@ function AppShell({ children }) {
           </div>
         </div>
         {showWorkspaceNav && (
-          <div className="w-full px-4 pb-3 sm:hidden sm:px-6">
+          <div className="mx-auto w-full max-w-[1600px] px-4 pb-3 sm:hidden sm:px-6">
             <div className="relative">
               {mobileOverflow.left ? (
                 <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-8 items-center justify-start pl-1 text-slate-500" style={{ background: 'linear-gradient(90deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.72) 60%, rgba(10,10,15,0) 100%)' }}>
@@ -403,22 +394,20 @@ function AppShell({ children }) {
                 onMouseMove={onMobileMouseMove}
                 aria-label="Workspace navigation"
               >
-                  {headerLinks.map((link) => (
-                    <NavLink
-                      key={link.to}
-                      to={link.to}
-                      onClick={() => handleRouteClick(link.to)}
-                      className={({ isActive }) =>
-                        `relative rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition-all duration-300 ${
-                          isActive
-                            ? 'bg-[#0ea773]/10 text-[#0ea773] ring-1 ring-[#0ea773]/20'
-                            : 'text-slate-200 hover:text-[#0ea773]'
-                        }`
-                      }
-                    >
-                      {link.label}
-                    </NavLink>
-                  ))}
+                {headerLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => handleRouteClick(link.to)}
+                  className={({ isActive }) =>
+                    isActive
+                        ? 'rounded-full px-3 py-2 text-gym-500'
+                        : 'rounded-full px-3 py-2 text-slate-200 transition hover:!text-emerald-400'
+                  }
+                >
+                    {link.label}
+                  </NavLink>
+                ))}
               </nav>
             </div>
           </div>
@@ -432,6 +421,34 @@ function AppShell({ children }) {
           context={{ mode: getAiMode(pathname, userRole) }}
           quickActions={aiQuickActions}
           onAction={(action) => {
+            if (action?.type === 'open_workout_detail' && action?.workoutId) {
+              if (pathname.startsWith('/customer/knowledge')) {
+                window.dispatchEvent(
+                  new CustomEvent('gymcore:knowledge-open-workout', {
+                    detail: { workoutId: action.workoutId, scrollToVideo: true },
+                  }),
+                )
+                return
+              }
+              window.sessionStorage.setItem('gymcore.knowledge.openWorkoutId', String(action.workoutId))
+              window.sessionStorage.setItem('gymcore.knowledge.scrollWorkoutVideo', '1')
+              navigate('/customer/knowledge')
+              return
+            }
+            if (action?.type === 'open_food_detail' && action?.foodId) {
+              if (pathname.startsWith('/customer/knowledge')) {
+                window.dispatchEvent(
+                  new CustomEvent('gymcore:knowledge-open-food', {
+                    detail: { foodId: action.foodId, scrollToDetail: true },
+                  }),
+                )
+                return
+              }
+              window.sessionStorage.setItem('gymcore.knowledge.openFoodId', String(action.foodId))
+              window.sessionStorage.setItem('gymcore.knowledge.scrollFoodDetail', '1')
+              navigate('/customer/knowledge')
+              return
+            }
             const route = String(action?.route || '').trim()
             if (!route) return
             if (pathname === route) {
@@ -444,31 +461,31 @@ function AppShell({ children }) {
         />
       ) : null}
 
-      <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.45),rgba(10,10,15,0.94))] px-4 pb-4 pt-8 sm:px-6">
+      <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.45),rgba(10,10,15,0.94))] px-4 pb-6 pt-12 sm:px-6">
         <div className="mx-auto max-w-[1600px]">
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr_0.9fr] lg:gap-10">
-            <section className="space-y-3">
-              <div className="inline-flex items-center gap-2.5 text-slate-50">
-                <span className="rounded-lg bg-gym-500 p-1.5 text-slate-950 shadow-glow">
-                  <Dumbbell size={13} />
+          <div className="grid gap-10 lg:grid-cols-[1.15fr_1fr_0.95fr] lg:gap-14">
+            <section className="space-y-4">
+              <div className="inline-flex items-center gap-3 text-slate-50">
+                <span className="rounded-xl bg-gym-500 p-2 text-slate-950 shadow-glow">
+                  <Dumbbell size={14} />
                 </span>
-                <span className="font-display text-lg font-bold tracking-tight">GymCore</span>
+                <span className="font-display text-xl font-bold tracking-tight">GymCore</span>
               </div>
-              <p className="max-w-md text-sm leading-6 text-slate-200">
+              <p className="max-w-md text-base leading-8 text-slate-200">
                 A customer-first fitness space for training, memberships, coaching support, and everyday routines that are easier to keep going.
               </p>
             </section>
 
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-slate-100">Visit Us</h3>
-              <div className="space-y-3 text-sm text-slate-200">
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <section className="space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-[0.24em] text-slate-100">Visit Us</h3>
+              <div className="space-y-4 text-base text-slate-200">
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
                   <p className="inline-flex items-center gap-2.5">
-                    <Clock3 size={13} className="text-gym-600" />
+                    <Clock3 size={14} className="text-gym-600" />
                     <span>Open daily: {gymPublicInfo.openingHours}</span>
                   </p>
                   <p className="inline-flex items-center gap-2.5">
-                    <Phone size={13} className="text-gym-600" />
+                    <Phone size={14} className="text-gym-600" />
                     <span>{gymPublicInfo.hotline}</span>
                   </p>
                 </div>
@@ -478,15 +495,15 @@ function AppShell({ children }) {
                   rel="noreferrer"
                   className="inline-flex items-start gap-2.5 text-slate-200 transition duration-200 hover:text-gym-500"
                 >
-                  <MapPin size={13} className="mt-0.5 text-gym-600" />
+                  <MapPin size={14} className="mt-0.5 text-gym-600" />
                   <span className="leading-relaxed">{gymPublicInfo.address}</span>
                 </a>
               </div>
             </section>
 
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-slate-100">Explore</h3>
-              <div className="flex flex-col gap-2 text-sm text-slate-200">
+            <section className="space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-[0.24em] text-slate-100">Explore</h3>
+              <div className="flex flex-col gap-3 text-base text-slate-200">
                 <Link
                   to="/"
                   onClick={() => handleRouteClick('/')}
@@ -517,7 +534,7 @@ function AppShell({ children }) {
             </section>
           </div>
 
-          <div className="mt-6 flex flex-col items-start justify-between gap-2 border-t border-white/10 pt-4 text-xs text-slate-200 sm:flex-row sm:items-center">
+          <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-5 text-sm text-slate-200 sm:flex-row sm:items-center">
             <p>&copy; {new Date().getFullYear()} GymCore. All rights reserved.</p>
             <p>Pickup at gym front desk for all product orders.</p>
           </div>

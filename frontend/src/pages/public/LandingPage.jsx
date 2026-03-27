@@ -170,6 +170,7 @@ function LandingPage() {
         <div className="relative mx-auto max-w-7xl">
           <div className="flex min-h-[560px] items-end py-6 sm:min-h-[620px]">
             <div className="w-full max-w-6xl py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-gym-100">Atmospheric Fitness Workspace</p>
               <h1 className="mt-5 max-w-4xl text-4xl font-black leading-[0.98] sm:text-5xl lg:text-7xl">
                 Your fitness journey starts here.
               </h1>
@@ -458,7 +459,7 @@ function LandingPage() {
                   className="group rounded-[24px] border border-slate-200 bg-white px-5 py-5 shadow-[0_20px_50px_rgba(15,23,42,0.05)] transition open:border-gym-200 open:shadow-[0_24px_60px_rgba(34,197,94,0.08)] sm:px-6"
                 >
                   <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-                    <span className="faq-question-hover text-lg font-semibold leading-8 text-slate-950">{item.question}</span>
+                    <span className="text-lg font-semibold leading-8 text-slate-950">{item.question}</span>
                     <span className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-500 transition group-open:bg-gym-100 group-open:text-gym-800">
                       <span className="group-open:hidden">+</span>
                       <span className="hidden group-open:inline">−</span>

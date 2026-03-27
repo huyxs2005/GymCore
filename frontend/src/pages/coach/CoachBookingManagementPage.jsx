@@ -2,9 +2,6 @@ import { useEffect, useState } from 'react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
-import { Calendar, Clock, User, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react'
-
-const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function CoachBookingManagementPage() {
   const [requests, setRequests] = useState([])
@@ -17,7 +14,6 @@ function CoachBookingManagementPage() {
     request: null,
     action: '',
     reason: '',
-    confirmSlots: false,
   })
   const [rescheduleActionModal, setRescheduleActionModal] = useState({
     open: false,
@@ -52,7 +48,6 @@ function CoachBookingManagementPage() {
       request,
       action,
       reason: '',
-      confirmSlots: false,
     })
   }
 
@@ -62,18 +57,7 @@ function CoachBookingManagementPage() {
       request: null,
       action: '',
       reason: '',
-      confirmSlots: false,
     })
-  }
-
-  function formatRequestedSlot(slot) {
-    const dayLabel = DAY_LABELS[Math.max(0, Number(slot?.dayOfWeek || 1) - 1)] || `Day ${slot?.dayOfWeek || ''}`
-    const slotIndex = Number(slot?.slotIndex || slot?.timeSlotId || 0)
-    const start = String(slot?.startTime || '').slice(0, 5)
-    const end = String(slot?.endTime || '').slice(0, 5)
-    return start && end
-      ? `${dayLabel} • Slot ${slotIndex} (${start}-${end})`
-      : `${dayLabel} • Slot ${slotIndex}`
   }
 
   function openRescheduleActionModal(request, action) {
@@ -102,10 +86,6 @@ function CoachBookingManagementPage() {
     const reason = bookingActionModal.reason.trim()
     if (isDeny && !reason) {
       setError('Deny reason is required.')
-      return
-    }
-    if (!isDeny && !bookingActionModal.confirmSlots) {
-      setError('Please confirm the customer requested slots before approving.')
       return
     }
 
@@ -156,127 +136,73 @@ function CoachBookingManagementPage() {
     }
   }
 
-  const getStatusBadge = (status) => {
+  const getStatusStyle = (status) => {
     switch (status) {
       case 'PENDING':
-        return <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-500 border border-amber-500/20">Pending</span>
+        return 'bg-amber-100 text-amber-700'
       case 'APPROVED':
-        return <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-500 border border-emerald-500/20">Approved</span>
+        return 'bg-green-100 text-green-700'
       case 'DENIED':
-        return <span className="rounded-full bg-rose-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-rose-500 border border-rose-500/20">Denied</span>
+        return 'bg-red-100 text-red-700'
       default:
-        return <span className="rounded-full bg-slate-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border border-slate-500/20">{status}</span>
+        return 'bg-slate-100 text-slate-700'
     }
   }
 
-  const ModalHeader = ({ title, kicker, icon: Icon, colorClass }) => (
-    <div className="mb-6">
-      <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-${colorClass}-500/10 ring-1 ring-${colorClass}-500/20`}>
-        <Icon className={`h-6 w-6 text-${colorClass}-500`} />
-      </div>
-      <p className="gc-section-kicker">{kicker}</p>
-      <h4 className="mt-2 font-display text-2xl font-bold tracking-tight text-white">{title}</h4>
-    </div>
-  )
+  if (loading && requests.length === 0 && rescheduleRequests.length === 0) {
+    return (
+      <WorkspaceScaffold title="Coach Booking Management" subtitle="Approve or deny booking and reschedule requests" links={coachNav}>
+        <div className="max-w-6xl mx-auto space-y-6 pb-10">
+          <div className="text-center py-10 text-slate-500">Loading...</div>
+        </div>
+      </WorkspaceScaffold>
+    )
+  }
 
   return (
-    <WorkspaceScaffold 
-      showHeader={false}
-    >
-      <div className="max-w-6xl space-y-8 pb-12">
-        {/* Messages */}
+    <WorkspaceScaffold title="Coach Booking Management" subtitle="Approve or deny booking and reschedule requests" links={coachNav}>
+      <div className="max-w-6xl mx-auto space-y-6 pb-10">
         {(error || message) && (
-          <div className={`gc-card-compact flex items-center justify-between border-l-4 ${error ? 'border-l-rose-500 bg-rose-500/5' : 'border-l-emerald-500 bg-emerald-500/5'}`}>
-            <div className="flex items-center gap-3">
-              {error ? <AlertCircle className="h-5 w-5 text-rose-500" /> : <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
-              <span className={`text-sm font-medium ${error ? 'text-rose-200' : 'text-emerald-200'}`}>{error || message}</span>
-            </div>
-            <button 
-              onClick={() => { setError(''); setMessage('') }}
-              className="rounded-lg p-1 text-slate-500 transition hover:bg-white/5 hover:text-white"
-            >
-              <XCircle className="h-4 w-4" />
-            </button>
+          <div className={`p-4 rounded-xl flex items-center justify-between ${error ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
+            <span>{error || message}</span>
+            <button onClick={() => { setError(''); setMessage('') }}>x</button>
           </div>
         )}
 
-        {/* Reschedule Requests */}
         {rescheduleRequests.length > 0 && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <div>
-                <h3 className="font-display text-xl font-bold tracking-tight text-white">Reschedule Requests</h3>
-                <p className="text-sm text-slate-500">Customers requesting changes to existing sessions</p>
-              </div>
-              <span className="rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow-glow">
-                {rescheduleRequests.length}
-              </span>
-            </div>
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">Reschedule Requests ({rescheduleRequests.length})</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {rescheduleRequests.map((req) => (
-                <div key={req.ptSessionId} className="gc-card-compact group border-white/5 bg-white/[0.03] transition duration-300 hover:border-white/10 hover:bg-white/[0.05]">
-                  <div className="mb-4 flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 group-hover:ring-white/20">
-                        <User className="h-5 w-5 text-slate-400" />
-                      </div>
+                <div key={req.ptSessionId} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-start justify-between">
                       <div>
-                        <h4 className="font-bold text-white">{req.customerName}</h4>
-                        <p className="text-[11px] font-medium text-slate-500">{req.customerEmail}</p>
+                        <h4 className="font-bold text-slate-900">{req.customerName}</h4>
+                        <p className="text-xs text-slate-500">{req.customerEmail}</p>
                       </div>
+                      <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">PENDING</span>
                     </div>
-                    {getStatusBadge('PENDING')}
-                  </div>
-
-                  <div className="mb-6 space-y-3">
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/5">
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Current</p>
-                        <p className="text-xs font-bold text-slate-300">{req.currentSessionDate}</p>
-                        <p className="text-[10px] text-slate-500">Slot {req.currentSlot?.slotIndex || req.currentTimeSlotId}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-slate-600" />
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">Requested</p>
-                        <p className="text-xs font-bold text-white">{req.requestedSessionDate}</p>
-                        <p className="text-[10px] text-slate-400">Slot {req.requestedSlot?.slotIndex || req.requestedTimeSlotId}</p>
-                      </div>
-                    </div>
-
-                    {req.reason && (
-                      <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2 text-xs italic text-slate-400">
-                        "{req.reason}"
-                      </div>
-                    )}
-
-                    <div className="space-y-1">
-                      {!req.weeklyAvailable && (
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-500">
-                          <AlertCircle className="h-3.5 w-3.5" />
-                          <span>Not in your weekly availability</span>
-                        </div>
-                      )}
-                      {req.hasConflict && (
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-400">
-                          <AlertCircle className="h-3.5 w-3.5" />
-                          <span>Conflicts with another session</span>
-                        </div>
-                      )}
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-2">
+                      <p className="text-slate-600">Current: <span className="font-semibold">{req.currentSessionDate}</span> - Slot {req.currentSlot?.slotIndex || req.currentTimeSlotId}</p>
+                      <p className="text-slate-900">Requested: <span className="font-semibold">{req.requestedSessionDate}</span> - Slot {req.requestedSlot?.slotIndex || req.requestedTimeSlotId}</p>
+                      {req.reason && <p className="text-slate-700">Customer reason: <span className="font-semibold">{req.reason}</span></p>}
+                      {!req.weeklyAvailable && <p className="text-red-600 text-xs font-semibold">Requested slot is not in your weekly availability.</p>}
+                      {req.hasConflict && <p className="text-red-600 text-xs font-semibold">Requested slot conflicts with another session.</p>}
                     </div>
                   </div>
-
-                  <div className="flex gap-3 mt-auto">
+                  <div className="px-5 pb-5 flex gap-3">
                     <button
                       onClick={() => openRescheduleActionModal(req, 'APPROVE')}
                       disabled={loading}
-                      className="gc-button-primary flex-1 !min-h-[42px] !py-2 text-sm"
+                      className="flex-1 py-2.5 rounded-xl bg-gym-500 text-white font-bold hover:bg-gym-600 disabled:opacity-50"
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => openRescheduleActionModal(req, 'DENY')}
                       disabled={loading}
-                      className="gc-button-secondary flex-1 !min-h-[42px] !py-2 text-sm"
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 disabled:opacity-50"
                     >
                       Deny
                     </button>
@@ -284,169 +210,109 @@ function CoachBookingManagementPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </div>
         )}
 
-        {/* Booking Requests */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <div>
-              <h3 className="font-display text-xl font-bold tracking-tight text-white">Booking Requests</h3>
-              <p className="text-sm text-slate-500">New PT partnership applications</p>
-            </div>
-            {requests.length > 0 && (
-              <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow-glow">
-                {requests.length}
-              </span>
-            )}
+        {!loading && requests.length === 0 && rescheduleRequests.length === 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-20 text-center">
+            <h3 className="text-lg font-bold text-slate-800">No pending requests</h3>
+            <p className="text-slate-500">There are no booking/reschedule requests to process.</p>
           </div>
+        )}
 
-          {!loading && requests.length === 0 && rescheduleRequests.length === 0 && (
-            <div className="gc-glass-panel flex flex-col items-center justify-center py-20 text-center">
-              <div className="mb-4 rounded-3xl bg-white/5 p-6 ring-1 ring-white/10">
-                <CheckCircle2 className="h-10 w-10 text-slate-600" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {requests.map((req) => (
+            <div key={req.ptRequestId} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="p-6 flex-1 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">{req.customerName}</h3>
+                    <p className="text-sm text-slate-500">{req.customerEmail}</p>
+                  </div>
+                  <span className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusStyle(req.status)}`}>
+                    {req.status}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Requested window:</span>
+                    <span className="font-semibold text-slate-800">{req.startDate} to {req.endDate}</span>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Approval starts recurring sessions from the next Monday after you approve.
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Submitted:</span>
+                    <span>{new Date(req.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-lg font-bold text-white font-display">All caught up</h3>
-              <p className="mt-2 max-w-xs text-sm text-slate-500">
-                There are no pending booking or reschedule requests to process at this moment.
-              </p>
-              <button 
-                onClick={loadRequests} 
-                className="mt-6 flex items-center gap-2 text-sm font-bold text-gym-500 transition hover:text-gym-400"
-              >
-                <RefreshCw className="h-4 w-4" /> Refresh dashboard
-              </button>
-            </div>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {requests.map((req) => (
-              <div key={req.ptRequestId} className="gc-card group border-white/5 bg-white/[0.03] transition duration-300 hover:border-white/10 hover:bg-white/[0.05]">
-                <div className="mb-6 flex items-start justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 group-hover:ring-emerald-500/30">
-                      <User className="h-6 w-6 text-slate-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white">{req.customerName}</h3>
-                      <p className="text-xs font-medium text-slate-500">{req.customerEmail}</p>
-                    </div>
-                  </div>
-                  {getStatusBadge(req.status)}
-                </div>
-
-                <div className="mb-8 rounded-2xl border border-white/5 bg-white/5 p-4 space-y-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-500">Requested Window</span>
-                    <span className="font-bold text-slate-200">{req.startDate} — {req.endDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Submitted On</span>
-                    <span className="font-medium text-slate-400">{new Date(req.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                  </div>
-                  <div className="pt-2 border-t border-white/5">
-                    <p className="text-[10px] font-bold text-amber-500/80 leading-relaxed uppercase tracking-wider">
-                      Note: Approval will automatically generate recurring sessions from the following Monday.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 mt-auto">
+              <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col gap-4">
+                <div className="flex gap-3 w-full">
                   <button
                     onClick={() => openBookingActionModal(req, 'ACCEPT')}
                     disabled={loading}
-                    className="gc-button-primary flex-1"
+                    className="flex-1 py-3 bg-gym-500 text-white rounded-xl font-bold hover:bg-gym-600 transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Approve Request
+                    Approve
                   </button>
                   <button
                     onClick={() => openBookingActionModal(req, 'DENY')}
                     disabled={loading}
-                    className="gc-button-secondary flex-1 border-rose-500/20 text-rose-400 hover:bg-rose-500/5"
+                    className="flex-1 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Deny
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Modals */}
       {bookingActionModal.open && bookingActionModal.request && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="gc-glass-panel w-full max-w-lg p-8 shadow-2xl overflow-hidden relative">
-            <ModalHeader 
-              title={bookingActionModal.action === 'ACCEPT' ? 'Confirm Approval' : 'Deny Partnership'}
-              kicker="Partnership Action"
-              icon={bookingActionModal.action === 'ACCEPT' ? CheckCircle2 : XCircle}
-              colorClass={bookingActionModal.action === 'ACCEPT' ? 'emerald' : 'rose'}
-            />
-            
-            <p className="text-sm leading-relaxed text-slate-400">
-              You are about to <span className="font-bold text-white">{bookingActionModal.action === 'ACCEPT' ? 'accept' : 'decline'}</span> the training partnership with <span className="font-bold text-white">{bookingActionModal.request.customerName}</span>.
-              {bookingActionModal.action === 'ACCEPT' && " Review the customer's requested recurring slots below and confirm them before approval."}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${bookingActionModal.action === 'ACCEPT' ? 'text-gym-600' : 'text-rose-500'}`}>
+              {bookingActionModal.action === 'ACCEPT' ? 'Approve booking request' : 'Deny booking request'}
+            </p>
+            <h4 className="mt-2 text-2xl font-bold text-slate-900">
+              {bookingActionModal.action === 'ACCEPT' ? 'Confirm this PT booking request?' : 'Deny this PT booking request?'}
+            </h4>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              {bookingActionModal.request.customerName} requested sessions from {bookingActionModal.request.startDate} to {bookingActionModal.request.endDate}.
             </p>
 
-            {bookingActionModal.action === 'ACCEPT' && (
-              <div className="mt-6 space-y-4">
-                <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Customer requested slots</p>
-                  <div className="mt-3 space-y-2">
-                    {(bookingActionModal.request?.slots || []).length === 0 ? (
-                      <p className="text-sm text-slate-400">No requested slots found on this request.</p>
-                    ) : (
-                      bookingActionModal.request.slots.map((slot) => (
-                        <div key={`approve-slot-${bookingActionModal.request.ptRequestId}-${slot.dayOfWeek}-${slot.timeSlotId}`} className="rounded-xl border border-white/5 bg-white/5 px-3 py-2 text-sm text-slate-200">
-                          {formatRequestedSlot(slot)}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <label className="flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bookingActionModal.confirmSlots}
-                    onChange={(e) => setBookingActionModal((prev) => ({ ...prev, confirmSlots: e.target.checked }))}
-                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-emerald-500 focus:ring-emerald-500"
-                  />
-                  <span>I confirm these are the customer&apos;s requested recurring slots for approval.</span>
-                </label>
-              </div>
-            )}
-
             {bookingActionModal.action === 'DENY' && (
-              <div className="mt-6">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Denial Reason
-                </label>
+              <label className="mt-5 block text-sm font-semibold text-slate-700">
+                Reason for denial
                 <textarea
                   value={bookingActionModal.reason}
                   onChange={(e) => setBookingActionModal((prev) => ({ ...prev, reason: e.target.value }))}
-                  className="gc-input min-h-[100px] resize-none"
-                  placeholder="Explain why this request is being declined..."
+                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                  rows={3}
+                  placeholder="Explain why you cannot take this booking request."
                 />
-              </div>
+              </label>
             )}
 
-            <div className="mt-8 flex justify-end gap-3">
+            <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={closeBookingActionModal}
-                className="gc-button-secondary !px-5 text-sm"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Cancel
+                Close
               </button>
               <button
                 type="button"
                 onClick={submitBookingAction}
-                disabled={loading || (bookingActionModal.action === 'ACCEPT' && !bookingActionModal.confirmSlots)}
-                className={`${bookingActionModal.action === 'ACCEPT' ? 'gc-button-primary' : 'bg-rose-600 font-semibold text-white hover:bg-rose-700 shadow-lg ring-1 ring-rose-500/50'} rounded-xl px-6 py-2.5 text-sm disabled:opacity-50 transition`}
+                disabled={loading}
+                className={`rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${bookingActionModal.action === 'ACCEPT' ? 'bg-gym-600 hover:bg-gym-700' : 'bg-red-600 hover:bg-red-700'}`}
               >
-                {loading ? 'Processing...' : bookingActionModal.action === 'ACCEPT' ? 'Approve Request' : 'Confirm Denial'}
+                {bookingActionModal.action === 'ACCEPT' ? 'Approve request' : 'Confirm denial'}
               </button>
             </div>
           </div>
@@ -454,57 +320,49 @@ function CoachBookingManagementPage() {
       )}
 
       {rescheduleActionModal.open && rescheduleActionModal.request && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="gc-glass-panel w-full max-w-lg p-8 shadow-2xl">
-            <ModalHeader 
-              title={rescheduleActionModal.action === 'APPROVE' ? 'Approve Reschedule' : 'Deny Reschedule'}
-              kicker="Session Adjustment"
-              icon={RefreshCw}
-              colorClass={rescheduleActionModal.action === 'APPROVE' ? 'emerald' : 'rose'}
-            />
-
-            <div className="grid grid-cols-2 gap-4 mb-6 rounded-2xl bg-white/5 p-4 border border-white/5">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">From</p>
-                <p className="text-xs font-bold text-slate-300">{rescheduleActionModal.request.currentSessionDate}</p>
-                <p className="text-[10px] text-slate-500 italic">Slot {rescheduleActionModal.request.currentSlot?.slotIndex || rescheduleActionModal.request.currentTimeSlotId}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">To</p>
-                <p className="text-xs font-bold text-white">{rescheduleActionModal.request.requestedSessionDate}</p>
-                <p className="text-[10px] text-slate-400 italic">Slot {rescheduleActionModal.request.requestedSlot?.slotIndex || rescheduleActionModal.request.requestedTimeSlotId}</p>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${rescheduleActionModal.action === 'APPROVE' ? 'text-gym-600' : 'text-rose-500'}`}>
+              {rescheduleActionModal.action === 'APPROVE' ? 'Approve reschedule request' : 'Deny reschedule request'}
+            </p>
+            <h4 className="mt-2 text-2xl font-bold text-slate-900">
+              {rescheduleActionModal.action === 'APPROVE' ? 'Approve this reschedule request?' : 'Deny this reschedule request?'}
+            </h4>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+              <p className="text-slate-600">Customer: <span className="font-semibold text-slate-900">{rescheduleActionModal.request.customerName}</span></p>
+              <p className="text-slate-600">Current slot: <span className="font-semibold text-slate-900">{rescheduleActionModal.request.currentSessionDate} - Slot {rescheduleActionModal.request.currentSlot?.slotIndex || rescheduleActionModal.request.currentTimeSlotId}</span></p>
+              <p className="text-slate-600">Requested slot: <span className="font-semibold text-slate-900">{rescheduleActionModal.request.requestedSessionDate} - Slot {rescheduleActionModal.request.requestedSlot?.slotIndex || rescheduleActionModal.request.requestedTimeSlotId}</span></p>
+              {rescheduleActionModal.request.reason && <p className="text-slate-700">Customer reason: <span className="font-semibold">{rescheduleActionModal.request.reason}</span></p>}
             </div>
 
             {rescheduleActionModal.action === 'DENY' && (
-              <div className="mb-6">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Optional Reason
-                </label>
+              <label className="mt-5 block text-sm font-semibold text-slate-700">
+                Reason for denial (optional)
                 <textarea
                   value={rescheduleActionModal.reason}
                   onChange={(e) => setRescheduleActionModal((prev) => ({ ...prev, reason: e.target.value }))}
-                  className="gc-input min-h-[100px] resize-none"
-                  placeholder="Explain why you cannot accept this change..."
+                  className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-700"
+                  rows={3}
+                  placeholder="Explain why you cannot accept this requested slot."
                 />
-              </div>
+              </label>
             )}
 
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={closeRescheduleActionModal}
-                className="gc-button-secondary !px-5 text-sm"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Cancel
+                Keep current session
               </button>
               <button
                 type="button"
                 onClick={submitRescheduleAction}
                 disabled={loading}
-                className={`${rescheduleActionModal.action === 'APPROVE' ? 'gc-button-primary' : 'bg-rose-600 font-semibold text-white hover:bg-rose-700 shadow-lg ring-1 ring-rose-500/50'} rounded-xl px-6 py-2.5 text-sm disabled:opacity-50 transition`}
+                className={`rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${rescheduleActionModal.action === 'APPROVE' ? 'bg-gym-600 hover:bg-gym-700' : 'bg-red-600 hover:bg-red-700'}`}
               >
-                {loading ? 'Updating...' : rescheduleActionModal.action === 'APPROVE' ? 'Approve Change' : 'Deny Change'}
+                {rescheduleActionModal.action === 'APPROVE' ? 'Approve request' : 'Confirm denial'}
               </button>
             </div>
           </div>

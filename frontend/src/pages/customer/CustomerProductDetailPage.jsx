@@ -8,7 +8,6 @@ import { customerNav } from '../../config/navigation'
 import { cartApi } from '../../features/product/api/cartApi'
 import { productApi } from '../../features/product/api/productApi'
 import { triggerAddToCartAnimation } from '../../features/product/utils/cartAnimation'
-import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
 import { useSession } from '../../features/auth/useSession'
 
 const REVIEWS_PER_PAGE = 10
@@ -110,8 +109,11 @@ function CustomerProductDetailPage() {
   }, [allReviews, currentReviewPage])
 
   const activeImageUrl = useMemo(() => {
-    return getDynamicProductImage(product?.name)
-  }, [product?.name])
+    if (selectedImageUrl && galleryImages.some((image) => image.imageUrl === selectedImageUrl)) {
+      return selectedImageUrl
+    }
+    return galleryImages.find((image) => image.isPrimary)?.imageUrl || product?.thumbnailUrl || product?.imageUrl || ''
+  }, [galleryImages, product?.imageUrl, product?.thumbnailUrl, selectedImageUrl])
 
   const handleAddToCart = async (event) => {
     if (!product) return
@@ -217,7 +219,20 @@ function CustomerProductDetailPage() {
               <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm">
                 {activeImageUrl ? <img src={activeImageUrl} alt={product.name} className="h-[420px] w-full object-cover" /> : null}
               </div>
-
+              {galleryImages.length > 1 ? (
+                <div className="grid grid-cols-4 gap-3">
+                  {galleryImages.map((image) => (
+                    <button
+                      key={image.productImageId || image.imageUrl}
+                      type="button"
+                      onClick={() => setSelectedImageUrl(image.imageUrl)}
+                      className={`overflow-hidden rounded-2xl border ${activeImageUrl === image.imageUrl ? 'border-gym-500 ring-2 ring-gym-100' : 'border-slate-200'}`}
+                    >
+                      <img src={image.imageUrl} alt={image.altText || product.name} className="h-20 w-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </section>
 
             <section className="gc-card-compact space-y-6 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]">

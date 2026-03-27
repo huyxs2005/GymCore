@@ -10,7 +10,6 @@ import { useSession } from '../../features/auth/useSession'
 import { cartApi } from '../../features/product/api/cartApi'
 import { orderApi } from '../../features/product/api/orderApi'
 import { promotionApi } from '../../features/promotion/api/promotionApi'
-import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
 
 function CustomerCartPage() {
   const queryClient = useQueryClient()
@@ -259,12 +258,9 @@ function CustomerCartPage() {
             {cartItems.map((item) => (
               <article key={item.productId} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-1 items-start gap-3 min-w-0">
-                    <img src={getDynamicProductImage(item.name)} alt={item.name} className="h-14 w-14 rounded-xl object-cover border border-slate-200" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold text-slate-900">{item.name}</p>
-                      <p className="mt-1 text-sm text-slate-500">{Number(item.price || 0).toLocaleString('en-US')} VND / unit</p>
-                    </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold text-slate-900">{item.name}</p>
+                    <p className="mt-1 text-sm text-slate-500">{Number(item.price || 0).toLocaleString('en-US')} VND / unit</p>
                   </div>
                   <button type="button" onClick={() => removeCartItemMutation.mutate(item.productId)} className="text-[11px] font-medium text-rose-600 hover:text-rose-700">
                     Remove

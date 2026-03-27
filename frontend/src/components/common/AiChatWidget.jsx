@@ -2,6 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MessageCircle, Send, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { apiClient } from '../../api/client'
+import { aiApi } from '../../features/content/api/aiApi'
+
+/** Lowercase + strip Vietnamese diacritics so "bài tập" matches keywords like "bai tap". */
+function normalizeTextForKeywords(text) {
+  const lower = String(text || '').trim().toLowerCase()
+  if (!lower) return ''
+  return lower
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'd')
+}
 
 function detectLanguageFromText(text) {
   const sample = String(text || '').trim().toLowerCase()
@@ -75,7 +87,153 @@ function normalizeMessages(messages, limit = 12) {
     .filter((message) => message.content.length > 0)
 }
 
-function AiChatWidget({ context = {} }) {
+/**
+ * Split assistant text into plain segments and workout spans (by action labels).
+ * Longer labels first; case-insensitive; left-to-right non-overlapping.
+ */
+export function buildWorkoutLinkChunks(content, actions) {
+  const text = String(content ?? '')
+  const workoutActions = (Array.isArray(actions) ? actions : []).filter(
+    (a) =>
+      a?.type === 'open_workout_detail' &&
+      Number.isFinite(Number(a.workoutId)) &&
+      Number(a.workoutId) > 0 &&
+      String(a.label || '').trim().length > 0,
+  )
+  if (!text || workoutActions.length === 0) return [{ type: 'text', value: text }]
+
+  const sorted = [...workoutActions].sort((a, b) => String(b.label).length - String(a.label).length)
+  const lowerContent = text.toLowerCase()
+  const chunks = []
+  let i = 0
+
+  while (i < text.length) {
+    let bestIdx = -1
+    let bestAction = null
+    let bestLen = 0
+
+    for (const action of sorted) {
+      const label = String(action.label)
+      const idx = lowerContent.indexOf(label.toLowerCase(), i)
+      if (idx === -1) continue
+      if (bestIdx === -1 || idx < bestIdx || (idx === bestIdx && label.length > bestLen)) {
+        bestIdx = idx
+        bestAction = action
+        bestLen = label.length
+      }
+    }
+
+    if (bestIdx === -1) {
+      chunks.push({ type: 'text', value: text.slice(i) })
+      break
+    }
+
+    if (bestIdx > i) {
+      chunks.push({ type: 'text', value: text.slice(i, bestIdx) })
+    }
+
+    chunks.push({
+      type: 'workout',
+      value: text.slice(bestIdx, bestIdx + bestLen),
+      action: bestAction,
+    })
+    i = bestIdx + bestLen
+  }
+
+  return chunks
+}
+
+function normalizeWorkoutActions(workouts) {
+  const safe = Array.isArray(workouts) ? workouts : []
+  return safe
+    .map((workout) => {
+      const workoutId = Number(workout?.workoutId)
+      const name = String(workout?.name || '').trim()
+      if (!Number.isFinite(workoutId) || workoutId <= 0 || !name) return null
+      return {
+        id: `open-workout-${workoutId}`,
+        label: name,
+        type: 'open_workout_detail',
+        workoutId,
+        route: `/customer/knowledge?workoutId=${workoutId}`,
+      }
+    })
+    .filter(Boolean)
+}
+
+function normalizeFoodActions(foods) {
+  const safe = Array.isArray(foods) ? foods : []
+  return safe
+    .map((food) => {
+      const foodId = Number(food?.foodId)
+      const name = String(food?.name || '').trim()
+      if (!Number.isFinite(foodId) || foodId <= 0 || !name) return null
+      return {
+        id: `open-food-${foodId}`,
+        label: name,
+        type: 'open_food_detail',
+        foodId,
+        route: `/customer/knowledge?foodId=${foodId}`,
+      }
+    })
+    .filter(Boolean)
+}
+
+function isFoodIntent(text) {
+  const normalized = normalizeTextForKeywords(text)
+  if (!normalized) return false
+  const foodKeywords = [
+    'mon an',
+    'thuc an',
+    'bua an',
+    'do an',
+    'mon nuoc',
+    'food',
+    'meal',
+    'meals',
+    'dish',
+    'dishes',
+    'recipe',
+    'snack',
+    'breakfast',
+    'lunch',
+    'dinner',
+    'nutrition',
+    'diet',
+    'calories',
+    'macro',
+    'protein bowl',
+    'oatmeal',
+  ]
+  return foodKeywords.some((keyword) => normalized.includes(keyword))
+}
+
+function isWorkoutIntent(text) {
+  const normalized = normalizeTextForKeywords(text)
+  if (!normalized) return false
+  const workoutKeywords = [
+    'workout',
+    'exercise',
+    'training',
+    'split',
+    'routine',
+    'program',
+    'gym',
+    'tap',
+    'bai tap',
+    'buoi tap',
+    'lich tap',
+    'cardio',
+    'strength',
+    'hiit',
+    'van dong',
+    'the duc',
+    'tap luyen',
+  ]
+  return workoutKeywords.some((keyword) => normalized.includes(keyword))
+}
+
+function AiChatWidget({ context = {}, onAction }) {
   const [preferredLanguage, setPreferredLanguage] = useState(() => detectPreferredLanguage())
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
@@ -86,6 +244,7 @@ function AiChatWidget({ context = {} }) {
     {
       role: 'assistant',
       content: getLocalizedCopy(detectPreferredLanguage()).greeting,
+      actions: [],
     },
   ])
   const listRef = useRef(null)
@@ -118,6 +277,18 @@ function AiChatWidget({ context = {} }) {
     return Math.ceil(deltaMs / 1000)
   }, [cooldownUntil])
 
+  const triggerAction = (action) => {
+    if (!action) return
+    if (typeof onAction === 'function') {
+      onAction(action)
+      return
+    }
+    const route = String(action?.route || '').trim()
+    if (route && typeof window !== 'undefined') {
+      window.location.assign(route)
+    }
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || pending) return
@@ -133,19 +304,55 @@ function AiChatWidget({ context = {} }) {
     setMessages((prev) => [...prev, { role: 'user', content: text }])
 
     try {
-      const payload = {
-        messages: normalizeMessages([...messages, { role: 'user', content: text }], 12),
-        context: {
-          ...safeContext,
-          preferredLanguage: inferredLanguage,
-        },
+      if (safeContext.mode === 'WORKOUTS' && isWorkoutIntent(text)) {
+        const data = await aiApi.askWorkoutAssistant({
+          question: text,
+          limitWorkouts: 4,
+        })
+        const reply = String(data?.answer || '').trim()
+        if (!reply) {
+          throw new Error('Empty workout assistant reply.')
+        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: stripMarkdownArtifacts(reply),
+            actions: normalizeWorkoutActions(data?.workouts),
+          },
+        ])
+      } else if (isFoodIntent(text)) {
+        const data = await aiApi.askFoodAssistant({
+          question: text,
+          limitFoods: 4,
+        })
+        const reply = String(data?.answer || '').trim()
+        if (!reply) {
+          throw new Error('Empty food assistant reply.')
+        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: stripMarkdownArtifacts(reply),
+            actions: normalizeFoodActions(data?.foods),
+          },
+        ])
+      } else {
+        const payload = {
+          messages: normalizeMessages([...messages, { role: 'user', content: text }], 12),
+          context: {
+            ...safeContext,
+            preferredLanguage: inferredLanguage,
+          },
+        }
+        const response = await apiClient.post('/v1/ai/chat', payload)
+        const reply = response?.data?.data?.reply || response?.data?.reply || ''
+        if (!String(reply).trim()) {
+          throw new Error('Empty AI reply.')
+        }
+        setMessages((prev) => [...prev, { role: 'assistant', content: stripMarkdownArtifacts(String(reply).trim()), actions: [] }])
       }
-      const response = await apiClient.post('/v1/ai/chat', payload)
-      const reply = response?.data?.data?.reply || response?.data?.reply || ''
-      if (!String(reply).trim()) {
-        throw new Error('Empty AI reply.')
-      }
-      setMessages((prev) => [...prev, { role: 'assistant', content: stripMarkdownArtifacts(String(reply).trim()) }])
     } catch (error) {
       const status = error?.response?.status
       const message = error?.response?.data?.message || error?.message || 'AI chat failed.'
@@ -159,7 +366,7 @@ function AiChatWidget({ context = {} }) {
       toast.error(message)
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: localizedCopy.fallback },
+        { role: 'assistant', content: localizedCopy.fallback, actions: [] },
       ])
     } finally {
       setPending(false)
@@ -191,12 +398,47 @@ function AiChatWidget({ context = {} }) {
           <div ref={listRef} className="gc-scrollbar-hidden max-h-[50vh] space-y-3 overflow-y-auto px-4 py-4">
             {messages.map((message, index) => (
               <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm leading-6 ${
-                    message.role === 'user' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'bg-slate-100 text-slate-900'
-                  }`}
-                >
-                  {message.content}
+                <div className="max-w-[85%] space-y-2">
+                  <div
+                    className={`whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm leading-6 ${
+                      message.role === 'user' ? 'bg-gym-500 text-slate-950 shadow-glow' : 'bg-slate-100 text-slate-900'
+                    }`}
+                  >
+                    {message.role === 'assistant' &&
+                    Array.isArray(message.actions) &&
+                    message.actions.some((a) => a?.type === 'open_workout_detail') ? (
+                      buildWorkoutLinkChunks(message.content, message.actions).map((chunk, chunkIndex) =>
+                        chunk.type === 'workout' ? (
+                          <button
+                            key={`w-${chunkIndex}-${chunk.action.workoutId}`}
+                            type="button"
+                            onClick={() => triggerAction(chunk.action)}
+                            className="inline cursor-pointer border-0 bg-transparent p-0 align-baseline font-normal text-inherit no-underline shadow-none hover:text-inherit focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50"
+                          >
+                            {chunk.value}
+                          </button>
+                        ) : (
+                          <span key={`t-${chunkIndex}`}>{chunk.value}</span>
+                        ),
+                      )
+                    ) : (
+                      message.content
+                    )}
+                  </div>
+                  {message.role === 'assistant' && Array.isArray(message.actions) && message.actions.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {message.actions.map((action) => (
+                        <button
+                          key={action.id || action.label}
+                          type="button"
+                          onClick={() => triggerAction(action)}
+                          className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}

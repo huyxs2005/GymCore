@@ -3,7 +3,6 @@ import { customerNav } from '../../config/navigation'
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { promotionApi } from '../../features/promotion/api/promotionApi'
-import { useSession } from '../../features/auth/useSession'
 import { toast } from 'react-hot-toast'
 import { Ticket, Gift, Sparkles, Clock, CheckCircle2, X } from 'lucide-react'
 
@@ -11,13 +10,10 @@ function CustomerPromotionsPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [claimedCoupon, setClaimedCoupon] = useState(null)
   const queryClient = useQueryClient()
-  const { user } = useSession()
-  const userId = user?.userId ?? null
 
   const { data: postsData, isLoading } = useQuery({
-    queryKey: ['promotionPosts', userId],
+    queryKey: ['promotionPosts'],
     queryFn: () => promotionApi.getPromotionPosts(),
-    enabled: Boolean(userId),
   })
 
   const claimMutation = useMutation({
@@ -27,8 +23,8 @@ function CustomerPromotionsPage() {
       const post = posts.find(p => p.PromotionID === variables.promotionId)
       setClaimedCoupon(post)
       setShowSuccessModal(true)
-      queryClient.invalidateQueries({ queryKey: ['promotionPosts', userId] })
-      queryClient.invalidateQueries({ queryKey: ['myClaims', userId] })
+      queryClient.invalidateQueries({ queryKey: ['promotionPosts'] })
+      queryClient.invalidateQueries({ queryKey: ['myClaims'] })
     },
     onError: (error) => {
       toast.error(error?.response?.data?.message || 'Failed to claim coupon')
@@ -57,7 +53,6 @@ function CustomerPromotionsPage() {
       title="Promotions & Special Offers"
       subtitle="Discover exclusive deals and claim coupons for your fitness journey."
       links={customerNav}
-      showHeader={false}
     >
       {isLoading ? (
         <div className="flex justify-center items-center min-h-[300px]">
