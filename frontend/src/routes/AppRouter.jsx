@@ -14,7 +14,6 @@ const NotificationsPage = lazy(() => import('../pages/common/NotificationsPage')
 const CustomerMembershipPage = lazy(() => import('../pages/customer/CustomerMembershipPage'))
 const CustomerMembershipCheckoutPage = lazy(() => import('../pages/customer/CustomerMembershipCheckoutPage'))
 const CustomerCurrentMembershipPage = lazy(() => import('../pages/customer/CustomerCurrentMembershipPage'))
-const CustomerProgressHubPage = lazy(() => import('../pages/customer/CustomerProgressHubPage'))
 const CustomerCheckinHealthPage = lazy(() => import('../pages/customer/CustomerCheckinHealthPage'))
 const CustomerCoachBookingPage = lazy(() => import('../pages/customer/CustomerCoachBookingPage'))
 const CustomerShopPage = lazy(() => import('../pages/customer/CustomerShopPage'))
@@ -117,7 +116,7 @@ function AppRouter() {
         <Route path="/customer/membership" element={withRole(['CUSTOMER'], <CustomerMembershipPage />)} />
         <Route path="/customer/membership/checkout" element={withRole(['CUSTOMER'], <CustomerMembershipCheckoutPage />)} />
         <Route path="/customer/current-membership" element={withRole(['CUSTOMER'], <CustomerCurrentMembershipPage />)} />
-        <Route path="/customer/progress-hub" element={withRole(['CUSTOMER'], <CustomerProgressHubPage />)} />
+        <Route path="/customer/progress-hub" element={<Navigate to="/customer/checkin-health" replace />} />
         <Route path="/customer/checkin-health" element={withRole(['CUSTOMER'], <CustomerCheckinHealthPage />)} />
         <Route path="/customer/coach-booking" element={withRole(['CUSTOMER'], <CustomerCoachBookingPage />)} />
         <Route path="/customer/shop" element={withRole(['CUSTOMER'], <CustomerShopPage />)} />
@@ -151,7 +150,7 @@ function AppRouter() {
         <Route path="/admin/reports" element={withRole(['ADMIN'], <AdminReportsPage />)} />
 
         <Route path="/workspace/customer/membership" element={<Navigate to="/customer/membership" replace />} />
-        <Route path="/workspace/customer/progress-hub" element={<Navigate to="/customer/progress-hub" replace />} />
+        <Route path="/workspace/customer/progress-hub" element={<Navigate to="/customer/checkin-health" replace />} />
         <Route path="/workspace/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

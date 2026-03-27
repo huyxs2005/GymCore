@@ -63,7 +63,7 @@ function getQuickLinks(pathname, role) {
 
   if (pathname.startsWith('/customer/') || role === 'CUSTOMER') {
     return [
-      { to: '/customer/progress-hub', label: 'Progress Hub' },
+      { to: '/customer/checkin-health', label: 'Health Status' },
       { to: '/customer/membership', label: 'Membership' },
       { to: '/customer/shop', label: 'Product Shop' },
     ]
@@ -77,7 +77,7 @@ function getAiMode(pathname, role) {
   if (pathname.startsWith('/customer/shop') || pathname.startsWith('/customer/cart') || pathname.startsWith('/customer/orders')) return 'PRODUCTS'
   if (pathname.startsWith('/customer/membership')) return 'MEMBERSHIP'
   if (pathname.startsWith('/customer/coach-booking')) return 'COACH_BOOKING'
-  if (pathname.startsWith('/customer/progress-hub')) return 'PROGRESS_HUB'
+  if (pathname.startsWith('/customer/checkin-health')) return 'HEALTH'
   if (pathname.startsWith('/admin/')) return 'ADMIN'
   if (pathname.startsWith('/coach/')) return 'COACH'
   if (pathname.startsWith('/reception/')) return 'RECEPTION'
@@ -87,7 +87,7 @@ function getAiMode(pathname, role) {
 function getAiQuickActions(pathname, role) {
   const customerActions = [
     { id: 'ai-membership', label: 'Open membership', route: '/customer/membership', type: 'route' },
-    { id: 'ai-progress-hub', label: 'Open progress hub', route: '/customer/progress-hub', type: 'route' },
+    { id: 'ai-health-status', label: 'Open health status', route: '/customer/checkin-health', type: 'route' },
     { id: 'ai-coach-booking', label: 'Open coach booking', route: '/customer/coach-booking', type: 'route' },
     { id: 'ai-product-shop', label: 'Open product shop', route: '/customer/shop', type: 'route' },
     { id: 'ai-knowledge', label: 'Open workout/food AI', route: '/customer/knowledge', type: 'route' },

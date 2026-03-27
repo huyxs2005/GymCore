@@ -49,10 +49,6 @@ vi.mock('../pages/customer/CustomerKnowledgePage', () => ({
   default: () => <div>Customer Knowledge Hub</div>,
 }))
 
-vi.mock('../pages/customer/CustomerProgressHubPage', () => ({
-  default: () => <div>Customer Progress Hub</div>,
-}))
-
 vi.mock('../features/checkin/api/receptionCheckinApi', () => {
   return {
     receptionCheckinApi: {
@@ -177,7 +173,7 @@ describe('AppRouter role guards', () => {
       })
     })
     renderAt('/reception/invoices')
-    expect(await screen.findByText(/Reception Invoice Center/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Reception Pickup Desk/i)).toBeInTheDocument()
   })
 
   it('allows receptionist to open pickup route', async () => {
@@ -275,7 +271,7 @@ describe('AppRouter role guards', () => {
       })
     })
     renderAt('/customer/orders')
-    expect(await screen.findByText(/Order History/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Membership buying history/i)).toBeInTheDocument()
   })
 
   it('allows customer to open product detail route', async () => {
@@ -320,7 +316,7 @@ describe('AppRouter role guards', () => {
     expect(await screen.findByText(/Customer Knowledge Hub/i)).toBeInTheDocument()
   })
 
-  it('allows customer to open the progress hub route', async () => {
+  it('redirects the removed progress hub route to health status', async () => {
     act(() => {
       setAccessToken('token')
       setAuthUser({
@@ -331,6 +327,6 @@ describe('AppRouter role guards', () => {
       })
     })
     renderAt('/customer/progress-hub')
-    expect(await screen.findByText(/Customer Progress Hub/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Current Metrics/i)).toBeInTheDocument()
   })
 })

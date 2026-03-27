@@ -196,7 +196,7 @@ describe('CustomerCheckinHealthPage', () => {
     expect(screen.getByText(/Your BMI is inside the normal range/i)).toBeInTheDocument()
     expect(screen.getByText(/Healthy Weight/i)).toBeInTheDocument()
     expect(screen.getByText('50.4 - 67.8 kg')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Open Progress Hub/i })).toHaveAttribute('href', '/customer/progress-hub')
+    expect(screen.getByRole('link', { name: /Open Training & Nutrition/i })).toHaveAttribute('href', '/customer/knowledge')
   })
 
   it('renders a neutral empty state when no current health record exists', async () => {
