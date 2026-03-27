@@ -167,17 +167,17 @@ describe('AppShell cart button', () => {
       .map((link) => link.textContent?.trim())
       .filter(Boolean)
     expect(labels).toEqual([
-      'Check-in & Health',
       'Progress Hub',
+      'Health Status',
       'Personal Trainer',
-      'Promotions',
-      'Membership',
-      'Product Shop',
       'Workout/Food/AI',
+      'Membership',
+      'Promotions',
+      'Product Shop',
     ])
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Progress Hub$/i })).toBeInTheDocument()
-    expect(within(headerNav).getByRole('link', { name: /^Check-in & Health$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Health Status$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Personal Trainer$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Promotions$/i })).toBeInTheDocument()

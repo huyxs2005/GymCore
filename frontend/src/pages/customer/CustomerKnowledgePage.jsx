@@ -352,9 +352,10 @@ function CustomerKnowledgePage() {
 
   return (
     <WorkspaceScaffold
-      title="Customer Workout/Food/AI"
+      title="Training & Nutrition"
       subtitle="Browse workouts + foods and request goal-based recommendations."
       links={customerNav}
+      showHeader={false}
     >
       <section className="gc-card-compact space-y-5">
       <header className="overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.18),_transparent_34%),linear-gradient(135deg,_rgba(18,18,26,0.98),_rgba(10,10,15,0.92))] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">

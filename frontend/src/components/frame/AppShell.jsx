@@ -430,6 +430,36 @@ function AppShell({ children }) {
           context={{ mode: getAiMode(pathname, userRole) }}
           quickActions={aiQuickActions}
           onAction={(action) => {
+            if (action?.type === 'open_workout_detail' && action?.workoutId) {
+              if (pathname.startsWith('/customer/knowledge')) {
+                window.dispatchEvent(
+                  new CustomEvent('gymcore:knowledge-open-workout', {
+                    detail: { workoutId: action.workoutId, scrollToVideo: true },
+                  }),
+                )
+                return
+              }
+              window.sessionStorage.setItem('gymcore.knowledge.openWorkoutId', String(action.workoutId))
+              window.sessionStorage.setItem('gymcore.knowledge.scrollWorkoutVideo', '1')
+              jumpToTop()
+              navigate('/customer/knowledge')
+              return
+            }
+            if (action?.type === 'open_food_detail' && action?.foodId) {
+              if (pathname.startsWith('/customer/knowledge')) {
+                window.dispatchEvent(
+                  new CustomEvent('gymcore:knowledge-open-food', {
+                    detail: { foodId: action.foodId, scrollToDetail: true },
+                  }),
+                )
+                return
+              }
+              window.sessionStorage.setItem('gymcore.knowledge.openFoodId', String(action.foodId))
+              window.sessionStorage.setItem('gymcore.knowledge.scrollFoodDetail', '1')
+              jumpToTop()
+              navigate('/customer/knowledge')
+              return
+            }
             const route = String(action?.route || '').trim()
             if (!route) return
             if (pathname === route) {
