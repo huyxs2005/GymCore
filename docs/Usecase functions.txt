@@ -56,19 +56,17 @@ ________________________________________
 E. Coach Booking and Training Support
 Customer
 - Set Desired PT Schedule (weekly recurring day+slot)
-- Search Coaches (full match list + partial match list)
+- Match Coach (full match list + partial match list)
 - View Coach List
 - View Coach Details
 - View Coach Schedule
 - Request Booking Coach (recurring)
-- Remove conflicted recurring slots from partial matches before confirming booking
 - View PT Schedule
 - Cancel / Reschedule Coach Session
 - Feedback Coach (rating + comment)
 
 Coach
 - Update Available Slots (weekly availability)
-- Toggle whether coach is accepting new PT customers / appears in customer match results
 - View Coach Schedule
 - View Customer List
 - View Customer Profile
@@ -222,10 +220,6 @@ I4. Coach booking and PT scheduling rules
   - is ACTIVE,
   - allows coach booking,
   - covers requested StartDate..EndDate (`TRG_PTRecurringRequests_ValidateMembership`).
-- Customer planner behavior:
-  - customer chooses recurring weekday+slot template only,
-  - booking start is derived from the next eligible Monday,
-  - booking end is derived from the active coach-enabled membership coverage.
 - PT request must reference `CustomerMembershipID` (not nullable in DB).
 - One customer can have only one APPROVED recurring PT request at a time.
 - Customer cannot start another PT booking flow when either of these is true:
@@ -263,11 +257,8 @@ I4. Coach booking and PT scheduling rules
   - one feedback per PT session,
   - rating must be between 1 and 5.
 - Match results are separated into fully matched and partially matched coach lists.
-- When any full matches exist, the page shows only the full-match section.
-- Partial matches are ordered from least conflicted slots to most conflicted slots.
 - Customer must resolve unmatched selected slots before confirming a booking request in match review UI.
-- Coaches can hide themselves from future customer match results while keeping existing PT sessions/requests intact.
-- Coach and customer weekly slot summaries use compact grouped recurring-slot summaries instead of the older expanded chip-wall layout.
+- Coach and customer weekly slot summaries use weekday drill-down summaries (one selected weekday at a time) instead of expanded all-day chip walls.
 - Coach booked-session monthly calendar uses status-colored signals:
   - scheduled / active dates use green,
   - cancelled-only dates use red,

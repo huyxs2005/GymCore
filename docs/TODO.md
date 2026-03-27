@@ -1,24 +1,59 @@
-# GymCore TODO (Current Main Backlog)
+# GymCore TODO (Post feature/coupon merge)
 
-## Repo Status (Mar 26, 2026)
-- [x] Desktop working repo is now synced to `origin/main`.
-- [x] Current working baseline branch is `main`.
-- [x] The older `origin/main` merge-prep checklist is no longer active and is kept only in git history / older docs snapshots.
-
-## Recently Completed (Mar 27, 2026)
-- [x] Refine receptionist check-in layout/copy for front-desk use.
-  - QR check-in moved to the full-width top section.
-  - manual check-in and customer information panels simplified and aligned.
-  - access-log wording/styling cleaned up.
-- [x] Harden receptionist QR scanner fallback behavior.
-  - full-frame decode added before crop fallback
-  - jsQR inversion handling widened
-  - BarcodeDetector fallback now continues through jsQR
-- [x] Reorder customer account menu entries.
-  - `Check in QR` moved directly under `View profile`
-  - `Notifications` moved toward the bottom
-- [x] Restrict the AI chat widget to CUSTOMER only.
-- [x] Fix membership payment-success return flow so it resolves back into PT booking cleanly.
+## Main Branch Merge Prep: `origin/main` -> current local branch
+- [x] Use the current local branch as source of truth for the next merge session.
+  - Current local baseline branch: `alpha-0.1`
+  - Do not run a blind `git merge origin/main`.
+  - Preferred method: selective/manual port by subsystem.
+- [x] Keep Java on `25`.
+  - Do not accept the `origin/main` downgrade back to Java `21`.
+  - Preserve the local `backend/pom.xml` toolchain/runtime settings.
+- [x] Keep the current local JDBC/runtime config for this machine.
+  - Preserve local `backend/src/main/resources/application.properties` datasource values.
+  - Do not replace local SQL Server credentials with `origin/main` credentials or env defaults.
+  - Local machine remains:
+    - SQL Server auth on this machine
+    - database `GymCore`
+    - current working local login/password/settings
+- [x] Keep environment templates machine-neutral while preserving local runtime behavior.
+  - Merge `backend/.env.example` and `frontend/.env.local.example` as templates/documentation only.
+  - Do not commit real local secrets.
+  - Keep Gemini placeholders available in backend env files:
+    - `APP_AI_GEMINI_API_KEY=`
+    - `APP_AI_GEMINI_MODEL=`
+- [x] Merge DB changes from `origin/main` only into the 4 canonical SQL docs.
+  - Allowed targets only:
+    - `docs/GymCore.txt`
+    - `docs/alter.txt`
+    - `docs/InsertValues.txt`
+    - `docs/InsertTestingValues.txt`
+  - Do not create extra SQL docs/files for the merge.
+- [x] Treat current local DB docs as stronger than `origin/main` where `main` removes already-working behavior.
+  - Current local branch includes invoice pickup columns and related product/invoice flow support.
+  - Current local branch keeps stricter membership/payment/reporting behavior that should not be downgraded.
+- [x] Review `origin/main` only for additive value.
+  - Import only missing features/fixes that do not break:
+    - PayOS flow
+    - admin dashboard/reports
+    - invoice/pickup flow
+    - membership queue/renew/upgrade behavior
+    - current local test suite
+- [x] Re-run the full regression gate after the merge.
+  - Backend:
+    - `.\mvnw.cmd test`
+  - Frontend:
+    - `npm run lint`
+    - `npm run test:run -- --maxWorkers=1`
+    - `npm run build`
+  - DB smoke:
+    - `docs/GymCore.txt`
+    - `docs/alter.txt`
+    - `docs/InsertValues.txt`
+    - `docs/InsertTestingValues.txt`
+  - Completed Mar 14, 2026:
+    - backend tests passed
+    - frontend lint/tests/build passed
+    - canonical DB script order smoke-tested successfully on throwaway DB
 
 ## Recommendations Backlog (Business-Rule Safe)
 - [x] Add backend coverage tooling (`JaCoCo`) to `backend/pom.xml`.
@@ -133,7 +168,7 @@
 ## Medium Priority
 - [x] Complete bonus-duration coupon flow across backend, admin UI, and checkout compatibility.
   - `backend/src/main/java/com/gymcore/backend/modules/promotion/service/PromotionService.java`
-  - `frontend/src/pages/admin/AdminPr![1773840102939](image/TODO/1773840102939.png)![1773840104361](image/TODO/1773840104361.png)![1773840105265](image/TODO/1773840105265.png)![1773840105991](image/TODO/1773840105991.png)![1773840106129](image/TODO/1773840106129.png)![1773840113090](image/TODO/1773840113090.png)![1773840113696](image/TODO/1773840113696.png)![1773840113844](image/TODO/1773840113844.png)![1773840114000](image/TODO/1773840114000.png)![1773840114143](image/TODO/1773840114143.png)![1773840118488](image/TODO/1773840118488.png)![1773840119242](image/TODO/1773840119242.png)![1773840119389](image/TODO/1773840119389.png)omotionsPage.jsx`
+  - `frontend/src/pages/admin/AdminPromotionsPage.jsx`
   - `frontend/src/pages/customer/CustomerShopPage.jsx`
 - [x] Block duplicate PT booking attempts when customer already has a pending PT request or an active PT arrangement.
   - `backend/src/main/java/com/gymcore/backend/modules/coach/service/CoachBookingService.java`

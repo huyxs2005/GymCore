@@ -2,27 +2,43 @@
 
 Purpose: quick context snapshot so future work can resume without re-discovering decisions.
 
-## 0) Current repo baseline (Mar 26, 2026)
-- Active working repo on this machine:
-  - `C:\Users\Huy\Desktop\ky 7 fpt\SWP\GymCore`
-- Current branch baseline:
-  - `main`
-- Local `main` was synced to `origin/main` on Mar 26, 2026.
-- Runtime assumptions for this machine remain:
-  - Java `25`
-  - Microsoft SQL Server local datasource from `backend/src/main/resources/application.properties`
-  - DB run order remains:
-![1774509351395](image/PROJECT_MEMORY/1774509351395.png)![1774509353118](image/PROJECT_MEMORY/1774509353118.png)![1774509356198](image/PROJECT_MEMORY/1774509356198.png)![1774509356362](image/PROJECT_MEMORY/1774509356362.png)![1774509356526](image/PROJECT_MEMORY/1774509356526.png)![1774509356666](image/PROJECT_MEMORY/1774509356666.png)![1774509361118](image/PROJECT_MEMORY/1774509361118.png)![1774509373370](image/PROJECT_MEMORY/1774509373370.png)    1. `docs/GymCore.txt`
-    2. `docs/alter.txt`
-    3. `docs/InsertValues.txt`
-    4. `docs/InsertTestingValues.txt` (optional)
-- Env capability snapshot:
+## 0) Main merge baseline (Mar 14, 2026)
+- Current working baseline branch remains `alpha-0.1`.
+- The selective/manual merge from `origin/main` has now been completed.
+- Merge policy that was followed:
+  - selective/manual merge only, not raw branch merge
+  - keep current local branch as source of truth where `origin/main` would downgrade existing working behavior
+  - skip non-functional noise such as:
+    - Playwright/test-harness drift
+    - workflow/IDE noise
+    - real env/runtime drift
+    - unrelated root tooling drift
+- Local branch remained source of truth for:
+  - Java 25 runtime
+  - current working PayOS flow
+  - admin dashboard/reports structure
+  - invoice/pickup flow
+  - current DB doc structure and run order
+- Runtime config rule for this machine remains unchanged:
+  - keep the current local datasource behavior in `backend/src/main/resources/application.properties`
+  - do not replace local SQL Server values with `origin/main` values
+- DB merge rule that was applied:
+  - all SQL changes were folded only into:
+    - `docs/GymCore.txt`
+    - `docs/alter.txt`
+    - `docs/InsertValues.txt`
+    - `docs/InsertTestingValues.txt`
+  - no extra SQL docs/files were introduced
+- Current local env capability snapshot:
   - backend env supports Gemini, Google login, mail, and PayOS
-  - frontend env supports Google login and API/base URL wiring
-  - current local Gemini model used in docs/review:
+  - frontend env supports Google login and frontend API/base URL wiring
+  - current local Gemini model observed during review:
     - `gemini-3-flash-preview`
   - safer stable fallback recommendation for this codebase:
     - `gemini-2.5-flash`
+- AI/content implementation note after merge:
+  - content/admin-goal/frontend AI-related functionality from `origin/main` is now present in the codebase
+  - Gemini chat integration is no longer just placeholder env-only setup
 
 ## 1) Tech stack and structure
 - Backend: Spring Boot REST API (no Thymeleaf server-rendered pages).
@@ -215,9 +231,7 @@ Purpose: quick context snapshot so future work can resume without re-discovering
 ## 16) Coach booking/training support (current implementation)
 - Customer flow:
   - Must set desired recurring weekly day+slot first.
-  - Customer no longer manually picks a PT repeat end date in the planner.
-  - PT matching/request window starts from the next eligible Monday and ends at the coverage end of the active coach-enabled membership.
-  - Customer uses `Search Coaches` after saving the planner template.
+  - Then preview coach matching by date range and desired slots.
   - Customer cannot start a new PT booking flow if:
     - a PT request is already `PENDING`, or
     - an approved/current PT arrangement still has future scheduled sessions.
@@ -225,11 +239,6 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - Results separated into:
     - `Fully Match` (all desired slots available).
     - `Partial Match` (some overlap, e.g. already booked in selected range).
-  - When at least one fully matched coach exists, only the full-match list is shown.
-  - Otherwise only the partial-match list is shown.
-  - Partial matches are sorted from least conflicted slots to most conflicted slots.
-  - Partial-match conflicts are rendered inline, highlighted in red, and the customer can remove conflicted slots directly from the review UI.
-  - Customer can open coach profile details from the match card avatar/profile action.
   - Customer sends booking request; coach approves/denies later.
   - Customer can cancel session.
   - Customer reschedule is request-based (coach approves/denies).
@@ -239,8 +248,6 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - coach cancel -> customer notification
 - Coach flow:
   - Update weekly availability.
-  - Toggle whether coach is still accepting new PT customers / appears in customer matching results.
-  - That intake toggle uses a confirmation popup before changing state.
   - Review booking requests (`PENDING`) and approve/deny.
   - Deny requires reason.
   - Review reschedule requests and approve/deny.
@@ -258,40 +265,6 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   1. `docs/GymCore.txt`
   2. `docs/alter.txt`
   3. `docs/InsertValues.txt`
-
-## 19) Reception/frontdesk + customer shell updates (Mar 27, 2026)
-- Reception check-in page was simplified and re-laid out:
-  - QR check-in is the full-width top panel.
-  - Manual customer lookup and customer information panels sit below it.
-  - Reception workspace hero/header was removed from this page.
-- Reception manual lookup behavior:
-  - panel title is `Manual check-in`
-  - lookup is live while typing (no explicit search button)
-  - input placeholder is `Enter customer's name or phone number`
-  - empty-result copy is `Customer not found`
-- Reception customer information panel copy now uses:
-  - `Customer information`
-  - waiting state text `Waiting for customer's information.`
-- Reception QR scanner behavior was hardened:
-  - open-camera action text is `Open QR camera`
-  - idle camera text is `Camera offline`
-  - scanner now tries full-frame QR decoding first, then a centered crop
-  - jsQR now uses `attemptBoth` inversion handling
-  - BarcodeDetector empty-result path now falls back to jsQR in the same scan loop
-- Reception access log wording/styling:
-  - columns are `Timestamp`, `Name`, `Membership plan`, `Employee`
-  - membership plan badge is green
-  - timestamp and employee text are white
-  - extra `Verified customer` sublabel was removed
-- Customer account menu ordering changed:
-  - `Check in QR` now appears directly under `View profile`
-  - `Notifications` moved near the bottom of the list
-- Customer AI widget exposure is restricted:
-  - CUSTOMER sees the AI widget
-  - ADMIN / RECEPTIONIST / COACH do not
-- Membership payment success return flow:
-  - success overlay no longer gets stuck
-  - outside-click and countdown close both redirect customer to `/customer/coach-booking`
   4. `docs/InsertTestingValues.txt` (optional)
 - Root `README.md` now explicitly tells teammates where to change SQL Server auth:
   - `backend/src/main/resources/application.properties`
@@ -464,7 +437,7 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   - an `APPROVED` PT arrangement whose end date is still current.
 - `frontend/src/pages/customer/CustomerCoachBookingPage.jsx` now preloads PT schedule state and shows a blocking modal before:
   - `Open Schedule Planner`
-  - `Search Coaches`
+  - `Preview Matches`
 - The blocking modal routes customer into `My PT Schedule` so they review the current PT state instead of starting another request.
 - Regression coverage added:
   - `frontend/src/pages/customer/CustomerCoachBookingPage.test.jsx`
@@ -538,42 +511,15 @@ Purpose: quick context snapshot so future work can resume without re-discovering
     - cancelled-only dates are red.
   - Selected booked-session date uses a separate blue ring so selection does not visually conflict with green/red status colors.
   - Selected availability summary is no longer an all-day chip wall; it uses a compact weekday drill-down with a themed custom dropdown.
-  - Coaches can now toggle whether they accept new PT customers, and this toggle is confirmed via popup before it changes.
 - `frontend/src/pages/customer/CustomerCoachBookingPage.jsx`
-  - Top recurring-slot summary and planner modal summary were later simplified again into flatter inline groups instead of the earlier dropdown-heavy presentation.
-  - The planner now focuses on recurring slots only; the manual end-date UI was removed.
-  - The action button is `Search Coaches` instead of the old `Preview Matches`.
+  - Top recurring-slot summary and planner modal summary now use the same weekday drill-down pattern instead of rendering all selected-day groups at once.
+  - The weekday selector is a custom themed dropdown, not a browser-native select.
   - Customer cancel and reschedule actions both use in-app modals.
   - Customer can type cancellation reason and optional reschedule reason; coach can see those reasons in coach pages.
   - Customer can see coach cancellation reasons on cancelled PT sessions.
-- Shared UI component retained:
+- Shared UI component added:
   - `frontend/src/components/common/WeekdayDropdown.jsx`
-  - still used by coach schedule availability summary flows.
-
-## 35) Coach-booking UI and matching updates on `main` (Mar 26, 2026)
-- Customer coach-booking page:
-  - removed the old step chips:
-    - `1. Plan`
-    - `2. Preview`
-    - `3. Request`
-  - removed older helper cards such as:
-    - `PT Dashboard`
-    - `Booking guide / What happens next`
-    - planner `Approval rule` / `Planner guide`
-  - `Set Desired PT Schedule` remains as the main booking card heading without the old numeric prefix.
-  - `Earliest possible start` helper text was removed from the visible card.
-  - membership eligibility now shows a small status indicator beside the planner trigger:
-    - `Checking coach plan`
-    - `Coach plan active`
-    - `Coach plan missing`
-- Matching/review:
-  - coach cards now include profile avatar/icon actions
-  - coach profile modal shows richer detail
-  - partial-match warnings show conflict reasons inline
-  - conflict rows can be removed directly by the customer before proceeding
-- Coach availability:
-  - coach can hide from future customer matches while keeping existing sessions/requests intact
-  - this is persisted without a DB schema change and filtered out during customer match generation
+  - Used for compact weekday summary drill-down on coach/customer PT scheduling screens.
 
 ## 28) Latest verified test run (Mar 2, 2026)
 - Backend: `.\mvnw.cmd test` -> passed (`146` tests, `0` failures, `0` errors).
