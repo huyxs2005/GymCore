@@ -202,7 +202,7 @@ public class CoachBookingService {
         List<Map<String, Object>> availability = loadWeeklyAvailability(coachId);
 
         List<Map<String, Object>> recentFeedback = jdbcTemplate.query("""
-                SELECT TOP (5) cf.Rating, cf.Comment, cf.CreatedAt, u.FullName AS CustomerName
+                SELECT cf.Rating, cf.Comment, cf.CreatedAt, u.FullName AS CustomerName
                 FROM dbo.CoachFeedback cf
                 JOIN dbo.Users u ON u.UserID = cf.CustomerID
                 WHERE cf.CoachID = ? ORDER BY cf.CreatedAt DESC

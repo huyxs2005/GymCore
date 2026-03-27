@@ -442,6 +442,8 @@ function CustomerCoachBookingPage() {
     loading: false,
     coach: null,
   })
+  const [coachProfileReviewSort, setCoachProfileReviewSort] = useState('highest')
+  const [coachProfileReviewPage, setCoachProfileReviewPage] = useState(1)
   const [coachBookingModal, setCoachBookingModal] = useState({
     open: false,
     loading: false,
@@ -940,6 +942,8 @@ function CustomerCoachBookingPage() {
 
   async function openCoachProfile(coachId) {
     try {
+      setCoachProfileReviewSort('highest')
+      setCoachProfileReviewPage(1)
       setCoachProfileModal({
         open: true,
         loading: true,
@@ -963,6 +967,8 @@ function CustomerCoachBookingPage() {
   }
 
   function closeCoachProfile() {
+    setCoachProfileReviewSort('highest')
+    setCoachProfileReviewPage(1)
     setCoachProfileModal({
       open: false,
       loading: false,
@@ -1483,6 +1489,28 @@ function CustomerCoachBookingPage() {
     () => scheduleData.items.filter((s) => String(s.status || '').toUpperCase() === 'COMPLETED'),
     [scheduleData.items],
   )
+  const coachProfileReviews = useMemo(() => {
+    const items = Array.isArray(coachProfileModal.coach?.recentFeedback) ? coachProfileModal.coach.recentFeedback.slice() : []
+    items.sort((left, right) => {
+      const ratingDelta = Number(right.rating || 0) - Number(left.rating || 0)
+      if (ratingDelta !== 0) {
+        return coachProfileReviewSort === 'highest' ? ratingDelta : -ratingDelta
+      }
+      return String(right.createdAt || '').localeCompare(String(left.createdAt || ''))
+    })
+    return items
+  }, [coachProfileModal.coach, coachProfileReviewSort])
+  const coachProfileReviewPageCount = useMemo(
+    () => Math.max(1, Math.ceil(coachProfileReviews.length / 5)),
+    [coachProfileReviews.length],
+  )
+  const paginatedCoachProfileReviews = useMemo(() => {
+    const start = (coachProfileReviewPage - 1) * 5
+    return coachProfileReviews.slice(start, start + 5)
+  }, [coachProfileReviewPage, coachProfileReviews])
+  useEffect(() => {
+    setCoachProfileReviewPage((current) => Math.min(current, coachProfileReviewPageCount))
+  }, [coachProfileReviewPageCount])
   const activePhase = scheduleData.activePhase
   const ptDashboard = scheduleData.dashboard ?? {}
   const weeklyDashboardSchedule = Array.isArray(ptDashboard.weeklySchedule) ? ptDashboard.weeklySchedule : []
@@ -2287,20 +2315,88 @@ function CustomerCoachBookingPage() {
                 </div>
 
                 <div className="gc-surface-plain">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Recent feedback</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reviews</p>
+                    <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCoachProfileReviewSort('highest')
+                          setCoachProfileReviewPage(1)
+                        }}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          coachProfileReviewSort === 'highest'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Highest
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCoachProfileReviewSort('lowest')
+                          setCoachProfileReviewPage(1)
+                        }}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          coachProfileReviewSort === 'lowest'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Lowest
+                      </button>
+                    </div>
+                  </div>
                   <div className="mt-3 space-y-3">
-                    {Array.isArray(coachProfileModal.coach.recentFeedback) && coachProfileModal.coach.recentFeedback.length > 0 ? (
-                      coachProfileModal.coach.recentFeedback.map((item, index) => (
-                        <div key={`feedback-${index}`} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{item.customerName || 'Customer'}</p>
-                            <p className="text-xs font-semibold text-amber-600">Rating {Number(item.rating || 0).toFixed(1)}</p>
+                    {coachProfileReviews.length > 0 ? (
+                      <>
+                        {paginatedCoachProfileReviews.map((item, index) => (
+                          <div key={`feedback-${coachProfileReviewPage}-${index}-${item.createdAt || index}`} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-900">{item.customerName || 'Customer'}</p>
+                              <p className="text-xs font-semibold text-amber-600">Rating {Number(item.rating || 0).toFixed(1)}</p>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-600">{item.comment || 'No comment left.'}</p>
                           </div>
-                          <p className="mt-1 text-sm text-slate-600">{item.comment || 'No comment left.'}</p>
-                        </div>
-                      ))
+                        ))}
+                        {coachProfileReviewPageCount > 1 ? (
+                          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setCoachProfileReviewPage((current) => Math.max(1, current - 1))}
+                              disabled={coachProfileReviewPage === 1}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Prev
+                            </button>
+                            {Array.from({ length: coachProfileReviewPageCount }, (_, index) => index + 1).map((page) => (
+                              <button
+                                key={`coach-review-page-${page}`}
+                                type="button"
+                                onClick={() => setCoachProfileReviewPage(page)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                  coachProfileReviewPage === page
+                                    ? 'bg-slate-900 text-white'
+                                    : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setCoachProfileReviewPage((current) => Math.min(coachProfileReviewPageCount, current + 1))}
+                              disabled={coachProfileReviewPage === coachProfileReviewPageCount}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Next
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
-                      <p className="text-sm text-slate-500">No feedback yet.</p>
+                      <p className="text-sm text-slate-500">No reviews yet.</p>
                     )}
                   </div>
                 </div>
