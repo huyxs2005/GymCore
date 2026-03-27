@@ -199,7 +199,7 @@ function AppShell({ children }) {
   const [mobileOverflow, setMobileOverflow] = useState({ left: false, right: false })
   const quickLinks = getQuickLinks(pathname, userRole)
   const aiQuickActions = getAiQuickActions(pathname, userRole)
-  const showAiChatWidget = isAuthenticated
+  const showAiChatWidget = isAuthenticated && userRole === 'CUSTOMER'
 
   function jumpToTop() {
     window.scrollTo(0, 0)

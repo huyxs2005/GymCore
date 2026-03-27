@@ -258,6 +258,40 @@ Purpose: quick context snapshot so future work can resume without re-discovering
   1. `docs/GymCore.txt`
   2. `docs/alter.txt`
   3. `docs/InsertValues.txt`
+
+## 19) Reception/frontdesk + customer shell updates (Mar 27, 2026)
+- Reception check-in page was simplified and re-laid out:
+  - QR check-in is the full-width top panel.
+  - Manual customer lookup and customer information panels sit below it.
+  - Reception workspace hero/header was removed from this page.
+- Reception manual lookup behavior:
+  - panel title is `Manual check-in`
+  - lookup is live while typing (no explicit search button)
+  - input placeholder is `Enter customer's name or phone number`
+  - empty-result copy is `Customer not found`
+- Reception customer information panel copy now uses:
+  - `Customer information`
+  - waiting state text `Waiting for customer's information.`
+- Reception QR scanner behavior was hardened:
+  - open-camera action text is `Open QR camera`
+  - idle camera text is `Camera offline`
+  - scanner now tries full-frame QR decoding first, then a centered crop
+  - jsQR now uses `attemptBoth` inversion handling
+  - BarcodeDetector empty-result path now falls back to jsQR in the same scan loop
+- Reception access log wording/styling:
+  - columns are `Timestamp`, `Name`, `Membership plan`, `Employee`
+  - membership plan badge is green
+  - timestamp and employee text are white
+  - extra `Verified customer` sublabel was removed
+- Customer account menu ordering changed:
+  - `Check in QR` now appears directly under `View profile`
+  - `Notifications` moved near the bottom of the list
+- Customer AI widget exposure is restricted:
+  - CUSTOMER sees the AI widget
+  - ADMIN / RECEPTIONIST / COACH do not
+- Membership payment success return flow:
+  - success overlay no longer gets stuck
+  - outside-click and countdown close both redirect customer to `/customer/coach-booking`
   4. `docs/InsertTestingValues.txt` (optional)
 - Root `README.md` now explicitly tells teammates where to change SQL Server auth:
   - `backend/src/main/resources/application.properties`

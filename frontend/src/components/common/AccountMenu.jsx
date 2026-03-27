@@ -126,16 +126,19 @@ function AccountMenu({ className = '' }) {
               <User size={16} />
               View profile
             </button>
-            <button
-              type="button"
-              onClick={() => handleMenuNavigation('/notifications')}
-              className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
-            >
-              <Bell size={16} />
-              Notifications
-            </button>
             {isCustomer ? (
               <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    setQrOpen(true)
+                  }}
+                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
+                >
+                  <QrCode size={16} />
+                  Check in QR
+                </button>
                 <button
                   type="button"
                   onClick={() => handleMenuNavigation('/customer/current-membership')}
@@ -152,19 +155,16 @@ function AccountMenu({ className = '' }) {
                   <Package size={16} />
                   Order history
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false)
-                    setQrOpen(true)
-                  }}
-                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
-                >
-                  <QrCode size={16} />
-                  Check in QR
-                </button>
               </>
             ) : null}
+            <button
+              type="button"
+              onClick={() => handleMenuNavigation('/notifications')}
+              className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-slate-50"
+            >
+              <Bell size={16} />
+              Notifications
+            </button>
             <button
               type="button"
               onClick={handleLogout}

@@ -5,6 +5,21 @@
 - [x] Current working baseline branch is `main`.
 - [x] The older `origin/main` merge-prep checklist is no longer active and is kept only in git history / older docs snapshots.
 
+## Recently Completed (Mar 27, 2026)
+- [x] Refine receptionist check-in layout/copy for front-desk use.
+  - QR check-in moved to the full-width top section.
+  - manual check-in and customer information panels simplified and aligned.
+  - access-log wording/styling cleaned up.
+- [x] Harden receptionist QR scanner fallback behavior.
+  - full-frame decode added before crop fallback
+  - jsQR inversion handling widened
+  - BarcodeDetector fallback now continues through jsQR
+- [x] Reorder customer account menu entries.
+  - `Check in QR` moved directly under `View profile`
+  - `Notifications` moved toward the bottom
+- [x] Restrict the AI chat widget to CUSTOMER only.
+- [x] Fix membership payment-success return flow so it resolves back into PT booking cleanly.
+
 ## Recommendations Backlog (Business-Rule Safe)
 - [x] Add backend coverage tooling (`JaCoCo`) to `backend/pom.xml`.
   - Reason:

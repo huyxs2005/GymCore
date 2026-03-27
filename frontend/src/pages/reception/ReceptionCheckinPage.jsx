@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { QrCode, Search, Camera, CameraOff, History, CheckCircle2, AlertCircle, User, X, ShieldAlert, MonitorCheck, Loader2 } from 'lucide-react'
+import { QrCode, Search, Camera, CameraOff, History, CheckCircle2, AlertCircle, UserRound, X, ShieldAlert, MonitorCheck, Loader2 } from 'lucide-react'
 import jsQR from 'jsqr'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { receptionCheckinApi } from '../../features/checkin/api/receptionCheckinApi'
@@ -75,6 +75,26 @@ function ReceptionCheckinPage() {
   }, [])
 
   useEffect(() => {
+    const trimmedQuery = query.trim()
+
+    if (!trimmedQuery) {
+      setCustomers([])
+      setSearching(false)
+      setSelectedCustomer(null)
+      setSelectedValidity(null)
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      runSearch(trimmedQuery)
+    }, 250)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [query])
+
+  useEffect(() => {
     return () => {
       stopCamera()
     }
@@ -140,34 +160,46 @@ function ReceptionCheckinPage() {
     handlingScanRef.current = false
   }
 
-  function decodeFromCenterSquareFrame() {
+  function decodeQrFromVideoFrame() {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas || video.videoWidth <= 0 || video.videoHeight <= 0) {
       return null
     }
 
-    const side = Math.min(video.videoWidth, video.videoHeight)
-    if (side <= 0) {
-      return null
-    }
-
-    const sx = Math.floor((video.videoWidth - side) / 2)
-    const sy = Math.floor((video.videoHeight - side) / 2)
-
-    canvas.width = side
-    canvas.height = side
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) {
       return null
     }
 
-    ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side)
-    const imageData = ctx.getImageData(0, 0, side, side)
-    const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'dontInvert',
-    })
-    return decoded?.data || null
+    const attempts = [
+      { sx: 0, sy: 0, sw: video.videoWidth, sh: video.videoHeight },
+    ]
+
+    const side = Math.min(video.videoWidth, video.videoHeight)
+    if (side > 0) {
+      attempts.push({
+        sx: Math.floor((video.videoWidth - side) / 2),
+        sy: Math.floor((video.videoHeight - side) / 2),
+        sw: side,
+        sh: side,
+      })
+    }
+
+    for (const attempt of attempts) {
+      canvas.width = attempt.sw
+      canvas.height = attempt.sh
+      ctx.drawImage(video, attempt.sx, attempt.sy, attempt.sw, attempt.sh, 0, 0, attempt.sw, attempt.sh)
+      const imageData = ctx.getImageData(0, 0, attempt.sw, attempt.sh)
+      const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      })
+      if (decoded?.data) {
+        return decoded.data
+      }
+    }
+
+    return null
   }
 
   function startScanLoop(detector) {
@@ -184,12 +216,13 @@ function ReceptionCheckinPage() {
         if (detector) {
           const barcodes = await detector.detect(videoRef.current)
           if (barcodes?.length) {
-            await handleQrTokenDetected(barcodes[0].rawValue || '')
+            const barcode = barcodes[0]
+            await handleQrTokenDetected(barcode.rawValue || barcode.displayValue || '')
+            return
           }
-          return
         }
 
-        const token = decodeFromCenterSquareFrame()
+        const token = decodeQrFromVideoFrame()
         if (token) {
           await handleQrTokenDetected(token)
         }
@@ -253,15 +286,21 @@ function ReceptionCheckinPage() {
     }
   }
 
-  async function runSearch(event) {
-    event.preventDefault()
+  async function runSearch(searchTerm = query.trim()) {
+    const trimmedQuery = searchTerm.trim()
+    if (!trimmedQuery) {
+      setCustomers([])
+      setSearching(false)
+      return
+    }
+
     setSearching(true)
     setErrorMessage('')
     setSuccessMessage('')
     setSelectedCustomer(null)
     setSelectedValidity(null)
     try {
-      const response = await receptionCustomerApi.searchCustomers(query.trim())
+      const response = await receptionCustomerApi.searchCustomers(trimmedQuery)
       setCustomers(response?.data?.items || [])
     } catch (error) {
       setCustomers([])
@@ -278,105 +317,20 @@ function ReceptionCheckinPage() {
 
   return (
     <WorkspaceScaffold
-      title="Access Control Terminal"
-      subtitle="Main hub for customer check-in via QR synthesis or identity lookup. Monitoring active membership validity in real-time."
+      showHeader={false}
       links={receptionNav}
     >
       <div className="max-w-7xl space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-8">
-            <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
-              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">QR Synthesis Check-in</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Propagate customer access rights via automated vision scanning.
-                  </p>
-                </div>
-                {!cameraOpen ? (
-                  <button
-                    type="button"
-                    onClick={openCamera}
-                    className="flex items-center gap-3 rounded-xl bg-gym-500 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-950 shadow-glow transition-all hover:scale-105 active:scale-95"
-                  >
-                    <Camera className="h-4 w-4" /> Start Vision Scan
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={stopCamera}
-                    className="flex items-center gap-3 rounded-xl bg-white/5 px-6 py-3 text-xs font-black uppercase tracking-widest text-white border border-white/10 transition-all hover:bg-white/10"
-                  >
-                    <CameraOff className="h-4 w-4" /> Deactivate Scanner
-                  </button>
-                )}
-              </div>
-
-              <div className="relative mx-auto aspect-square w-full max-w-sm">
-                <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-gym-500/20 via-transparent to-gym-500/10 blur-2xl opacity-50" />
-                <div className="relative h-full w-full overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 ring-1 ring-white/5">
-                  <video ref={videoRef} className="h-full w-full object-cover opacity-60 mix-blend-screen" muted playsInline />
-                  
-                  {!cameraReady && !cameraError && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
-                      <div className="rounded-full bg-white/5 p-6 border border-white/5">
-                        <QrCode className="h-12 w-12 text-slate-700" />
-                      </div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">Vision System Offline</p>
-                    </div>
-                  )}
-
-                  {cameraReady && (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                       <div className="relative h-64 w-64">
-                          <div className="absolute inset-0 border-2 border-gym-500/40 rounded-3xl" />
-                          <div className="absolute -inset-1 border-2 border-gym-500/20 rounded-[2rem] animate-pulse" />
-                          
-                          {/* Corner brackets */}
-                          <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-gym-500 rounded-tl-xl" />
-                          <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-gym-500 rounded-tr-xl" />
-                          <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-gym-500 rounded-bl-xl" />
-                          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-gym-500 rounded-br-xl" />
-                          
-                          {/* Scanning bar */}
-                          <div className="absolute top-0 left-4 right-4 h-1 bg-gym-500 shadow-glow animate-scan" />
-                       </div>
-                    </div>
-                  )}
-
-                  {cameraError && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-                      <ShieldAlert className="h-10 w-10 text-rose-500 mb-4" />
-                      <p className="text-sm font-bold text-rose-400 uppercase tracking-tight">System Access Denied</p>
-                      <p className="mt-2 text-xs text-slate-500 leading-relaxed">{cameraError}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {cameraOpen && (
-                <div className="mt-8 flex justify-center">
-                   <div className="flex items-center gap-3 rounded-full bg-emerald-500/10 px-4 py-2 ring-1 ring-emerald-500/20">
-                      <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500 shadow-glow" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">System Processing Active</span>
-                   </div>
-                </div>
-              )}
-            </section>
-
-            <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
+        <div className="grid gap-8 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="order-2 space-y-8">
+            <section className="gc-glass-panel flex h-full flex-col border-white/5 bg-white/[0.02] p-8">
               <div className="mb-8 items-start justify-between sm:flex">
                 <div>
-                  <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Direct Inquiry</h2>
-                  <p className="mt-1 text-sm text-slate-500">Locate customer credentials via database synchronization.</p>
-                </div>
-                <div className="hidden items-center gap-2 rounded-xl bg-white/5 px-4 py-2 border border-white/5 sm:flex">
-                   <MonitorCheck className="h-4 w-4 text-slate-500" />
-                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Database Ready</span>
+                  <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Manual check-in</h2>
                 </div>
               </div>
 
-              <form onSubmit={runSearch} className="group relative">
+              <div className="group relative">
                 <div className="flex items-center gap-4 rounded-2xl bg-white/[0.03] p-2 ring-1 ring-white/10 transition-all focus-within:ring-gym-500/50 focus-within:bg-white/5">
                   <div className="pl-4 text-slate-500 group-focus-within:text-gym-500">
                     <Search className="h-5 w-5" />
@@ -385,20 +339,13 @@ function ReceptionCheckinPage() {
                     type="text"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Enter Customer Identity or Proxy..."
+                    placeholder="Enter customer's name or phone number"
                     className="h-12 w-full bg-transparent text-sm text-white placeholder:text-slate-600 focus:outline-none"
                   />
-                  <button
-                    type="submit"
-                    disabled={searching || !query.trim()}
-                    className="flex h-12 items-center gap-2 rounded-xl bg-gym-500 px-8 text-xs font-black uppercase tracking-widest text-slate-950 shadow-glow disabled:opacity-20 disabled:shadow-none transition-all active:scale-95"
-                  >
-                    {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Synchronize'}
-                  </button>
                 </div>
-              </form>
+              </div>
 
-              <div className="mt-8 space-y-3">
+              <div className="mt-8 flex-1 space-y-3">
                 {searching ? (
                   <div className="space-y-3">
                     {[1, 2].map((i) => (
@@ -407,7 +354,7 @@ function ReceptionCheckinPage() {
                   </div>
                 ) : customers.length === 0 && query ? (
                    <div className="rounded-2xl border border-white/5 bg-white/[0.01] p-12 text-center">
-                     <p className="text-xs font-black uppercase tracking-widest text-slate-600">Zero matches found in active database.</p>
+                     <p className="text-xs font-black uppercase tracking-widest text-slate-600">Customer not found</p>
                    </div>
                 ) : (
                   customers.map((customer) => (
@@ -424,12 +371,12 @@ function ReceptionCheckinPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                            <div className={`flex h-12 w-12 items-center justify-center rounded-xl font-bold text-sm transition-colors ${selectedCustomer?.customerId === customer.customerId ? 'bg-gym-500 text-slate-950' : 'bg-white/5 text-slate-400 group-hover:text-white group-hover:bg-white/10'}`}>
-                             <User className="h-5 w-5" />
+                             <UserRound className="h-5 w-5" />
                            </div>
                            <div>
                              <p className="font-display text-lg font-bold text-white tracking-tight">{customer.fullName}</p>
                              <p className="text-xs font-black uppercase tracking-widest text-slate-500 group-hover:text-slate-400">
-                               {customer.phone || 'NO_PROXY'} — {customer.email || 'NO_CREDENTIAL'}
+                               {customer.phone ? `${customer.phone} - ` : ""}{customer.email || 'NO_CREDENTIAL'}
                              </p>
                            </div>
                         </div>
@@ -444,11 +391,10 @@ function ReceptionCheckinPage() {
             </section>
           </div>
 
-          <aside className="space-y-8">
-            <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
+          <aside className="order-3 space-y-8">
+             <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
                <div className="mb-6">
-                  <h2 className="font-display text-xl font-bold text-white tracking-tight uppercase leading-tight">Identity Verification</h2>
-                  <p className="mt-1 text-xs text-slate-500 uppercase tracking-widest font-black opacity-60">Status Analysis</p>
+                  <h2 className="font-display text-xl font-bold text-white tracking-tight uppercase leading-tight">Customer information</h2>
                </div>
 
                {!selectedCustomer ? (
@@ -456,14 +402,15 @@ function ReceptionCheckinPage() {
                    <div className="rounded-full bg-white/5 p-6 border border-white/5 mb-4">
                      <Search className="h-8 w-8 text-slate-700" />
                    </div>
-                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 leading-relaxed">Awaiting identity selection for<br/>access protocol verification.</p>
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 leading-relaxed">Waiting for customer&apos;s information.</p>
                  </div>
                ) : (
                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Subject Profile</p>
                       <p className="text-xl font-bold text-white font-display mb-1">{selectedCustomer.fullName}</p>
-                      <p className="text-[11px] font-bold text-slate-400 opacity-60 uppercase">{selectedCustomer.phone || '-'}</p>
+                      {selectedCustomer.phone ? (
+                        <p className="text-[11px] font-bold text-slate-400 opacity-60 uppercase">{selectedCustomer.phone}</p>
+                      ) : null}
                    </div>
 
                    {selectedValidity && (
@@ -480,7 +427,7 @@ function ReceptionCheckinPage() {
                        
                        {selectedValidity.membership?.customerMembershipId && (
                          <div className="mt-4 border-t border-white/5 pt-4">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-1">Contract Parameters</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-1">Membership plan</p>
                             <p className="text-sm font-bold text-white">{selectedValidity.membership.planName}</p>
                             <p className="text-xs text-slate-500 mt-1">
                                {selectedValidity.membership.startDate} — {selectedValidity.membership.endDate}
@@ -501,6 +448,80 @@ function ReceptionCheckinPage() {
                    </button>
                  </div>
                )}
+            </section>
+          </aside>
+
+          <div className="order-1 space-y-8 xl:col-span-2">
+            <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
+              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">QR check in</h2>
+                </div>
+                {!cameraOpen ? (
+                  <button
+                    type="button"
+                    onClick={openCamera}
+                    className="flex items-center gap-3 rounded-xl bg-gym-500 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-950 shadow-glow transition-all hover:scale-105 active:scale-95"
+                  >
+                    <Camera className="h-4 w-4" /> Open QR camera
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="flex items-center gap-3 rounded-xl bg-white/5 px-6 py-3 text-xs font-black uppercase tracking-widest text-white border border-white/10 transition-all hover:bg-white/10"
+                  >
+                    <CameraOff className="h-4 w-4" /> Deactivate Scanner
+                  </button>
+                )}
+              </div>
+
+              <div className="relative h-[34rem] w-full">
+                <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-gym-500/20 via-transparent to-gym-500/10 blur-2xl opacity-50" />
+                <div className="relative h-full w-full overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 ring-1 ring-white/5">
+                  <video ref={videoRef} className="h-full w-full object-cover opacity-60 mix-blend-screen" muted playsInline />
+                  
+                  {!cameraReady && !cameraError && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
+                      <div className="rounded-full bg-white/5 p-6 border border-white/5">
+                        <QrCode className="h-12 w-12 text-slate-700" />
+                      </div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">Camera offline</p>
+                    </div>
+                  )}
+
+                  {cameraReady && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="relative h-72 w-72">
+                        <div className="absolute inset-0 border-2 border-gym-500/40 rounded-3xl" />
+                        <div className="absolute -inset-1 border-2 border-gym-500/20 rounded-[2rem] animate-pulse" />
+                        <div className="absolute top-0 left-0 h-8 w-8 rounded-tl-xl border-l-4 border-t-4 border-gym-500" />
+                        <div className="absolute top-0 right-0 h-8 w-8 rounded-tr-xl border-r-4 border-t-4 border-gym-500" />
+                        <div className="absolute bottom-0 left-0 h-8 w-8 rounded-bl-xl border-b-4 border-l-4 border-gym-500" />
+                        <div className="absolute bottom-0 right-0 h-8 w-8 rounded-br-xl border-b-4 border-r-4 border-gym-500" />
+                        <div className="absolute top-0 left-4 right-4 h-1 bg-gym-500 shadow-glow animate-scan" />
+                      </div>
+                    </div>
+                  )}
+
+                  {cameraError && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
+                      <ShieldAlert className="mb-4 h-10 w-10 text-rose-500" />
+                      <p className="text-sm font-bold uppercase tracking-tight text-rose-400">System Access Denied</p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-500">{cameraError}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {cameraOpen && (
+                <div className="mt-8 flex justify-center">
+                  <div className="flex items-center gap-3 rounded-full bg-emerald-500/10 px-4 py-2 ring-1 ring-emerald-500/20">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500 shadow-glow" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">System Processing Active</span>
+                  </div>
+                </div>
+              )}
             </section>
 
             {successMessage && (
@@ -530,7 +551,7 @@ function ReceptionCheckinPage() {
                   </div>
                </div>
             )}
-          </aside>
+          </div>
         </div>
 
         <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
@@ -541,15 +562,8 @@ function ReceptionCheckinPage() {
               </div>
               <div>
                 <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Access Logs</h2>
-                <p className="mt-0.5 text-sm text-slate-500">Historical synchronization of subject entries.</p>
               </div>
             </div>
-            <button 
-              onClick={refreshHistory}
-              className="group rounded-xl bg-white/5 p-3 text-slate-500 border border-white/5 hover:text-white transition-all active:scale-95"
-            >
-              <Loader2 className={`h-4 w-4 ${loadingHistory ? 'animate-spin text-gym-500' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
-            </button>
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-white/5 bg-black/20">
@@ -557,10 +571,10 @@ function ReceptionCheckinPage() {
               <table className="min-w-full text-left">
                 <thead className="border-b border-white/5 bg-white/[0.02]">
                   <tr>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Timestamp</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Subject</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Contract</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Operator</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-white">Timestamp</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-white">Name</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-white">Membership plan</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-white">Employee</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -579,19 +593,18 @@ function ReceptionCheckinPage() {
                   ) : (
                     history.map((item) => (
                       <tr key={item.checkInId} className="group transition-colors hover:bg-white/[0.02]">
-                        <td className="whitespace-nowrap px-6 py-5 text-sm font-black text-white/40 group-hover:text-gym-500/60 tabular-nums">
+                        <td className="whitespace-nowrap px-6 py-5 text-sm font-black text-white tabular-nums">
                           {formatCheckinTimeVn(item.checkInTime)}
                         </td>
                         <td className="px-6 py-5">
                           <p className="text-sm font-bold text-white">{item.fullName || '-'}</p>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Verified Subject</p>
                         </td>
                         <td className="px-6 py-5">
-                          <div className="inline-flex rounded-lg bg-white/5 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-slate-400 border border-white/5">
+                          <div className="inline-flex rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-emerald-300">
                             {item.planName || 'N/A'}
                           </div>
                         </td>
-                        <td className="px-6 py-5 text-sm font-medium text-slate-500 group-hover:text-slate-300">
+                        <td className="px-6 py-5 text-sm font-medium text-white">
                           {item.checkedByName || 'SYSTEM'}
                         </td>
                       </tr>

@@ -134,7 +134,7 @@ function CustomerMembershipPage() {
   function dismissPaymentSuccessOverlay() {
     setShowSuccessMessage(false)
     setSuccessCountdown(10)
-    navigate('/customer/membership', { replace: true })
+    navigate('/customer/coach-booking', { replace: true })
   }
 
   const plansByCategory = useMemo(
@@ -454,7 +454,7 @@ function CustomerMembershipPage() {
               <h2 className="mb-2 text-2xl font-bold text-slate-100">Payment Successful!</h2>
               <p className="text-sm text-slate-400">Your membership space has been updated.</p>
               <p className="mt-3 text-xs font-medium text-slate-500">
-                Click outside to return, or this closes in {successCountdown}s.
+                Click outside to continue to PT booking, or this closes in {successCountdown}s.
               </p>
             </div>
           </div>
