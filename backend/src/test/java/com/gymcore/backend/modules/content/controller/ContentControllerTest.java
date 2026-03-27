@@ -118,6 +118,20 @@ class ContentControllerTest {
     }
 
     @Test
+    void askFoodAssistant_shouldPassPayload() {
+        Map<String, Object> payload = Map.of("question", "Suggest meals");
+        Map<String, Object> request = new java.util.LinkedHashMap<>(payload);
+        request.put("authorizationHeader", null);
+        when(contentService.execute("ai-food-assistant", request))
+                .thenReturn(Map.of("answer", "Try oatmeal"));
+
+        ApiResponse<Map<String, Object>> response = controller.askFoodAssistant(null, payload);
+
+        assertEquals("Try oatmeal", response.data().get("answer"));
+        verify(contentService).execute("ai-food-assistant", request);
+    }
+
+    @Test
     void askCoachBookingAssistant_shouldPassPayload() {
         Map<String, Object> payload = Map.of("question", "Find a PT slot");
         Map<String, Object> request = new java.util.LinkedHashMap<>(payload);

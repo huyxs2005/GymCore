@@ -89,6 +89,14 @@ public class ContentController {
                 contentService.execute("ai-workout-assistant", withAuthorization(authorizationHeader, payload)));
     }
 
+    @PostMapping("/ai/food-assistant")
+    public ApiResponse<Map<String, Object>> askFoodAssistant(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Food assistant response",
+                contentService.execute("ai-food-assistant", withAuthorization(authorizationHeader, payload)));
+    }
+
     @PostMapping("/ai/coach-booking-assistant")
     public ApiResponse<Map<String, Object>> askCoachBookingAssistant(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,

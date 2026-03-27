@@ -13,6 +13,9 @@ export const aiApi = {
   askWorkoutAssistant(payload) {
     return apiClient.post('/v1/ai/workout-assistant', payload).then((response) => response.data?.data ?? response.data)
   },
+  askFoodAssistant(payload) {
+    return apiClient.post('/v1/ai/food-assistant', payload).then((response) => response.data?.data ?? response.data)
+  },
   askCoachBookingAssistant(payload) {
     return apiClient.post('/v1/ai/coach-booking-assistant', payload).then((response) => response.data?.data ?? response.data)
   },
