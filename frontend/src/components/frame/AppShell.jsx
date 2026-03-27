@@ -58,7 +58,6 @@ function getQuickLinks(pathname, role) {
     return [
       { to: '/reception/checkin', label: 'Check-in Scanner' },
       { to: '/reception/pickup', label: 'Pickup Desk' },
-      { to: '/reception/invoices', label: 'Invoices' },
     ]
   }
 
@@ -103,7 +102,6 @@ function getAiQuickActions(pathname, role) {
   const receptionActions = [
     { id: 'ai-reception-checkin', label: 'Open check-in', route: '/reception/checkin', type: 'route' },
     { id: 'ai-reception-pickup', label: 'Open pickup desk', route: '/reception/pickup', type: 'route' },
-    { id: 'ai-reception-invoices', label: 'Open invoices', route: '/reception/invoices', type: 'route' },
   ]
 
   const adminActions = [

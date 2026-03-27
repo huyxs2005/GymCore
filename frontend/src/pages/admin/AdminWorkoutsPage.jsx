@@ -3,10 +3,12 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Dumbbell, Edit3, PlusCircle, Search, ShieldCheck, Trash2, Undo2, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import { adminNav } from '../../config/navigation'
 import { adminWorkoutApi } from '../../features/content/api/adminWorkoutApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All statuses' },
@@ -120,6 +122,12 @@ function AdminWorkoutsPage() {
       return haystack.includes(normalizedSearch)
     })
   }, [categoryFilter, normalizedSearch, statusFilter, workouts])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredWorkouts, 10)
 
   const formCategories = useMemo(() => categories.filter((c) => c.active !== false), [categories])
   const [formState, setFormState] = useState(() => buildInitialWorkoutForm([]))
@@ -243,7 +251,7 @@ function AdminWorkoutsPage() {
         {workoutsQuery.isError ? <p className="text-sm text-rose-600">Could not load workouts.</p> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredWorkouts.map((workout) => {
+          {paginatedItems.map((workout) => {
             const isActive = Boolean(workout.active)
             return (
               <article key={workout.workoutId} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -320,6 +328,11 @@ function AdminWorkoutsPage() {
             )
           })}
         </div>
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
 
         {editingWorkout ? (
           typeof document !== 'undefined'

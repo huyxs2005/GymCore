@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, FileText, Mail, Search, Clock, CreditCard, ShieldCheck, AlertCircle, Loader2, ChevronRight, User } from 'lucide-react'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav, receptionNav } from '../../config/navigation'
 import { useSession } from '../../features/auth/useSession'
 import { adminInvoiceApi } from '../../features/product/api/adminInvoiceApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const EMAIL_OPTIONS = [
   { value: 'all', label: 'All notifications' },
@@ -97,6 +99,12 @@ function AdminInvoicesPage() {
       return haystack.includes(normalizedSearch)
     })
   }, [emailFilter, invoices, pickupFilter, pickupTrackingAvailable, search])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems: paginatedInvoices,
+  } = usePagination(filteredInvoices, 10)
 
   const selectedInvoice = invoiceDetailQuery.data?.invoice ?? null
   const selectedItems = invoiceDetailQuery.data?.items ?? []
@@ -187,7 +195,7 @@ function AdminInvoicesPage() {
                        ) : filteredInvoices.length === 0 ? (
                           <tr><td colSpan={5} className="py-20 text-center text-xs font-black uppercase tracking-widest text-slate-800">No active vectors matched query.</td></tr>
                        ) : (
-                          filteredInvoices.map((invoice) => {
+                          paginatedInvoices.map((invoice) => {
                              const isSelected = invoice.invoiceId === activeInvoiceId
                              return (
                                 <tr 
@@ -224,6 +232,13 @@ function AdminInvoicesPage() {
                     </tbody>
                  </table>
               </div>
+              <PaginationControls
+                 currentPage={currentPage}
+                 totalPages={totalPages}
+                 onPageChange={setCurrentPage}
+                 tone="dark"
+                 className="mt-6"
+              />
            </section>
 
            {activeInvoiceId && (
@@ -445,7 +460,7 @@ function AdminInvoicesPage() {
                     <td colSpan={6} className="px-3 py-3 text-center text-slate-500">No invoices match the current filters.</td>
                   </tr>
                 )}
-                {filteredInvoices.map((invoice) => {
+                {paginatedInvoices.map((invoice) => {
                   const isSelected = invoice.invoiceId === activeInvoiceId
                   return (
                     <tr key={invoice.invoiceId} className={isSelected ? 'bg-gym-50/60' : 'hover:bg-slate-50'}>
@@ -475,6 +490,12 @@ function AdminInvoicesPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="pt-2"
+          />
         </section>
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

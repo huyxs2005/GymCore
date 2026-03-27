@@ -938,7 +938,50 @@ END;
 GO
 
 --- =========================================================
---- Section 3d: Day pass membership date enforcement
+--- Section 3d: Membership status normalization
+--- Ensure EXPIRED is a first-class persisted status in legacy DBs
+--- =========================================================
+IF OBJECT_ID('dbo.CustomerMemberships', 'U') IS NULL
+BEGIN
+    RAISERROR('dbo.CustomerMemberships was not found. Run docs/GymCore.txt first.', 16, 1);
+    RETURN;
+END;
+GO
+
+IF EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID('dbo.CustomerMemberships')
+      AND name = 'CK_CustomerMemberships_Status'
+      AND definition NOT LIKE '%EXPIRED%'
+)
+BEGIN
+    ALTER TABLE dbo.CustomerMemberships DROP CONSTRAINT CK_CustomerMemberships_Status;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID('dbo.CustomerMemberships')
+      AND name = 'CK_CustomerMemberships_Status'
+)
+BEGIN
+    ALTER TABLE dbo.CustomerMemberships
+    ADD CONSTRAINT CK_CustomerMemberships_Status
+        CHECK (Status IN ('PENDING','SCHEDULED','ACTIVE','EXPIRED','CANCELLED'));
+END;
+GO
+
+UPDATE dbo.CustomerMemberships
+SET Status = 'EXPIRED',
+    UpdatedAt = SYSDATETIME()
+WHERE Status = 'ACTIVE'
+  AND EndDate < CAST(GETDATE() AS DATE);
+GO
+
+--- =========================================================
+--- Section 3e: Day pass membership date enforcement
 --- =========================================================
 IF OBJECT_ID('dbo.CustomerMemberships', 'U') IS NULL
 BEGIN
@@ -977,8 +1020,30 @@ BEGIN
 END;
 GO
 
+CREATE OR ALTER TRIGGER dbo.TRG_CustomerMemberships_AutoExpireOnDateChange
+ON dbo.CustomerMemberships
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF TRIGGER_NESTLEVEL() > 1
+    BEGIN
+        RETURN;
+    END;
+
+    UPDATE cm
+    SET cm.Status = 'EXPIRED',
+        cm.UpdatedAt = SYSDATETIME()
+    FROM dbo.CustomerMemberships cm
+    JOIN inserted i ON i.CustomerMembershipID = cm.CustomerMembershipID
+    WHERE cm.EndDate < CAST(GETDATE() AS DATE)
+      AND cm.Status IN ('ACTIVE', 'SCHEDULED');
+END;
+GO
+
 --- =========================================================
---- Section 3e: Auto-seed 7x8 availability for new coaches
+--- Section 3f: Auto-seed 7x8 availability for new coaches
 --- =========================================================
 IF OBJECT_ID('dbo.Coaches', 'U') IS NULL
 BEGIN

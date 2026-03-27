@@ -6,6 +6,8 @@ import { promotionApi } from '../../features/promotion/api/promotionApi'
 import { useSession } from '../../features/auth/useSession'
 import { toast } from 'react-hot-toast'
 import { Ticket, Gift, Sparkles, Clock, CheckCircle2, X } from 'lucide-react'
+import PaginationControls from '../../components/common/PaginationControls'
+import { usePagination } from '../../hooks/usePagination'
 
 function CustomerPromotionsPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
@@ -36,6 +38,12 @@ function CustomerPromotionsPage() {
   })
 
   const posts = postsData?.posts || []
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(posts, 10)
   const formatPostBenefit = (post) => {
     const discountPercent = Number(post.DiscountPercent || 0)
     const discountAmount = Number(post.DiscountAmount || 0)
@@ -64,8 +72,9 @@ function CustomerPromotionsPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-gym-600"></div>
         </div>
       ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {posts.map((post) => (
+          {paginatedItems.map((post) => (
             <div
               key={post.PromotionPostID}
               className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group transition-all hover:shadow-md hover:-translate-y-1"
@@ -152,6 +161,13 @@ function CustomerPromotionsPage() {
             </div>
           )}
         </div>
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          className="mt-6"
+        />
+        </>
       )}
 
       {/* Success Modal */}

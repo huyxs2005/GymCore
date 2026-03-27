@@ -4,6 +4,7 @@ import com.gymcore.backend.modules.auth.service.AuthService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -139,10 +140,19 @@ public class UserManagementService {
         customerMap.put("email", customer.email());
         customerMap.put("phone", customer.phone());
 
+        MembershipSnapshot active = findTopMembership(customer.customerId(), "ACTIVE");
+        MembershipSnapshot scheduled = findTopMembership(customer.customerId(), "SCHEDULED");
+        MembershipSnapshot expired = findTopMembership(customer.customerId(), "EXPIRED");
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("customer", customerMap);
         data.put("validForCheckin", validity.valid());
         data.put("reason", validity.reason());
+        data.put("activeMembership", toMembershipMap(active));
+        data.put("autoRenewMembership", toMembershipMap(scheduled));
+        data.put("expiredMembership", toMembershipMap(expired));
+        data.put("expiredMembershipHistory", findMembershipHistory(customer.customerId(), "EXPIRED", 12));
+        data.put("checkinHistory", findCheckinHistory(customer.customerId(), 20));
 
         if (validity.customerMembershipId() == null) {
             data.put("membership", Map.of());
@@ -405,20 +415,20 @@ public class UserManagementService {
         MembershipSnapshot scheduled = findTopMembership(customerId, "SCHEDULED");
         if (scheduled != null) {
             int days = Math.max(0, (int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), scheduled.startDate()));
-            return new MembershipValidity(false, "Membership not active yet. It is scheduled to start on " + dateToString(scheduled.startDate()) + ".", scheduled.customerMembershipId(), scheduled.status(), scheduled.planName(), scheduled.planType(), dateToString(scheduled.startDate()), dateToString(scheduled.endDate()), days);
+            return new MembershipValidity(false, scheduled.planName() + " is scheduled to start on " + dateToString(scheduled.startDate()) + ".", scheduled.customerMembershipId(), scheduled.status(), scheduled.planName(), scheduled.planType(), dateToString(scheduled.startDate()), dateToString(scheduled.endDate()), days);
         }
 
         MembershipSnapshot expired = findTopMembership(customerId, "EXPIRED");
         if (expired != null) {
-            return new MembershipValidity(false, "Membership expired on " + dateToString(expired.endDate()) + ".", expired.customerMembershipId(), expired.status(), expired.planName(), expired.planType(), dateToString(expired.startDate()), dateToString(expired.endDate()), null);
+            return new MembershipValidity(false, expired.planName() + " expired on " + dateToString(expired.endDate()) + ".", expired.customerMembershipId(), expired.status(), expired.planName(), expired.planType(), dateToString(expired.startDate()), dateToString(expired.endDate()), null);
         }
 
         MembershipSnapshot pending = findTopMembership(customerId, "PENDING");
         if (pending != null) {
-            return new MembershipValidity(false, "Membership payment is pending and not active yet.", pending.customerMembershipId(), pending.status(), pending.planName(), pending.planType(), dateToString(pending.startDate()), dateToString(pending.endDate()), null);
+            return new MembershipValidity(false, pending.planName() + " payment is pending and not active yet.", pending.customerMembershipId(), pending.status(), pending.planName(), pending.planType(), dateToString(pending.startDate()), dateToString(pending.endDate()), null);
         }
 
-        return new MembershipValidity(false, "Customer does not have a valid membership.", null, null, null, null, null, null, null);
+        return new MembershipValidity(false, "No active membership found for this customer.", null, null, null, null, null, null, null);
     }
 
     private MembershipSnapshot findTopMembership(int customerId, String status) {
@@ -436,6 +446,64 @@ public class UserManagementService {
                 ORDER BY cm.EndDate DESC, cm.CustomerMembershipID DESC
                 """, membershipSnapshotRowMapper(), customerId, status);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private List<Map<String, Object>> findMembershipHistory(int customerId, String status, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+        return jdbcTemplate.query("""
+                SELECT TOP (50)
+                    cm.CustomerMembershipID,
+                    cm.Status,
+                    cm.StartDate,
+                    cm.EndDate,
+                    mp.PlanName,
+                    mp.PlanType
+                FROM dbo.CustomerMemberships cm
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                WHERE cm.CustomerID = ? AND cm.Status = ?
+                ORDER BY cm.EndDate DESC, cm.CustomerMembershipID DESC
+                """, (rs, rowNum) -> toMembershipMap(membershipSnapshotRowMapper().mapRow(rs, rowNum)), customerId, status)
+                .stream()
+                .limit(safeLimit)
+                .toList();
+    }
+
+    private List<Map<String, Object>> findCheckinHistory(int customerId, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+        return jdbcTemplate.query("""
+                SELECT TOP (50)
+                    ci.CheckInID,
+                    ci.CheckInTime,
+                    mp.PlanName,
+                    r.FullName AS CheckedByName
+                FROM dbo.CheckIns ci
+                JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = ci.CustomerMembershipID
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                LEFT JOIN dbo.Users r ON r.UserID = ci.CheckedByUserID
+                WHERE ci.CustomerID = ?
+                ORDER BY ci.CheckInTime DESC, ci.CheckInID DESC
+                """, (rs, rowNum) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("checkInId", rs.getInt("CheckInID"));
+            item.put("checkInTime", timestampToIso(rs.getTimestamp("CheckInTime")));
+            item.put("planName", rs.getString("PlanName"));
+            item.put("employeeName", rs.getString("CheckedByName"));
+            return item;
+        }, customerId).stream().limit(safeLimit).toList();
+    }
+
+    private Map<String, Object> toMembershipMap(MembershipSnapshot snapshot) {
+        if (snapshot == null) {
+            return Map.of();
+        }
+        Map<String, Object> membership = new LinkedHashMap<>();
+        membership.put("customerMembershipId", snapshot.customerMembershipId());
+        membership.put("status", snapshot.status());
+        membership.put("planName", snapshot.planName());
+        membership.put("planType", snapshot.planType());
+        membership.put("startDate", dateToString(snapshot.startDate()));
+        membership.put("endDate", dateToString(snapshot.endDate()));
+        return membership;
     }
 
     private RowMapper<Map<String, Object>> searchRowMapper() {
@@ -697,6 +765,10 @@ public class UserManagementService {
 
     private String dateToString(LocalDate value) {
         return value == null ? null : value.format(DATE_FORMAT);
+    }
+
+    private String timestampToIso(Timestamp value) {
+        return value == null ? null : value.toInstant().toString();
     }
 
     private ResponseStatusException unsupportedAction(String action) {

@@ -7,6 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -89,6 +90,17 @@ public class CheckinHealthController {
         Map<String, Object> request = new java.util.LinkedHashMap<>();
         request.put("authorizationHeader", authorizationHeader);
         request.put("customerId", customerId);
+        return ApiResponse.ok("Reception membership validity endpoint ready for implementation",
+                checkinHealthService.execute("reception-validate-membership", request));
+    }
+
+    @GetMapping("/reception/checkin/validity")
+    public ApiResponse<Map<String, Object>> validateMembershipByQr(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @RequestParam(value = "qrCodeToken", required = false) String qrCodeToken) {
+        Map<String, Object> request = new java.util.LinkedHashMap<>();
+        request.put("authorizationHeader", authorizationHeader);
+        request.put("qrCodeToken", qrCodeToken);
         return ApiResponse.ok("Reception membership validity endpoint ready for implementation",
                 checkinHealthService.execute("reception-validate-membership", request));
     }

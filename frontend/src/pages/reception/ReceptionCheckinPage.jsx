@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { QrCode, Search, Camera, CameraOff, History, CheckCircle2, AlertCircle, UserRound, X, ShieldAlert, MonitorCheck, Loader2 } from 'lucide-react'
+import { QrCode, Search, History, CheckCircle2, AlertCircle, UserRound, X, ShieldAlert, Loader2 } from 'lucide-react'
 import QrScanner from 'qr-scanner'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { receptionCheckinApi } from '../../features/checkin/api/receptionCheckinApi'
@@ -29,6 +29,34 @@ function formatCheckinTimeVn(value) {
   return `${valueByType.day}/${valueByType.month}/${valueByType.year} ${valueByType.hour}:${valueByType.minute}`
 }
 
+function formatDateRangeVn(startDate, endDate) {
+  const formatDate = (value) => {
+    if (!value) return ''
+    const parsed = new Date(`${value}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return String(value)
+
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    }).format(parsed)
+  }
+
+  const start = formatDate(startDate)
+  const end = formatDate(endDate)
+  if (!start && !end) return ''
+  if (!start) return end
+  if (!end) return start
+  return `${start} - ${end}`
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const ACCESS_LOGS_PAGE_SIZE = 10
+
 function ReceptionCheckinPage() {
   const [query, setQuery] = useState('')
   const [customers, setCustomers] = useState([])
@@ -39,6 +67,7 @@ function ReceptionCheckinPage() {
 
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
 
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
@@ -47,10 +76,13 @@ function ReceptionCheckinPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [scanPopup, setScanPopup] = useState(null)
+  const [scanPopupCountdown, setScanPopupCountdown] = useState(5)
 
   const videoRef = useRef(null)
   const scannerRef = useRef(null)
   const handlingScanRef = useRef(false)
+  const suppressNextSearchRef = useRef(false)
+  const manualSectionRef = useRef(null)
 
   const cameraSupported = useMemo(() => {
     return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
@@ -73,7 +105,16 @@ function ReceptionCheckinPage() {
   }, [])
 
   useEffect(() => {
+    setHistoryPage(1)
+  }, [history.length])
+
+  useEffect(() => {
     const trimmedQuery = query.trim()
+
+    if (suppressNextSearchRef.current) {
+      suppressNextSearchRef.current = false
+      return undefined
+    }
 
     if (!trimmedQuery) {
       setCustomers([])
@@ -97,6 +138,72 @@ function ReceptionCheckinPage() {
       stopCamera()
     }
   }, [])
+
+  useEffect(() => {
+    if (!cameraSupported) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!cameraOpen && !cameraReady && !cameraError) {
+        openCamera()
+      }
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [cameraSupported])
+
+  useEffect(() => {
+    if (!scanPopup) {
+      return undefined
+    }
+
+    setScanPopupCountdown(5)
+
+    const interval = window.setInterval(() => {
+      setScanPopupCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(interval)
+          setScanPopup(null)
+          return 0
+        }
+        return current - 1
+      })
+    }, 1000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [scanPopup])
+
+  useEffect(() => {
+    if (scanPopup || cameraOpen || checkingIn || !cameraSupported) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!cameraOpen && !checkingIn) {
+        openCamera()
+      }
+    }, 200)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [scanPopup, cameraOpen, checkingIn, cameraSupported])
+
+  function scrollToCustomerPanels() {
+    const target = manualSectionRef.current
+    if (!target) {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   function stopCamera() {
     const scanner = scannerRef.current
@@ -158,10 +265,12 @@ function ReceptionCheckinPage() {
       const response = await receptionCheckinApi.scan(payload)
       const data = response?.data || {}
       const formattedTime = formatCheckinTimeVn(data?.checkInTime)
-      const successText = `Checked in ${data?.customer?.fullName || 'customer'} at ${formattedTime}.`
+      const membershipName = data?.membership?.planName ? ` with ${data.membership.planName}` : ''
+      const successText = `Checked in ${data?.customer?.fullName || 'customer'}${membershipName} at ${formattedTime}.`
       setSuccessMessage(successText)
-      if (selectedCustomer) {
-        await loadMembershipValidity(selectedCustomer.customerId)
+      const checkedInCustomerId = data?.customer?.customerId || payload?.customerId || selectedCustomer?.customerId
+      if (checkedInCustomerId) {
+        await loadMembershipValidity(checkedInCustomerId)
       }
       await refreshHistory()
       return { ok: true, data, message: successText }
@@ -182,11 +291,61 @@ function ReceptionCheckinPage() {
 
     handlingScanRef.current = true
     stopCamera()
-    const result = await performCheckin({ qrCodeToken: token })
-    setScanPopup({
-      ok: result.ok,
-      message: result.message,
-    })
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const response = await receptionCheckinApi.validateMembershipByQrToken(token)
+      const data = response?.data || {}
+      const customer = data?.customer || null
+
+      if (data?.valid && customer?.customerId) {
+        setSelectedCustomer(null)
+        setSelectedValidity(null)
+        setCustomers([])
+        suppressNextSearchRef.current = true
+        setQuery('')
+        const result = await performCheckin({ customerId: customer.customerId })
+        const popupMessage = result.ok
+          ? `Successful check-in. ${customer.fullName} used ${data?.membership?.planName || 'their active membership'}.`
+          : result.message
+        setScanPopup({
+          ok: result.ok,
+          message: popupMessage,
+          highlight: data?.membership?.planName || '',
+        })
+      } else {
+        if (customer?.customerId) {
+          setSelectedCustomer(customer)
+          setSelectedValidity(data)
+          setCustomers([customer])
+          suppressNextSearchRef.current = true
+          setQuery(customer.fullName || customer.email || customer.phone || '')
+          scrollToCustomerPanels()
+        } else {
+          setSelectedCustomer(null)
+          setSelectedValidity(null)
+          setCustomers([])
+        }
+        const membershipName = data?.membership?.planName ? `${data.membership.planName}. ` : ''
+        const message = membershipName + (data?.reason || 'Membership is not valid for check-in.')
+        setErrorMessage(message)
+        setScanPopup({
+          ok: false,
+          message,
+        })
+      }
+    } catch (error) {
+      const message = resolveApiMessage(error, 'QR code is invalid or customer was not found.')
+      setSelectedCustomer(null)
+      setSelectedValidity(null)
+      setCustomers([])
+      setErrorMessage(message)
+      setScanPopup({
+        ok: false,
+        message,
+      })
+    }
     handlingScanRef.current = false
   }
 
@@ -283,15 +442,26 @@ function ReceptionCheckinPage() {
     await loadMembershipValidity(customer.customerId)
   }
 
+  const membershipDateRange = formatDateRangeVn(selectedValidity?.membership?.startDate, selectedValidity?.membership?.endDate)
+  const popupHighlightPattern = scanPopup?.highlight ? new RegExp(`(${escapeRegExp(scanPopup.highlight)})`) : null
+  const popupMessageParts = popupHighlightPattern ? String(scanPopup?.message || '').split(popupHighlightPattern) : [scanPopup?.message || '']
+  const totalHistoryPages = Math.max(1, Math.ceil(history.length / ACCESS_LOGS_PAGE_SIZE))
+  const safeHistoryPage = Math.min(historyPage, totalHistoryPages)
+  const paginatedHistory = history.slice(
+    (safeHistoryPage - 1) * ACCESS_LOGS_PAGE_SIZE,
+    safeHistoryPage * ACCESS_LOGS_PAGE_SIZE,
+  )
+
   return (
     <WorkspaceScaffold
       showHeader={false}
       links={receptionNav}
     >
       <div className="max-w-7xl space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div className="grid gap-8 xl:grid-cols-[0.8fr_1.2fr]">
-          <div className="order-2 space-y-8">
-            <section className="gc-glass-panel flex h-full flex-col border-white/5 bg-white/[0.02] p-8">
+        <div className="grid items-stretch gap-8 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="order-2 flex flex-col">
+            <div ref={manualSectionRef} />
+            <section className="gc-glass-panel flex h-full min-h-[25rem] flex-col border-white/5 bg-white/[0.02] p-8">
               <div className="mb-8 items-start justify-between sm:flex">
                 <div>
                   <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">Manual check-in</h2>
@@ -307,7 +477,7 @@ function ReceptionCheckinPage() {
                     type="text"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Enter customer's name or phone number"
+                    placeholder="Enter customer's name, email or phone number"
                     className="h-12 w-full bg-transparent text-sm text-white placeholder:text-slate-600 focus:outline-none"
                   />
                 </div>
@@ -359,8 +529,8 @@ function ReceptionCheckinPage() {
             </section>
           </div>
 
-          <aside className="order-3 space-y-8">
-             <section className="gc-glass-panel border-white/5 bg-white/[0.02] p-8">
+          <aside className="order-3 flex flex-col">
+             <section className="gc-glass-panel flex h-full min-h-[25rem] flex-col border-white/5 bg-white/[0.02] p-8">
                <div className="mb-6">
                   <h2 className="font-display text-xl font-bold text-white tracking-tight uppercase leading-tight">Customer information</h2>
                </div>
@@ -375,9 +545,13 @@ function ReceptionCheckinPage() {
                ) : (
                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                      <p className="text-xl font-bold text-white font-display mb-1">{selectedCustomer.fullName}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Name</p>
+                      <p className="mt-2 text-xl font-bold text-white font-display">{selectedCustomer.fullName}</p>
                       {selectedCustomer.phone ? (
-                        <p className="text-[11px] font-bold text-slate-400 opacity-60 uppercase">{selectedCustomer.phone}</p>
+                        <>
+                          <p className="mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Phone number</p>
+                          <p className="mt-2 text-[11px] font-bold text-slate-400 opacity-80 uppercase">{selectedCustomer.phone}</p>
+                        </>
                       ) : null}
                    </div>
 
@@ -390,16 +564,18 @@ function ReceptionCheckinPage() {
                           </p>
                        </div>
                        <p className={`text-sm leading-relaxed ${selectedValidity.valid ? 'text-emerald-200/70' : 'text-rose-200/70'}`}>
-                         {selectedValidity.valid ? 'Membership vector is active and verified for the current cycle.' : selectedValidity.reason}
+                         {selectedValidity.valid
+                           ? `${selectedValidity.membership?.planName || 'Membership'} is active and valid for check-in today.`
+                           : selectedValidity.reason}
                        </p>
                        
                        {selectedValidity.membership?.customerMembershipId && (
                          <div className="mt-4 border-t border-white/5 pt-4">
                             <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-1">Membership plan</p>
                             <p className="text-sm font-bold text-white">{selectedValidity.membership.planName}</p>
-                            <p className="text-xs text-slate-500 mt-1">
-                               {selectedValidity.membership.startDate} — {selectedValidity.membership.endDate}
-                            </p>
+                            {membershipDateRange ? (
+                              <p className="mt-1 text-xs text-slate-500">{membershipDateRange}</p>
+                            ) : null}
                          </div>
                        )}
                      </div>
@@ -407,9 +583,9 @@ function ReceptionCheckinPage() {
 
                    <button
                      type="button"
-                     disabled={checkingIn}
+                     disabled={checkingIn || !selectedCustomer || !selectedValidity?.valid}
                      onClick={() => performCheckin({ customerId: selectedCustomer.customerId })}
-                     className="group relative h-16 w-full overflow-hidden rounded-2xl bg-gym-500 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-glow transition-all active:scale-95 disabled:opacity-10"
+                     className="group relative h-16 w-full overflow-hidden rounded-2xl bg-gym-500 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-glow transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
                    >
                      <span className="relative z-10">{checkingIn ? 'Initiating...' : 'Commit Access'}</span>
                      <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20" />
@@ -425,23 +601,6 @@ function ReceptionCheckinPage() {
                 <div>
                   <h2 className="font-display text-2xl font-bold text-white tracking-tight uppercase">QR check in</h2>
                 </div>
-                {!cameraOpen ? (
-                  <button
-                    type="button"
-                    onClick={openCamera}
-                    className="flex items-center gap-3 rounded-xl bg-gym-500 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-950 shadow-glow transition-all hover:scale-105 active:scale-95"
-                  >
-                    <Camera className="h-4 w-4" /> Open QR camera
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={stopCamera}
-                    className="flex items-center gap-3 rounded-xl bg-white/5 px-6 py-3 text-xs font-black uppercase tracking-widest text-white border border-white/10 transition-all hover:bg-white/10"
-                  >
-                    <CameraOff className="h-4 w-4" /> Deactivate Scanner
-                  </button>
-                )}
               </div>
 
               <div className="relative h-[34rem] w-full">
@@ -559,7 +718,7 @@ function ReceptionCheckinPage() {
                       </td>
                     </tr>
                   ) : (
-                    history.map((item) => (
+                    paginatedHistory.map((item) => (
                       <tr key={item.checkInId} className="group transition-colors hover:bg-white/[0.02]">
                         <td className="whitespace-nowrap px-6 py-5 text-sm font-black text-white tabular-nums">
                           {formatCheckinTimeVn(item.checkInTime)}
@@ -582,12 +741,41 @@ function ReceptionCheckinPage() {
               </table>
             </div>
           </div>
+          {history.length > ACCESS_LOGS_PAGE_SIZE ? (
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
+                disabled={safeHistoryPage === 1}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                Prev
+              </button>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-300">
+                {safeHistoryPage} / {totalHistoryPages}
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryPage((current) => Math.min(totalHistoryPages, current + 1))}
+                disabled={safeHistoryPage === totalHistoryPages}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
         </section>
       </div>
 
       {scanPopup && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900 p-8 shadow-29xl ring-1 ring-white/10">
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl animate-in fade-in duration-300"
+          onClick={() => setScanPopup(null)}
+        >
+          <div
+            className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900 p-8 shadow-29xl ring-1 ring-white/10"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="absolute top-0 right-0 p-4">
                <button onClick={() => setScanPopup(null)} className="rounded-full bg-white/5 p-2 text-slate-500 hover:text-white transition-colors">
                   <X className="h-4 w-4" />
@@ -600,32 +788,24 @@ function ReceptionCheckinPage() {
 
             <div className="text-center">
               <h3 className={`font-display text-2xl font-bold uppercase tracking-tight ${scanPopup.ok ? 'text-white' : 'text-rose-400'}`}>
-                {scanPopup.ok ? 'Protocol Finalized' : 'Detection Failure'}
+                {scanPopup.ok ? 'Check-in successful' : 'Detection Failure'}
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-400 font-medium">
-                {scanPopup.message}
+              <p className={`mt-3 text-sm leading-relaxed font-medium ${scanPopup.ok ? 'text-white' : 'text-slate-400'}`}>
+                {popupMessageParts.map((part, index) => (
+                  part === scanPopup?.highlight ? (
+                    <span key={`${part}-${index}`} className="text-emerald-400">
+                      {part}
+                    </span>
+                  ) : (
+                    <span key={`${part}-${index}`}>{part}</span>
+                  )
+                ))}
+              </p>
+              <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                Closes automatically in {scanPopupCountdown}s
               </p>
             </div>
 
-            <div className="mt-8 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setScanPopup(null)}
-                className="rounded-2xl border border-white/5 bg-white/5 px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/10"
-              >
-                Dismiss
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setScanPopup(null)
-                  await openCamera()
-                }}
-                className="rounded-2xl bg-gym-500 px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-950 shadow-glow transition-all active:scale-95"
-              >
-                Scan Next
-              </button>
-            </div>
           </div>
         </div>
       )}

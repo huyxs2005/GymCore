@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Mail, Phone, RefreshCw, Search, Star, Users } from 'lucide-react'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const RATING_FILTERS = [
   { value: 'all', label: 'All ratings' },
@@ -222,6 +224,12 @@ function AdminCoachManagementPage() {
         .some((value) => String(value || '').toLowerCase().includes(keyword))
     })
   }, [coaches, experienceFilter, ratingFilter, search, studentFilter])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredCoaches, 10)
 
   const summary = useMemo(() => ({
     total: coaches.length,
@@ -352,7 +360,7 @@ function AdminCoachManagementPage() {
                   <tr>
                     <td colSpan={5} className="px-5 py-6 text-center text-slate-500">No coaches match the current filters.</td>
                   </tr>
-                ) : filteredCoaches.map((coach) => (
+                ) : paginatedItems.map((coach) => (
                   <tr key={coach.coachId} className={selectedCoachId === coach.coachId ? 'bg-gym-50/50' : 'hover:bg-slate-50'}>
                     <td className="px-5 py-4">
                       <div className="font-semibold text-slate-900">{coach.fullName}</div>
@@ -377,6 +385,12 @@ function AdminCoachManagementPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="pt-2"
+          />
         </section>
 
         {selectedCoachId && (

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import PaginationControls from '../../components/common/PaginationControls'
 import { notificationApi } from '../../features/notification/api/notificationApi'
 import {
   formatNotificationTimestamp,
@@ -11,6 +12,7 @@ import {
   resolveNotificationLink,
   updateNotificationCollection,
 } from '../../features/notification/notificationUtils'
+import { usePagination } from '../../hooks/usePagination'
 
 function normalizeCategory(notification) {
   return String(notification?.reminder?.category || 'general')
@@ -107,10 +109,17 @@ function NotificationsPage() {
     return notifications
   }, [filter, notifications])
 
-  const groupedNotifications = useMemo(() => groupNotificationsByDay(filteredNotifications), [filteredNotifications])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredNotifications, 10)
+
+  const groupedNotifications = useMemo(() => groupNotificationsByDay(paginatedItems), [paginatedItems])
   const visibleNotificationIds = useMemo(
-    () => filteredNotifications.map((notification) => notification.notificationId),
-    [filteredNotifications],
+    () => paginatedItems.map((notification) => notification.notificationId),
+    [paginatedItems],
   )
 
   const allVisibleSelected =
@@ -252,6 +261,13 @@ function NotificationsPage() {
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 px-4 py-3 text-sm text-slate-300">
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  tone="dark"
+                  className="mr-auto"
+                />
                 <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"

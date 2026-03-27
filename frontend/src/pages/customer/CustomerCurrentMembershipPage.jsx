@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { BadgeCheck, CalendarClock, CreditCard, Dumbbell, QrCode } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const statusTone = {
   ACTIVE: 'bg-emerald-100 text-emerald-700',
@@ -72,6 +74,13 @@ function CustomerCurrentMembershipPage() {
 
   const membership = currentMembershipQuery.data?.data?.membership ?? {}
   const queuedMembership = currentMembershipQuery.data?.data?.queuedMembership ?? null
+  const expiredMembershipHistory = currentMembershipQuery.data?.data?.expiredMembershipHistory ?? []
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(expiredMembershipHistory, 10)
   const validForCheckin = Boolean(currentMembershipQuery.data?.data?.validForCheckin)
   const invalidReason = currentMembershipQuery.data?.data?.reason || ''
   const hasMembership = Object.keys(membership).length > 0
@@ -285,6 +294,64 @@ function CustomerCurrentMembershipPage() {
                     </p>
                   </div>
                 ) : null}
+              </article>
+            ) : null}
+
+            {expiredMembershipHistory.length > 0 ? (
+              <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Expired Membership History</h3>
+                    <p className="mt-1 text-sm text-slate-500">Your previous memberships stay here for renewal tracking and coupon eligibility.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {expiredMembershipHistory.length} record{expiredMembershipHistory.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {paginatedItems.map((item) => {
+                    const itemPlan = item?.plan ?? {}
+                    return (
+                      <div key={item.customerMembershipId} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{itemPlan.name || 'Membership plan'}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {planTypeLabel[String(itemPlan.planType || '').toUpperCase()] || 'Membership'}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {item.status || 'EXPIRED'}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Start date</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{item.startDate || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">End date</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{item.endDate || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Paid amount</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">
+                              {formatCurrency(item?.payment?.amount ?? itemPlan.price)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  className="mt-5"
+                />
               </article>
             ) : null}
           </section>

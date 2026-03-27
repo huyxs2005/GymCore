@@ -13,10 +13,12 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { adminUserApi } from '../../features/users/api/adminUserApi'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import { usePagination } from '../../hooks/usePagination'
 
 const ROLE_OPTIONS = [
   { value: 'ADMIN', label: 'Admin' },
@@ -92,6 +94,12 @@ function AdminUsersPage() {
   })
 
   const items = usersQuery.data?.data?.items ?? []
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(items, 10)
   const summary = usersQuery.data?.data?.summary ?? {}
   const selectedUser = items.find((user) => user.userId === selectedUserId) ?? null
 
@@ -285,7 +293,7 @@ function AdminUsersPage() {
               ) : items.length === 0 ? (
                 <div className="p-6 text-sm text-slate-500">No staff accounts match the current filters.</div>
               ) : (
-                items.map((user) => (
+                paginatedItems.map((user) => (
                   <div
                     key={user.userId}
                     className={`grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_140px_110px_110px] gap-4 px-5 py-4 text-sm ${
@@ -338,6 +346,12 @@ function AdminUsersPage() {
               )}
             </div>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="pt-2"
+          />
         </section>
 
         <aside className="gc-card-compact space-y-5">

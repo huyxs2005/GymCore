@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
+import PaginationControls from '../../components/common/PaginationControls'
 import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
 import { Calendar, Clock, User, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react'
+import { usePagination } from '../../hooks/usePagination'
 
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -25,6 +27,18 @@ function CoachBookingManagementPage() {
     action: '',
     reason: '',
   })
+  const {
+    currentPage: requestsPage,
+    setCurrentPage: setRequestsPage,
+    totalPages: requestsTotalPages,
+    paginatedItems: paginatedRequests,
+  } = usePagination(requests, 10)
+  const {
+    currentPage: reschedulePage,
+    setCurrentPage: setReschedulePage,
+    totalPages: rescheduleTotalPages,
+    paginatedItems: paginatedRescheduleRequests,
+  } = usePagination(rescheduleRequests, 10)
 
   useEffect(() => {
     loadRequests()
@@ -213,7 +227,7 @@ function CoachBookingManagementPage() {
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {rescheduleRequests.map((req) => (
+              {paginatedRescheduleRequests.map((req) => (
                 <div key={req.ptSessionId} className="gc-card-compact group border-white/5 bg-white/[0.03] transition duration-300 hover:border-white/10 hover:bg-white/[0.05]">
                   <div className="mb-4 flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -284,6 +298,12 @@ function CoachBookingManagementPage() {
                 </div>
               ))}
             </div>
+            <PaginationControls
+              currentPage={reschedulePage}
+              totalPages={rescheduleTotalPages}
+              onPageChange={setReschedulePage}
+              tone="dark"
+            />
           </section>
         )}
 
@@ -320,7 +340,7 @@ function CoachBookingManagementPage() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {requests.map((req) => (
+            {paginatedRequests.map((req) => (
               <div key={req.ptRequestId} className="gc-card group border-white/5 bg-white/[0.03] transition duration-300 hover:border-white/10 hover:bg-white/[0.05]">
                 <div className="mb-6 flex items-start justify-between">
                   <div className="flex items-center gap-4">
@@ -370,6 +390,12 @@ function CoachBookingManagementPage() {
               </div>
             ))}
           </div>
+          <PaginationControls
+            currentPage={requestsPage}
+            totalPages={requestsTotalPages}
+            onPageChange={setRequestsPage}
+            tone="dark"
+          />
         </section>
       </div>
 

@@ -532,12 +532,16 @@ public class OrderInvoiceService {
                            i.PickedUpAt,
                            i.PickedUpByUserID,
                            pickupUser.FullName AS PickedUpByName,
+                           promo.PromoCode,
                            i.EmailSentAt,
                            i.EmailSendError,
                            i.CreatedAt,
                            i.UpdatedAt
                     FROM dbo.OrderInvoices i
                     LEFT JOIN dbo.Users u ON u.UserID = i.CustomerID
+                    LEFT JOIN dbo.Orders o ON o.OrderID = i.OrderID
+                    LEFT JOIN dbo.UserPromotionClaims claim ON claim.ClaimID = o.ClaimID
+                    LEFT JOIN dbo.Promotions promo ON promo.PromotionID = claim.PromotionID
                     LEFT JOIN dbo.Users pickupUser ON pickupUser.UserID = i.PickedUpByUserID
                     WHERE i.InvoiceID = ?
                     """;
@@ -564,12 +568,16 @@ public class OrderInvoiceService {
                        CAST(NULL AS DATETIME) AS PickedUpAt,
                        CAST(NULL AS INT) AS PickedUpByUserID,
                        CAST(NULL AS NVARCHAR(255)) AS PickedUpByName,
+                       promo.PromoCode,
                        i.EmailSentAt,
                        i.EmailSendError,
                        i.CreatedAt,
                        i.UpdatedAt
                 FROM dbo.OrderInvoices i
                 LEFT JOIN dbo.Users u ON u.UserID = i.CustomerID
+                LEFT JOIN dbo.Orders o ON o.OrderID = i.OrderID
+                LEFT JOIN dbo.UserPromotionClaims claim ON claim.ClaimID = o.ClaimID
+                LEFT JOIN dbo.Promotions promo ON promo.PromotionID = claim.PromotionID
                 WHERE i.InvoiceID = ?
                 """;
     }
@@ -622,6 +630,7 @@ public class OrderInvoiceService {
         invoice.put("pickedUpAt", rs.getTimestamp("PickedUpAt"));
         invoice.put("pickedUpByUserId", rs.getObject("PickedUpByUserID"));
         invoice.put("pickedUpByName", rs.getString("PickedUpByName"));
+        invoice.put("promoCode", rs.getString("PromoCode"));
         invoice.put("emailSentAt", rs.getTimestamp("EmailSentAt"));
         invoice.put("emailSendError", rs.getString("EmailSendError"));
         invoice.put("createdAt", rs.getTimestamp("CreatedAt"));

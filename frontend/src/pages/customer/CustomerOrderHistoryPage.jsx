@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Mail, Receipt, Search, ShoppingBag, Ticket } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { useSession } from '../../features/auth/useSession'
 import { orderApi } from '../../features/product/api/orderApi'
 import { productApi } from '../../features/product/api/productApi'
 import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
+import { usePagination } from '../../hooks/usePagination'
 
 const PICKUP_FILTERS = [
   { value: 'all', label: 'All pickup states' },
@@ -77,6 +79,12 @@ function CustomerOrderHistoryPage() {
       return haystack.includes(normalizedSearch)
     })
   }, [paidOrders, pickupFilter, search])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems: paginatedOrders,
+  } = usePagination(filteredOrders, 10)
 
   const awaitingPickupCount = paidOrders.filter((order) => !order.pickedUpAt).length
   const pickedUpCount = paidOrders.filter((order) => Boolean(order.pickedUpAt)).length
@@ -210,7 +218,7 @@ function CustomerOrderHistoryPage() {
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          {filteredOrders.map((order) => (
+          {paginatedOrders.map((order) => (
             <article key={order.orderId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -358,6 +366,12 @@ function CustomerOrderHistoryPage() {
             </article>
           ))}
         </div>
+
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </section>
     </WorkspaceScaffold>
   )

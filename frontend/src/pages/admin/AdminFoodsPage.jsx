@@ -3,10 +3,12 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Apple, Edit3, PlusCircle, Search, ShieldCheck, Trash2, Undo2, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import { adminNav } from '../../config/navigation'
 import { adminFoodApi } from '../../features/content/api/adminFoodApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All statuses' },
@@ -139,6 +141,12 @@ function AdminFoodsPage() {
       return haystack.includes(normalizedSearch)
     })
   }, [categoryFilter, foods, normalizedSearch, statusFilter])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredFoods, 10)
 
   const formCategories = useMemo(() => categories.filter((c) => c.active !== false), [categories])
   const [formState, setFormState] = useState(() => buildInitialFoodForm([]))
@@ -264,7 +272,7 @@ function AdminFoodsPage() {
         {foodsQuery.isError ? <p className="text-sm text-rose-600">Could not load foods.</p> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredFoods.map((food) => {
+          {paginatedItems.map((food) => {
             const isActive = Boolean(food.active)
             return (
               <article key={food.foodId} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -352,6 +360,11 @@ function AdminFoodsPage() {
             )
           })}
         </div>
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
 
         {editingFood ? (
           typeof document !== 'undefined'

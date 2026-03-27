@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit3, PlusCircle, Search } from 'lucide-react'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { adminMembershipApi } from '../../features/membership/api/adminMembershipApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const PLAN_TYPE_FILTERS = [
   { value: 'ALL', label: 'All plan types' },
@@ -105,6 +107,12 @@ function AdminMembershipsPage() {
       }),
     [coachFilter, planTypeFilter, plans, search, statusFilter],
   )
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredPlans, 10)
 
   const handleCreate = () => {
     setErrorMessage('')
@@ -243,7 +251,7 @@ function AdminMembershipsPage() {
                     </td>
                   </tr>
                 )}
-                {filteredPlans.map((plan) => (
+                {paginatedItems.map((plan) => (
                   <tr key={plan.planId}>
                     <td className="px-3 py-2 text-slate-900">{plan.name}</td>
                     <td className="px-3 py-2 text-slate-700">{plan.planType}</td>
@@ -276,6 +284,12 @@ function AdminMembershipsPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="pt-2"
+          />
         </section>
 
         {editingPlan && (

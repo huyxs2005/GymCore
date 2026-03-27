@@ -134,7 +134,7 @@ function AppRouter() {
         <Route path="/reception/checkin" element={withRole(['RECEPTIONIST'], <ReceptionCheckinPage />)} />
         <Route path="/reception/customers" element={withRole(['RECEPTIONIST'], <ReceptionCustomersPage />)} />
         <Route path="/reception/pickup" element={withRole(['RECEPTIONIST'], <ReceptionPickupPage />)} />
-        <Route path="/reception/invoices" element={withRole(['RECEPTIONIST'], <AdminInvoicesPage />)} />
+        <Route path="/reception/invoices" element={withRole(['RECEPTIONIST'], <Navigate to="/reception/pickup" replace />)} />
 
         <Route path="/admin/dashboard" element={withRole(['ADMIN'], <AdminDashboardPage />)} />
         <Route path="/admin/support" element={withRole(['ADMIN'], <AdminSupportConsolePage />)} />

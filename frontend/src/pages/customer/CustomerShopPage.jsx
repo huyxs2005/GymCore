@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShoppingCart, Star, StarHalf, StarOff } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { useSession } from '../../features/auth/useSession'
@@ -11,6 +12,7 @@ import { orderApi } from '../../features/product/api/orderApi'
 import { productApi } from '../../features/product/api/productApi'
 import { triggerAddToCartAnimation } from '../../features/product/utils/cartAnimation'
 import { getDynamicProductImage } from '../../features/product/utils/productImageUtils'
+import { usePagination } from '../../hooks/usePagination'
 
 function CustomerShopPage() {
   const queryClient = useQueryClient()
@@ -18,6 +20,8 @@ function CustomerShopPage() {
   const { user } = useSession()
   const userId = user?.userId ?? null
   const cartQueryKey = useMemo(() => ['cart', userId], [userId])
+  const productListTopRef = useRef(null)
+  const previousProductsPageRef = useRef(1)
 
   const [selectedCategoryId, setSelectedCategoryId] = useState('ALL')
   const [productSearch, setProductSearch] = useState('')
@@ -124,11 +128,29 @@ function CustomerShopPage() {
     return haystack.includes(normalizedSearch)
   })
 
+  const {
+    currentPage: productsPage,
+    setCurrentPage: setProductsPage,
+    totalPages: productTotalPages,
+    paginatedItems: paginatedProducts,
+  } = usePagination(filteredProducts, 20)
+
+  useEffect(() => {
+    if (previousProductsPageRef.current === productsPage) return
+    previousProductsPageRef.current = productsPage
+    if (!productListTopRef.current || typeof window === 'undefined') return
+
+    const top = productListTopRef.current.getBoundingClientRect().top + window.scrollY - 96
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: 'smooth',
+    })
+  }, [productsPage])
+
   return (
     <WorkspaceScaffold
-      title="GymCore Product Shop"
-      subtitle="Browse supplements here, open a dedicated product page for full details, and manage checkout from the separate cart page."
       links={customerNav}
+      showHeader={false}
     >
       {showSuccessMessage ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -142,12 +164,12 @@ function CustomerShopPage() {
         </div>
       ) : null}
 
+      <div className="mb-6 px-4">
+        <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">Browse our catalog here</h1>
+      </div>
+
       <section className="gc-card-compact space-y-5">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="gc-section-kicker">Catalog</h2>
-            <p className="mt-1 text-sm text-slate-500">Search products here. Open a product page for the full gallery, usage instructions, and reviews.</p>
-          </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link to="/customer/orders" className="inline-flex items-center rounded-full border border-gym-200 bg-gym-50 px-4 py-2 text-sm font-semibold text-gym-700 transition hover:bg-gym-100">
               View buying history
@@ -175,7 +197,7 @@ function CustomerShopPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div ref={productListTopRef} className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setSelectedCategoryId('ALL')}
@@ -198,13 +220,13 @@ function CustomerShopPage() {
         {productsQuery.isLoading ? <p className="text-sm text-slate-500">Loading products...</p> : null}
         {productsQuery.isError ? <p className="text-sm text-rose-600">Could not load products.</p> : null}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredProducts.map((product) => {
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {paginatedProducts.map((product) => {
             const desiredQuantity = getDesiredQuantity(product.productId)
             return (
-              <article key={product.productId} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <article key={product.productId} className="flex h-full flex-col overflow-hidden rounded-[1.6rem] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                 <Link to={`/customer/shop/${product.productId}`} className="block">
-                  <div className="aspect-[4/3] overflow-hidden bg-slate-100">
+                  <div className="aspect-square overflow-hidden bg-slate-100">
                     <img
                       src={getDynamicProductImage(product.name)}
                       alt={product.name}
@@ -212,35 +234,37 @@ function CustomerShopPage() {
                     />
                   </div>
                 </Link>
-                <div className="space-y-4 p-4">
-                  <div className="space-y-2">
+                <div className="flex flex-1 flex-col gap-3 p-3">
+                  <div className="flex min-h-[168px] flex-col gap-2">
                     <div className="flex flex-wrap gap-2">
                       {(product.categories || []).map((category) => (
-                        <span key={`${product.productId}-${category.productCategoryId}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+                        <span key={`${product.productId}-${category.productCategoryId}`} className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-600">
                           {category.name}
                         </span>
                       ))}
                     </div>
-                    <Link to={`/customer/shop/${product.productId}`} className="block text-lg font-bold text-slate-900 hover:text-gym-700">
+                    <Link to={`/customer/shop/${product.productId}`} className="block text-base font-bold text-slate-900 hover:text-gym-700">
                       {product.name}
                     </Link>
-                    <p className="text-sm text-slate-600">
+                    <p className="line-clamp-2 min-h-[2.5rem] text-xs text-slate-600">
                       {product.shortDescription || product.description || 'Product details available on the product page.'}
                     </p>
-                    <ProductRating rating={Number(product.averageRating || 0)} count={Number(product.reviewCount || 0)} />
+                    <div className="mt-auto min-h-[20px]">
+                      <ProductRating rating={Number(product.averageRating || 0)} count={Number(product.reviewCount || 0)} size="sm" />
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-2">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Price</p>
-                      <p className="mt-1 text-xl font-bold text-slate-900">{Number(product.price || 0).toLocaleString('en-US')} VND</p>
+                      <p className="mt-1 text-base font-bold text-slate-900">{Number(product.price || 0).toLocaleString('en-US')} VND</p>
                     </div>
-                    <Link to={`/customer/shop/${product.productId}`} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                    <Link to={`/customer/shop/${product.productId}`} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
                       View details
                     </Link>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                  <div className="mt-auto space-y-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
                     <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">
                       <button type="button" onClick={() => changeDesiredQuantity(product.productId, -1)} className="rounded-full px-1 text-slate-500 hover:text-slate-900">
                         -
@@ -254,14 +278,14 @@ function CustomerShopPage() {
                       <button
                         type="button"
                         onClick={(event) => handleAddToCart(product, { quantity: desiredQuantity, sourceElement: event.currentTarget })}
-                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-gym-700 bg-gym-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
+                        className="inline-flex min-h-9 items-center justify-center rounded-full border border-gym-700 bg-gym-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-gym-700"
                       >
                         Add to cart
                       </button>
                       <button
                         type="button"
                         onClick={(event) => handleBuyNow(product, { quantity: desiredQuantity, sourceElement: event.currentTarget })}
-                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                        className="inline-flex min-h-9 items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-100"
                       >
                         Buy now
                       </button>
@@ -278,6 +302,12 @@ function CustomerShopPage() {
             No products match the current filters.
           </div>
         ) : null}
+
+        <PaginationControls
+          currentPage={productsPage}
+          totalPages={productTotalPages}
+          onPageChange={setProductsPage}
+        />
       </section>
     </WorkspaceScaffold>
   )
@@ -289,14 +319,16 @@ function ProductRating({ rating, count, size = 'md' }) {
   const hasHalf = value - fullStars >= 0.5
   const totalStars = 5
   const iconSize = size === 'sm' ? 12 : 14
+  const filledStarClassName = 'fill-amber-400 text-amber-400 stroke-0'
+  const emptyStarClassName = 'text-slate-500 stroke-[1.5]'
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex h-5 items-center gap-1">
       <div className="flex items-center gap-[1px]">
         {Array.from({ length: totalStars }).map((_, index) => {
-          if (index < fullStars) return <Star key={index} size={iconSize} className="fill-gym-500 text-gym-500" />
-          if (index === fullStars && hasHalf) return <StarHalf key={index} size={iconSize} className="fill-gym-500 text-gym-500" />
-          return <StarOff key={index} size={iconSize} className="text-slate-300" />
+          if (index < fullStars) return <Star key={index} size={iconSize} className={filledStarClassName} />
+          if (index === fullStars && hasHalf) return <StarHalf key={index} size={iconSize} className={filledStarClassName} />
+          return <StarOff key={index} size={iconSize} className={emptyStarClassName} />
         })}
       </div>
       <span className="text-[11px] font-medium text-slate-600">{value.toFixed(1)} {typeof count === 'number' ? `(${count})` : ''}</span>

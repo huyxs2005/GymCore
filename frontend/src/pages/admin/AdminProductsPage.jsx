@@ -5,6 +5,8 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
 import { adminProductApi } from '../../features/product/api/adminProductApi'
 import { toast } from 'react-hot-toast'
+import PaginationControls from '../../components/common/PaginationControls'
+import { usePagination } from '../../hooks/usePagination'
 
 const PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 
@@ -184,6 +186,12 @@ function AdminProductsPage() {
       )
     })
   }, [categoryFilter, products, reviewFilter, search, statusFilter])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredProducts, 10)
 
   const handleCreate = () => {
     setFormError('')
@@ -355,7 +363,7 @@ function AdminProductsPage() {
             {!productsQuery.isLoading && filteredProducts.length === 0 ? (
               <p className="text-sm text-slate-500">No products match the current filters.</p>
             ) : null}
-            {filteredProducts.map((product) => (
+            {paginatedItems.map((product) => (
               <article key={product.productId} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex gap-4">
                   <div className="h-24 w-24 overflow-hidden rounded-3xl bg-slate-200">
@@ -425,6 +433,11 @@ function AdminProductsPage() {
               </article>
             ))}
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </section>
 
         <div className="space-y-6">

@@ -18,7 +18,6 @@ export const receptionNav = [
   { to: '/reception/checkin', label: 'Check-in Scanner' },
   { to: '/reception/customers', label: 'Customer Lookup' },
   { to: '/reception/pickup', label: 'Pickup Desk' },
-  { to: '/reception/invoices', label: 'Invoices' },
 ]
 
 export const adminNav = [

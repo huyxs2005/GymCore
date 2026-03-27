@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit3, Flag, PlusCircle, Search, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import { adminNav } from '../../config/navigation'
 import { adminGoalApi } from '../../features/content/api/adminGoalApi'
+import { usePagination } from '../../hooks/usePagination'
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All statuses' },
@@ -141,6 +143,12 @@ function AdminGoalsPage() {
       return haystack.includes(normalizedSearch)
     })
   }, [goals, normalizedSearch, statusFilter])
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+  } = usePagination(filteredGoals, 10)
 
   const closeEditor = () => {
     setEditingGoal(null)
@@ -244,7 +252,7 @@ function AdminGoalsPage() {
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
           <div className="grid gap-4 md:grid-cols-2">
-            {filteredGoals.map((goal) => {
+            {paginatedItems.map((goal) => {
               const isActive = Boolean(goal.active)
               return (
                 <article key={goal.goalId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -327,6 +335,11 @@ function AdminGoalsPage() {
               )
             })}
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
 
           <aside className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
             <div className="flex items-center gap-2">

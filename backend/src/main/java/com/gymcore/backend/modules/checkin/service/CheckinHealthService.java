@@ -63,6 +63,15 @@ public class CheckinHealthService {
             m.put("qrIssuedAt", timestampToIso(rs.getTimestamp("QrIssuedAt")));
             return m;
         }, customer.userId());
+        MembershipValidity validity = buildMembershipValidity(customer.userId());
+        Map<String, Object> membershipStatus = new LinkedHashMap<>();
+        membershipStatus.put("valid", validity.valid());
+        membershipStatus.put("status", validity.status());
+        membershipStatus.put("reason", validity.reason());
+        membershipStatus.put("planName", validity.planName());
+        membershipStatus.put("startDate", validity.startDate());
+        membershipStatus.put("endDate", validity.endDate());
+        data.put("membershipStatus", membershipStatus);
         return data;
     }
 
@@ -310,11 +319,17 @@ public class CheckinHealthService {
     private Map<String, Object> receptionValidateMembership(Map<String, Object> payload) {
         requireReceptionist(payload);
         Integer customerId = parseInteger(payload.get("customerId"));
-        if (customerId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "customerId is required.");
+        String qrCodeToken = asText(payload.get("qrCodeToken"));
+
+        CustomerLookup customer;
+        if (customerId != null) {
+            customer = requireCustomerById(customerId);
+        } else if (qrCodeToken != null) {
+            customer = requireCustomerByQrToken(qrCodeToken);
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide customerId or qrCodeToken.");
         }
 
-        CustomerLookup customer = requireCustomerById(customerId);
         MembershipValidity validity = buildMembershipValidity(customer.customerId());
 
         Map<String, Object> customerMap = new LinkedHashMap<>();
@@ -418,7 +433,7 @@ public class CheckinHealthService {
                 """, membershipSnapshotRowMapper(), customerId);
         if (!scheduledRows.isEmpty()) {
             MembershipSnapshot scheduled = scheduledRows.get(0);
-            String reason = "Membership not active yet. It is scheduled to start on "
+            String reason = scheduled.planName() + " is scheduled to start on "
                     + dateToString(scheduled.startDate()) + ".";
             return new MembershipValidity(
                     false,
@@ -446,7 +461,7 @@ public class CheckinHealthService {
                 """, membershipSnapshotRowMapper(), customerId);
         if (!expiredRows.isEmpty()) {
             MembershipSnapshot expired = expiredRows.get(0);
-            String reason = "Membership expired on " + dateToString(expired.endDate()) + ".";
+            String reason = expired.planName() + " expired on " + dateToString(expired.endDate()) + ".";
             return new MembershipValidity(
                     false,
                     reason,
@@ -456,6 +471,33 @@ public class CheckinHealthService {
                     expired.planType(),
                     dateToString(expired.startDate()),
                     dateToString(expired.endDate()));
+        }
+
+        List<MembershipSnapshot> cancelledRows = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    cm.CustomerMembershipID,
+                    cm.Status,
+                    cm.StartDate,
+                    cm.EndDate,
+                    mp.PlanName,
+                    mp.PlanType
+                FROM dbo.CustomerMemberships cm
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                WHERE cm.CustomerID = ? AND cm.Status = 'CANCELLED'
+                ORDER BY cm.EndDate DESC, cm.CustomerMembershipID DESC
+                """, membershipSnapshotRowMapper(), customerId);
+        if (!cancelledRows.isEmpty()) {
+            MembershipSnapshot cancelled = cancelledRows.get(0);
+            String reason = cancelled.planName() + " was cancelled and is not valid for check-in.";
+            return new MembershipValidity(
+                    false,
+                    reason,
+                    cancelled.customerMembershipId(),
+                    cancelled.status(),
+                    cancelled.planName(),
+                    cancelled.planType(),
+                    dateToString(cancelled.startDate()),
+                    dateToString(cancelled.endDate()));
         }
 
         List<MembershipSnapshot> pendingRows = jdbcTemplate.query("""
@@ -475,7 +517,7 @@ public class CheckinHealthService {
             MembershipSnapshot pending = pendingRows.get(0);
             return new MembershipValidity(
                     false,
-                    "Membership payment is pending and not active yet.",
+                    pending.planName() + " payment is pending and not active yet.",
                     pending.customerMembershipId(),
                     pending.status(),
                     pending.planName(),
@@ -484,7 +526,7 @@ public class CheckinHealthService {
                     dateToString(pending.endDate()));
         }
 
-        return new MembershipValidity(false, "Customer does not have a valid membership.", null, null, null, null, null,
+        return new MembershipValidity(false, "No active membership found for this customer.", null, null, null, null, null,
                 null);
     }
 
