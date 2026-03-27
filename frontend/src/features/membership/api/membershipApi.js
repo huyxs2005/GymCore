@@ -20,6 +20,8 @@ export const membershipApi = {
     return apiClient.post('/v1/memberships/upgrade', payload).then((response) => response.data)
   },
   confirmPaymentReturn(payload) {
-    return apiClient.post('/v1/memberships/payment-return', payload).then((response) => response.data)
+    return apiClient
+      .post('/v1/memberships/payment-return', payload, { skipMutationSync: true })
+      .then((response) => response.data)
   },
 }

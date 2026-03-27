@@ -4,6 +4,8 @@ import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
 import { Calendar, Clock, User, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react'
 
+const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 function CoachBookingManagementPage() {
   const [requests, setRequests] = useState([])
   const [rescheduleRequests, setRescheduleRequests] = useState([])
@@ -15,6 +17,7 @@ function CoachBookingManagementPage() {
     request: null,
     action: '',
     reason: '',
+    confirmSlots: false,
   })
   const [rescheduleActionModal, setRescheduleActionModal] = useState({
     open: false,
@@ -49,6 +52,7 @@ function CoachBookingManagementPage() {
       request,
       action,
       reason: '',
+      confirmSlots: false,
     })
   }
 
@@ -58,7 +62,18 @@ function CoachBookingManagementPage() {
       request: null,
       action: '',
       reason: '',
+      confirmSlots: false,
     })
+  }
+
+  function formatRequestedSlot(slot) {
+    const dayLabel = DAY_LABELS[Math.max(0, Number(slot?.dayOfWeek || 1) - 1)] || `Day ${slot?.dayOfWeek || ''}`
+    const slotIndex = Number(slot?.slotIndex || slot?.timeSlotId || 0)
+    const start = String(slot?.startTime || '').slice(0, 5)
+    const end = String(slot?.endTime || '').slice(0, 5)
+    return start && end
+      ? `${dayLabel} • Slot ${slotIndex} (${start}-${end})`
+      : `${dayLabel} • Slot ${slotIndex}`
   }
 
   function openRescheduleActionModal(request, action) {
@@ -87,6 +102,10 @@ function CoachBookingManagementPage() {
     const reason = bookingActionModal.reason.trim()
     if (isDeny && !reason) {
       setError('Deny reason is required.')
+      return
+    }
+    if (!isDeny && !bookingActionModal.confirmSlots) {
+      setError('Please confirm the customer requested slots before approving.')
       return
     }
 
@@ -162,8 +181,7 @@ function CoachBookingManagementPage() {
 
   return (
     <WorkspaceScaffold 
-      title="Coach Booking Workspace" 
-      subtitle="Manage incoming booking requests and session reschedule applications from your customers." 
+      showHeader={false}
     >
       <div className="max-w-6xl space-y-8 pb-12">
         {/* Messages */}
@@ -368,8 +386,37 @@ function CoachBookingManagementPage() {
             
             <p className="text-sm leading-relaxed text-slate-400">
               You are about to <span className="font-bold text-white">{bookingActionModal.action === 'ACCEPT' ? 'accept' : 'decline'}</span> the training partnership with <span className="font-bold text-white">{bookingActionModal.request.customerName}</span>.
-              {bookingActionModal.action === 'ACCEPT' && " Recurring sessions will be established based on your weekly availability."}
+              {bookingActionModal.action === 'ACCEPT' && " Review the customer's requested recurring slots below and confirm them before approval."}
             </p>
+
+            {bookingActionModal.action === 'ACCEPT' && (
+              <div className="mt-6 space-y-4">
+                <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Customer requested slots</p>
+                  <div className="mt-3 space-y-2">
+                    {(bookingActionModal.request?.slots || []).length === 0 ? (
+                      <p className="text-sm text-slate-400">No requested slots found on this request.</p>
+                    ) : (
+                      bookingActionModal.request.slots.map((slot) => (
+                        <div key={`approve-slot-${bookingActionModal.request.ptRequestId}-${slot.dayOfWeek}-${slot.timeSlotId}`} className="rounded-xl border border-white/5 bg-white/5 px-3 py-2 text-sm text-slate-200">
+                          {formatRequestedSlot(slot)}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bookingActionModal.confirmSlots}
+                    onChange={(e) => setBookingActionModal((prev) => ({ ...prev, confirmSlots: e.target.checked }))}
+                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span>I confirm these are the customer&apos;s requested recurring slots for approval.</span>
+                </label>
+              </div>
+            )}
 
             {bookingActionModal.action === 'DENY' && (
               <div className="mt-6">
@@ -396,10 +443,10 @@ function CoachBookingManagementPage() {
               <button
                 type="button"
                 onClick={submitBookingAction}
-                disabled={loading}
+                disabled={loading || (bookingActionModal.action === 'ACCEPT' && !bookingActionModal.confirmSlots)}
                 className={`${bookingActionModal.action === 'ACCEPT' ? 'gc-button-primary' : 'bg-rose-600 font-semibold text-white hover:bg-rose-700 shadow-lg ring-1 ring-rose-500/50'} rounded-xl px-6 py-2.5 text-sm disabled:opacity-50 transition`}
               >
-                {loading ? 'Processing...' : bookingActionModal.action === 'ACCEPT' ? 'Confirm Partnership' : 'Confirm Denial'}
+                {loading ? 'Processing...' : bookingActionModal.action === 'ACCEPT' ? 'Approve Request' : 'Confirm Denial'}
               </button>
             </div>
           </div>

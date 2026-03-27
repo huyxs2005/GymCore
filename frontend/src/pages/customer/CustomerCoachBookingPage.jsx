@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, BadgeCheck, ChevronDown, Search, UserCircle2, X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
+import { GLOBAL_MUTATION_SYNC_EVENT } from '../../features/dataSync/mutationSync'
 import { membershipApi } from '../../features/membership/api/membershipApi'
 
 const DAYS = [
@@ -16,6 +17,43 @@ const DAYS = [
   { id: 6, label: 'Saturday', shortLabel: 'Sat' },
   { id: 7, label: 'Sunday', shortLabel: 'Sun' },
 ]
+
+class CoachBookingPageErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error) {
+    console.error('Coach booking page crashed:', error)
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false })
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="mx-auto max-w-3xl rounded-3xl border border-amber-300 bg-amber-50 px-6 py-8 text-slate-900 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700">Coach Booking</p>
+          <h3 className="mt-2 text-2xl font-bold">This screen hit a temporary rendering problem.</h3>
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            The page stayed alive so you can keep working. Change the selected schedule or search again to reload the match view.
+          </p>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 function formatDateValue(date) {
   const year = date.getFullYear()
@@ -49,6 +87,18 @@ function getMinimumBookingStartDate(baseDate = new Date()) {
 
 function getDayMeta(dayOfWeek) {
   return DAYS.find((day) => day.id === dayOfWeek) || null
+}
+
+function getUnavailableReason(reason) {
+  if (reason === 'BOOKED_IN_RANGE') return 'Already booked in selected date range'
+  if (reason === 'NO_WEEKLY_AVAILABILITY') return 'Not in coach weekly availability'
+  return 'Unavailable'
+}
+
+function getAdjustedReason(reason) {
+  if (reason === 'BOOKED_IN_RANGE') return 'Chosen time is occupied, but this weekday still has another free slot'
+  if (reason === 'DIFFERENT_SLOT_AVAILABLE') return 'This weekday is still compatible with another free slot'
+  return 'Alternative slot available on this weekday'
 }
 
 function buildMonthGrid(monthCursor) {
@@ -229,6 +279,99 @@ function countCoachConflicts(coach) {
   return Array.isArray(coach?.unavailableSlots) ? coach.unavailableSlots.length : 0
 }
 
+function normalizeUnavailableSlot(slot) {
+  return {
+    dayOfWeek: Number(slot?.dayOfWeek || 0),
+    timeSlotId: Number(slot?.timeSlotId || 0),
+    reason: typeof slot?.reason === 'string' ? slot.reason : 'NO_WEEKLY_AVAILABILITY',
+  }
+}
+
+function normalizeAlternativeSlot(slot) {
+  return {
+    dayOfWeek: Number(slot?.dayOfWeek || 0),
+    requestedTimeSlotId: Number(slot?.requestedTimeSlotId || 0),
+    timeSlotId: Number(slot?.timeSlotId || 0),
+    freeTimeSlotIds: Array.isArray(slot?.freeTimeSlotIds)
+      ? slot.freeTimeSlotIds.map((value) => Number(value || 0)).filter((value) => value > 0)
+      : [],
+    reason: typeof slot?.reason === 'string' ? slot.reason : 'DIFFERENT_SLOT_AVAILABLE',
+  }
+}
+
+function normalizeResolvedSlot(slot) {
+  return {
+    dayOfWeek: Number(slot?.dayOfWeek || 0),
+    timeSlotId: Number(slot?.timeSlotId || 0),
+    requestedTimeSlotId: Number(slot?.requestedTimeSlotId || 0),
+    exactMatch: slot?.exactMatch === true,
+  }
+}
+
+function normalizeCoachMatch(coach, fallbackType) {
+  const unavailableSlots = Array.isArray(coach?.unavailableSlots)
+    ? coach.unavailableSlots.map(normalizeUnavailableSlot).filter((slot) => slot.dayOfWeek > 0 && slot.timeSlotId > 0)
+    : []
+  const alternativeSlots = Array.isArray(coach?.alternativeSlots)
+    ? coach.alternativeSlots.map(normalizeAlternativeSlot).filter((slot) => slot.dayOfWeek > 0 && slot.timeSlotId > 0)
+    : []
+  const resolvedSlots = Array.isArray(coach?.resolvedSlots)
+    ? coach.resolvedSlots.map(normalizeResolvedSlot).filter((slot) => slot.dayOfWeek > 0 && slot.timeSlotId > 0)
+    : []
+
+  return {
+    ...coach,
+    coachId: Number(coach?.coachId || 0),
+    fullName: typeof coach?.fullName === 'string' ? coach.fullName : 'Coach',
+    email: typeof coach?.email === 'string' ? coach.email : '',
+    bio: typeof coach?.bio === 'string' ? coach.bio : '',
+    avatarUrl: coach?.avatarUrl || '',
+    matchType: String(coach?.matchType || fallbackType || '').toUpperCase(),
+    matchedSlots: Number(coach?.matchedSlots || 0),
+    exactMatchedSlots: Number(coach?.exactMatchedSlots || 0),
+    requestedSlots: Number(coach?.requestedSlots || 0),
+    unavailableSlots,
+    alternativeSlots,
+    resolvedSlots,
+  }
+}
+
+function normalizeMatchResults(payload) {
+  const fullMatches = Array.isArray(payload?.fullMatches)
+    ? payload.fullMatches.map((coach) => normalizeCoachMatch(coach, 'FULL')).filter((coach) => coach.coachId > 0)
+    : []
+  const partialMatches = Array.isArray(payload?.partialMatches)
+    ? payload.partialMatches.map((coach) => normalizeCoachMatch(coach, 'PARTIAL')).filter((coach) => coach.coachId > 0)
+    : []
+
+  return {
+    fullMatches,
+    partialMatches: sortPartialMatchesByLeastConflict(partialMatches),
+  }
+}
+
+function buildSlotsSignature(slots) {
+  return slots
+    .map((slot) => `${slot.dayOfWeek}:${slot.timeSlotId}`)
+    .sort()
+    .join('|')
+}
+
+function buildPairKey(dayOfWeek, timeSlotId) {
+  return `${Number(dayOfWeek)}-${Number(timeSlotId)}`
+}
+
+function groupAvailabilityByDay(availability) {
+  return DAYS.map((day) => ({
+    ...day,
+    slots: Array.isArray(availability)
+      ? availability
+          .filter((slot) => Number(slot?.dayOfWeek) === day.id)
+          .sort((left, right) => Number(left?.timeSlotId || 0) - Number(right?.timeSlotId || 0))
+      : [],
+  })).filter((day) => day.slots.length > 0)
+}
+
 function sortPartialMatchesByLeastConflict(items) {
   return [...items].sort((left, right) => {
     const leftConflicts = countCoachConflicts(left)
@@ -263,17 +406,32 @@ function CustomerCoachBookingPage() {
   const [coachReviewModal, setCoachReviewModal] = useState({
     open: false,
     coach: null,
+    selectedAlternativeSlots: {},
   })
   const [coachProfileModal, setCoachProfileModal] = useState({
     open: false,
     loading: false,
     coach: null,
   })
+  const [coachBookingModal, setCoachBookingModal] = useState({
+    open: false,
+    loading: false,
+    coach: null,
+    focusDay: 1,
+    weeklyAvailability: [],
+    bookedSlots: [],
+    availableSlots: [],
+    selectedSlots: [],
+    fromDate: '',
+    toDate: '',
+  })
 
   const [matches, setMatches] = useState({
     fullMatches: [],
     partialMatches: [],
   })
+  const [coachDirectory, setCoachDirectory] = useState([])
+  const [coachDirectoryLoading, setCoachDirectoryLoading] = useState(false)
   const [hasPreviewedMatches, setHasPreviewedMatches] = useState(false)
   const [expandedSummaryDays, setExpandedSummaryDays] = useState({})
   const [expandedPlannerDays, setExpandedPlannerDays] = useState({})
@@ -318,6 +476,7 @@ function CustomerCoachBookingPage() {
     reason: '',
   })
   const [membershipBlockedModal, setMembershipBlockedModal] = useState(false)
+  const [noCoachMatchModal, setNoCoachMatchModal] = useState(false)
   const [ptBookingGate, setPtBookingGate] = useState({
     loaded: false,
     blocked: false,
@@ -335,6 +494,7 @@ function CustomerCoachBookingPage() {
     void loadTimeSlots()
     void loadMembershipGate()
     void loadMySchedule({ silent: true })
+    void loadCoachDirectory()
   }, [])
 
   useEffect(() => {
@@ -386,6 +546,20 @@ function CustomerCoachBookingPage() {
       if (!silent) {
         setLoading(false)
       }
+    }
+  }
+
+  async function loadCoachDirectory() {
+    try {
+      setCoachDirectoryLoading(true)
+      const response = await coachApi.getCoaches()
+      const payload = response?.data ?? response
+      setCoachDirectory(Array.isArray(payload?.items) ? payload.items : [])
+    } catch (err) {
+      setCoachDirectory([])
+      setError(err?.response?.data?.message || 'Cannot load coach directory')
+    } finally {
+      setCoachDirectoryLoading(false)
     }
   }
 
@@ -457,29 +631,69 @@ function CustomerCoachBookingPage() {
   const coachReviewRows = useMemo(() => {
     if (!coachReviewModal.coach) return []
     const unavailable = Array.isArray(coachReviewModal.coach.unavailableSlots) ? coachReviewModal.coach.unavailableSlots : []
+    const alternatives = Array.isArray(coachReviewModal.coach.alternativeSlots) ? coachReviewModal.coach.alternativeSlots : []
     return weeklySlots.map((item) => {
       const blocked = unavailable.find((slot) => slot.dayOfWeek === item.dayOfWeek && slot.timeSlotId === item.timeSlotId)
+      const alternative = alternatives.find((slot) => slot.dayOfWeek === item.dayOfWeek && slot.requestedTimeSlotId === item.timeSlotId)
+      const chosenAlternativeTimeSlotId = Number(coachReviewModal.selectedAlternativeSlots?.[item.dayOfWeek] || 0)
       return {
         ...item,
         dayLabel: getDayMeta(item.dayOfWeek)?.label || `Day ${item.dayOfWeek}`,
         unavailable: Boolean(blocked),
+        adjusted: Boolean(alternative),
+        suggestedTimeSlotIds: Array.isArray(alternative?.freeTimeSlotIds) && alternative.freeTimeSlotIds.length > 0
+          ? alternative.freeTimeSlotIds
+          : alternative?.timeSlotId
+            ? [alternative.timeSlotId]
+            : [],
+        chosenAlternativeTimeSlotId: chosenAlternativeTimeSlotId > 0 ? chosenAlternativeTimeSlotId : null,
         reason: blocked?.reason || null,
+        adjustedReason: alternative?.reason || null,
       }
     }).sort((a, b) => {
       if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek
       return a.timeSlotId - b.timeSlotId
     })
-  }, [coachReviewModal.coach, weeklySlots])
+  }, [coachReviewModal.coach, coachReviewModal.selectedAlternativeSlots, weeklySlots])
 
   const unresolvedReviewCount = useMemo(
-    () => coachReviewRows.filter((item) => item.unavailable).length,
+    () => coachReviewRows.filter((item) => item.unavailable || (item.adjusted && !item.chosenAlternativeTimeSlotId)).length,
     [coachReviewRows],
   )
+  const coachBookingAvailablePairs = useMemo(() => {
+    const pairs = new Set()
+    coachBookingModal.availableSlots.forEach((slot) => {
+      pairs.add(buildPairKey(slot.dayOfWeek, slot.timeSlotId))
+    })
+    return pairs
+  }, [coachBookingModal.availableSlots])
+  const coachBookingBookedPairs = useMemo(() => {
+    const pairs = new Set()
+    coachBookingModal.bookedSlots.forEach((slot) => {
+      pairs.add(buildPairKey(slot.dayOfWeek, slot.timeSlotId))
+    })
+    return pairs
+  }, [coachBookingModal.bookedSlots])
+  const coachBookingWeeklyPairs = useMemo(() => {
+    const pairs = new Set()
+    coachBookingModal.weeklyAvailability.forEach((slot) => {
+      pairs.add(buildPairKey(slot.dayOfWeek, slot.timeSlotId))
+    })
+    return pairs
+  }, [coachBookingModal.weeklyAvailability])
+  const coachBookingSelectedCountByDay = useMemo(() => {
+    const counts = new Map()
+    coachBookingModal.selectedSlots.forEach((slot) => {
+      counts.set(slot.dayOfWeek, (counts.get(slot.dayOfWeek) || 0) + 1)
+    })
+    return counts
+  }, [coachBookingModal.selectedSlots])
   const currentMembershipPlan = membershipGate.membership?.plan ?? {}
   const membershipStatusIndicator = useMemo(
     () => renderMembershipStatusIndicator(membershipGate),
     [membershipGate],
   )
+  const weeklySlotsSignature = useMemo(() => buildSlotsSignature(weeklySlots), [weeklySlots])
 
   function requireCoachBookingMembership() {
     if (membershipGate.loading) {
@@ -537,7 +751,14 @@ function CustomerCoachBookingPage() {
       setRequestedWeeklySlots((prev) => prev.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)))
       return
     }
-    setRequestedWeeklySlots((prev) => [...prev, { dayOfWeek, timeSlotId }])
+    setRequestedWeeklySlots((prev) => {
+      const sameDaySelection = prev.find((slot) => slot.dayOfWeek === dayOfWeek)
+      const next = prev.filter((slot) => slot.dayOfWeek !== dayOfWeek)
+      if (sameDaySelection && sameDaySelection.timeSlotId !== timeSlotId) {
+        setMessage(`Only one recurring slot is allowed on ${getDayMeta(dayOfWeek)?.label || 'that day'}. The previous slot was replaced.`)
+      }
+      return [...next, { dayOfWeek, timeSlotId }]
+    })
   }
 
   function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
@@ -572,12 +793,6 @@ function CustomerCoachBookingPage() {
       badge: 'Available',
     }
   }, [ptBookingGate, formatSlotLabel])
-
-  function getUnavailableReason(reason) {
-    if (reason === 'BOOKED_IN_RANGE') return 'Already booked in selected date range'
-    if (reason === 'NO_WEEKLY_AVAILABILITY') return 'Not in coach weekly availability'
-    return 'Unavailable'
-  }
 
   function getSessionStatusAppearance(status) {
     const normalized = String(status || '').toUpperCase()
@@ -635,7 +850,18 @@ function CustomerCoachBookingPage() {
     setCoachReviewModal({
       open: true,
       coach,
+      selectedAlternativeSlots: {},
     })
+  }
+
+  function chooseReviewAlternativeSlot(dayOfWeek, timeSlotId) {
+    setCoachReviewModal((prev) => ({
+      ...prev,
+      selectedAlternativeSlots: {
+        ...(prev.selectedAlternativeSlots || {}),
+        [dayOfWeek]: timeSlotId,
+      },
+    }))
   }
 
   async function openCoachProfile(coachId) {
@@ -689,13 +915,10 @@ function CustomerCoachBookingPage() {
         slots: weeklySlots,
       })
       const payload = response?.data ?? response
-      setMatches({
-        fullMatches: Array.isArray(payload?.fullMatches) ? payload.fullMatches : [],
-        partialMatches: sortPartialMatchesByLeastConflict(
-          Array.isArray(payload?.partialMatches) ? payload.partialMatches : [],
-        ),
-      })
+      const normalizedMatches = normalizeMatchResults(payload)
+      setMatches(normalizedMatches)
       setHasPreviewedMatches(true)
+      setNoCoachMatchModal(normalizedMatches.fullMatches.length === 0 && normalizedMatches.partialMatches.length === 0)
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot preview coach matches')
     } finally {
@@ -797,6 +1020,222 @@ function CustomerCoachBookingPage() {
     await previewMatches()
   }
 
+  async function openCoachBookingModal(coach) {
+    if (!requireCoachBookingMembership()) {
+      return
+    }
+    if (!requireNoExistingPtBooking()) {
+      return
+    }
+
+    setCoachBookingModal({
+      open: true,
+      loading: true,
+      coach,
+      focusDay: 1,
+      weeklyAvailability: [],
+      bookedSlots: [],
+      availableSlots: [],
+      selectedSlots: [],
+      fromDate: '',
+      toDate: '',
+    })
+
+    try {
+      const response = await coachApi.getCoachSchedule(coach.coachId)
+      const payload = response?.data ?? response ?? {}
+      const weeklyAvailability = Array.isArray(payload.weeklyAvailability) ? payload.weeklyAvailability : []
+      const bookedSlots = Array.isArray(payload.bookedSlots) ? payload.bookedSlots : []
+      const availableSlots = Array.isArray(payload.availableSlots) ? payload.availableSlots : []
+      const firstAvailableDay = availableSlots.length > 0
+        ? Number(availableSlots[0]?.dayOfWeek || 1)
+        : Number(weeklyAvailability[0]?.dayOfWeek || 1)
+      setCoachBookingModal((prev) => ({
+        ...prev,
+        loading: false,
+        focusDay: firstAvailableDay,
+        weeklyAvailability,
+        bookedSlots,
+        availableSlots,
+        selectedSlots: [],
+        fromDate: payload.fromDate || '',
+        toDate: payload.toDate || '',
+      }))
+    } catch (err) {
+      setCoachBookingModal({
+        open: false,
+        loading: false,
+        coach: null,
+        focusDay: 1,
+        weeklyAvailability: [],
+        bookedSlots: [],
+        availableSlots: [],
+        selectedSlots: [],
+        fromDate: '',
+        toDate: '',
+      })
+      setError(err?.response?.data?.message || 'Cannot load coach availability')
+    }
+  }
+
+  function closeCoachBookingModal() {
+    setCoachBookingModal({
+      open: false,
+      loading: false,
+      coach: null,
+      focusDay: 1,
+      weeklyAvailability: [],
+      bookedSlots: [],
+      availableSlots: [],
+      selectedSlots: [],
+      fromDate: '',
+      toDate: '',
+    })
+  }
+
+  function isCoachBookingSlotSelected(dayOfWeek, timeSlotId) {
+    return coachBookingModal.selectedSlots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
+  }
+
+  function getCoachBookingSlotStatus(dayOfWeek, timeSlotId) {
+    const key = buildPairKey(dayOfWeek, timeSlotId)
+    if (coachBookingAvailablePairs.has(key)) return 'AVAILABLE'
+    if (coachBookingBookedPairs.has(key)) return 'BOOKED'
+    if (coachBookingWeeklyPairs.has(key)) return 'UNAVAILABLE'
+    return 'UNAVAILABLE'
+  }
+
+  function toggleCoachBookingSlot(dayOfWeek, timeSlotId) {
+    const status = getCoachBookingSlotStatus(dayOfWeek, timeSlotId)
+    if (status !== 'AVAILABLE') {
+      return
+    }
+
+    setCoachBookingModal((prev) => {
+      const exists = prev.selectedSlots.some((slot) => slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)
+      if (exists) {
+        return {
+          ...prev,
+          selectedSlots: prev.selectedSlots.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)),
+        }
+      }
+
+      const next = prev.selectedSlots.filter((slot) => slot.dayOfWeek !== dayOfWeek)
+      return {
+        ...prev,
+        selectedSlots: [...next, { dayOfWeek, timeSlotId }],
+      }
+    })
+  }
+
+  async function submitCoachSpecificBooking() {
+    if (!requireCoachBookingMembership()) {
+      return
+    }
+    if (!requireNoExistingPtBooking()) {
+      return
+    }
+    if (!coachBookingModal.coach?.coachId) {
+      return
+    }
+    if (coachBookingModal.selectedSlots.length === 0) {
+      setError('Please choose at least one free recurring slot for this coach.')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError('')
+      await coachBookingApi.createRequest({
+        coachId: coachBookingModal.coach.coachId,
+        slots: coachBookingModal.selectedSlots
+          .slice()
+          .sort((left, right) => {
+            if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+            return left.timeSlotId - right.timeSlotId
+          }),
+      })
+      setRequestedWeeklySlots(coachBookingModal.selectedSlots)
+      closeCoachBookingModal()
+      setMessage('Booking request sent. Coach will approve or deny your request.')
+      setActiveTab('schedule')
+      await loadMySchedule()
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot create PT booking request for this coach')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'match' || !hasPreviewedMatches || weeklySlots.length === 0) {
+      return undefined
+    }
+
+    let cancelled = false
+
+    const refreshPreviewMatches = async () => {
+      if (cancelled || membershipGate.loading || !membershipGate.eligible || !ptBookingGate.loaded || ptBookingGate.blocked) {
+        return
+      }
+
+      try {
+        const response = await coachBookingApi.matchCoaches({ slots: weeklySlots })
+        if (cancelled) {
+          return
+        }
+        const payload = response?.data ?? response
+        setMatches(normalizeMatchResults(payload))
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message || 'Cannot refresh coach matches')
+        }
+      }
+    }
+
+    const handleVisibilityRefresh = () => {
+      if (!document.hidden) {
+        void refreshPreviewMatches()
+      }
+    }
+
+    const handleAvailabilityRefresh = () => {
+      void refreshPreviewMatches()
+    }
+
+    const handleStorage = (event) => {
+      if (event.key === 'gymcore:mutation-sync') {
+        void refreshPreviewMatches()
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshPreviewMatches()
+    }, 10000)
+
+    window.addEventListener('focus', handleAvailabilityRefresh)
+    window.addEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleAvailabilityRefresh)
+    window.addEventListener('storage', handleStorage)
+    document.addEventListener('visibilitychange', handleVisibilityRefresh)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleAvailabilityRefresh)
+      window.removeEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleAvailabilityRefresh)
+      window.removeEventListener('storage', handleStorage)
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh)
+    }
+  }, [
+    activeTab,
+    hasPreviewedMatches,
+    membershipGate.eligible,
+    membershipGate.loading,
+    ptBookingGate.blocked,
+    ptBookingGate.loaded,
+    weeklySlots,
+  ])
+
   async function requestCoach(coachId) {
     if (!requireNoExistingPtBooking()) {
       return
@@ -808,13 +1247,35 @@ function CustomerCoachBookingPage() {
     try {
       setLoading(true)
       setError('')
+      const adjustedRowsMissingChoice = coachReviewRows.filter((row) => row.adjusted && !row.chosenAlternativeTimeSlotId)
+      if (adjustedRowsMissingChoice.length > 0) {
+        setError('Please choose a specific coach slot for every weekday that needs adjusting.')
+        setLoading(false)
+        return
+      }
+      const resolvedByDay = new Map()
+      weeklySlots.forEach((slot) => {
+        const chosenAlternativeTimeSlotId = Number(coachReviewModal.selectedAlternativeSlots?.[slot.dayOfWeek] || 0)
+        if (chosenAlternativeTimeSlotId > 0) {
+          resolvedByDay.set(slot.dayOfWeek, { dayOfWeek: slot.dayOfWeek, timeSlotId: chosenAlternativeTimeSlotId })
+        } else {
+          resolvedByDay.set(slot.dayOfWeek, { dayOfWeek: slot.dayOfWeek, timeSlotId: slot.timeSlotId })
+        }
+      })
+      const requestSlots = weeklySlots
+        .map((slot) => resolvedByDay.get(slot.dayOfWeek) || slot)
+        .sort((left, right) => {
+          if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+          return left.timeSlotId - right.timeSlotId
+        })
       await coachBookingApi.createRequest({
         coachId,
-        slots: weeklySlots,
+        slots: requestSlots,
       })
+      setRequestedWeeklySlots(requestSlots)
       setMessage('Booking request sent. Coach will approve or deny your request.')
       setActiveTab('schedule')
-      setCoachReviewModal({ open: false, coach: null })
+      setCoachReviewModal({ open: false, coach: null, selectedAlternativeSlots: {} })
       await loadMySchedule()
     } catch (err) {
       setError(err?.response?.data?.message || 'Cannot create booking request')
@@ -986,6 +1447,7 @@ function CustomerCoachBookingPage() {
 
   return (
     <WorkspaceScaffold title="Coach Booking" subtitle="Pick recurring weekday slots first, then request matched coaches." links={customerNav} showHeader={false}>
+      <CoachBookingPageErrorBoundary resetKey={`${activeTab}|${hasPreviewedMatches ? 'previewed' : 'idle'}|${weeklySlotsSignature}`}>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
           <div className="flex justify-center">
             <div className="flex flex-wrap justify-center gap-2">
@@ -1025,12 +1487,22 @@ function CustomerCoachBookingPage() {
               </div>
 
               <div className="space-y-3 pt-1">
-                <div className="flex flex-wrap gap-5 text-xs text-slate-600">
-                  <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
-                  <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex flex-wrap gap-5 text-xs text-slate-600">
+                    <span>Selected recurring slots: <strong className="text-slate-800">{weeklySlots.length}</strong></span>
+                    <span>Selected weekdays: <strong className="text-slate-800">{selectedSlotsByDay.size}</strong></span>
+                  </div>
+                  <button
+                    onClick={previewMatches}
+                    disabled={loading}
+                    className="gc-button-primary-flat min-h-0 gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span>{loading ? 'Loading...' : 'Search Coaches'}</span>
+                    <Search size={16} className="shrink-0" />
+                  </button>
                 </div>
-                  {weeklySlots.length > 0 && (
-                    <div className="space-y-3">
+                {weeklySlots.length > 0 && (
+                  <div className="space-y-3">
                     {groupedWeeklySlots.map((group) => (
                       <div key={`summary-group-${group.id}`} className="border-b border-slate-200/80 pb-3 last:border-b-0 last:pb-0">
                         <button
@@ -1072,20 +1544,11 @@ function CustomerCoachBookingPage() {
                   </div>
                 )}
               </div>
-
-              <button
-                onClick={previewMatches}
-                disabled={loading}
-                className="gc-button-primary-flat min-h-0 gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span>{loading ? 'Loading...' : 'Search Coaches'}</span>
-                <Search size={16} className="shrink-0" />
-              </button>
             </div>
 
             {hasPreviewedMatches && (
               <div className="space-y-4">
-                {matches.fullMatches.length > 0 ? (
+                {matches.fullMatches.length > 0 && (
                   <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
                     <h4 className="text-lg font-bold text-emerald-800">Fully Match</h4>
                     <p className="text-sm text-emerald-700">These coaches can cover your recurring slot pattern through the membership-backed PT booking window.</p>
@@ -1102,27 +1565,62 @@ function CustomerCoachBookingPage() {
                       ))}
                     </div>
                   </div>
-                ) : (
-                  <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
-                    <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
-                    <p className="text-sm text-red-700">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
-                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
-                      {matches.partialMatches.map((coach) => (
-                        <CoachCard
-                          key={`partial-${coach.coachId}`}
-                          coach={coach}
-                          onReview={openCoachReview}
-                          onOpenProfile={openCoachProfile}
-                          onRemoveSlot={removeRequestedWeeklySlot}
-                          formatSlotLabel={formatSlotLabel}
-                        />
-                      ))}
-                    </div>
-                  </div>
                 )}
+
+                <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
+                  <h4 className="text-lg font-bold text-red-800">Partial Match</h4>
+                  <p className="text-sm text-red-700">These coaches fit part of the schedule, but some requested slots still conflict with weekly availability or existing bookings.</p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {matches.partialMatches.length === 0 && <p className="text-sm text-slate-600">No partial matched coach yet.</p>}
+                    {matches.partialMatches.map((coach) => (
+                      <CoachCard
+                        key={`partial-${coach.coachId}`}
+                        coach={coach}
+                        onReview={openCoachReview}
+                        onOpenProfile={openCoachProfile}
+                        onRemoveSlot={removeRequestedWeeklySlot}
+                        formatSlotLabel={formatSlotLabel}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
+
+            <section className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4 backdrop-blur-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">PT directory</p>
+                  <h4 className="mt-1 text-lg font-bold text-white">Browse coaches and check weekly availability</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadCoachDirectory}
+                  disabled={coachDirectoryLoading}
+                  className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
+                >
+                  {coachDirectoryLoading ? 'Refreshing...' : 'Refresh list'}
+                </button>
+              </div>
+
+              <div className="mt-4 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10">
+                {coachDirectoryLoading && coachDirectory.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-slate-300">Loading coach directory...</div>
+                ) : coachDirectory.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-slate-300">No PT is available right now.</div>
+                ) : (
+                  coachDirectory.map((coach) => (
+                    <CoachDirectoryRow
+                      key={`directory-${coach.coachId}`}
+                      coach={coach}
+                      formatSlotLabel={formatSlotLabel}
+                      onBook={openCoachBookingModal}
+                      onOpenProfile={openCoachProfile}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
           </div>
         )}
 
@@ -1423,7 +1921,7 @@ function CustomerCoachBookingPage() {
                 <p className="text-sm text-slate-600">{coachReviewModal.coach.fullName}  |  {coachReviewModal.coach.email}</p>
               </div>
               <button
-                onClick={() => setCoachReviewModal({ open: false, coach: null })}
+                onClick={() => setCoachReviewModal({ open: false, coach: null, selectedAlternativeSlots: {} })}
                 className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600"
               >
                 Close
@@ -1439,15 +1937,52 @@ function CustomerCoachBookingPage() {
               {coachReviewRows.map((row) => (
                 <div
                   key={`review-${row.dayOfWeek}-${row.timeSlotId}`}
-                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${row.unavailable ? 'border-red-500/30 bg-red-500/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
+                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${
+                    row.unavailable
+                      ? 'border-red-500/30 bg-red-500/10'
+                      : row.adjusted
+                        ? 'border-amber-500/30 bg-amber-500/10'
+                        : 'border-emerald-500/30 bg-emerald-500/10'
+                  }`}
                 >
                   <div>
-                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : 'text-emerald-800'}`}>
+                    <div className={`text-sm font-semibold ${row.unavailable ? 'text-red-800' : row.adjusted ? 'text-amber-800' : 'text-emerald-800'}`}>
                       {row.dayLabel} | {formatSlotLabel(row.timeSlotId)}
                     </div>
-                    <div className={`text-xs ${row.unavailable ? 'text-red-700' : 'text-emerald-700'}`}>
-                      {row.unavailable ? getUnavailableReason(row.reason) : 'Matched'}
+                    <div className={`text-xs ${row.unavailable ? 'text-red-700' : row.adjusted ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      {row.unavailable ? getUnavailableReason(row.reason) : row.adjusted ? getAdjustedReason(row.adjustedReason) : 'Matched'}
                     </div>
+                    {row.adjusted && row.suggestedTimeSlotIds?.length > 0 ? (
+                      <div className="mt-2 space-y-2">
+                        <div className="text-xs font-semibold text-amber-800">
+                          Coach free on this weekday at:
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {row.suggestedTimeSlotIds.map((timeSlotId) => {
+                            const selected = row.chosenAlternativeTimeSlotId === timeSlotId
+                            return (
+                              <button
+                                key={`adjust-choice-${row.dayOfWeek}-${timeSlotId}`}
+                                type="button"
+                                onClick={() => chooseReviewAlternativeSlot(row.dayOfWeek, timeSlotId)}
+                                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                                  selected
+                                    ? 'border-amber-600 bg-amber-600 text-white'
+                                    : 'border-amber-300 bg-white text-amber-800 hover:bg-amber-50'
+                                }`}
+                              >
+                                {formatSlotLabel(timeSlotId)}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {!row.chosenAlternativeTimeSlotId ? (
+                          <div className="text-xs font-semibold text-amber-700">
+                            Choose one slot to continue.
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   {row.unavailable ? (
                     <button
@@ -1457,7 +1992,9 @@ function CustomerCoachBookingPage() {
                       Remove
                     </button>
                   ) : (
-                    <span className="text-xs font-semibold text-emerald-700">OK</span>
+                    <span className={`text-xs font-semibold ${row.adjusted ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      {row.adjusted ? 'Adjusting' : 'OK'}
+                    </span>
                   )}
                 </div>
               ))}
@@ -1465,13 +2002,13 @@ function CustomerCoachBookingPage() {
 
             <div className={`rounded-lg px-3 py-2 text-sm ${unresolvedReviewCount > 0 ? 'bg-red-500/10 text-red-700' : 'bg-emerald-500/10 text-emerald-700'}`}>
               {unresolvedReviewCount > 0
-                ? `${unresolvedReviewCount} unmatched slot(s) must be removed before requesting this coach.`
-                : 'All selected slots match this coach.'}
+                ? `${unresolvedReviewCount} slot(s) still need action before requesting this coach.`
+                : 'All selected weekdays can be covered by this coach.'}
             </div>
 
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setCoachReviewModal({ open: false, coach: null })}
+                onClick={() => setCoachReviewModal({ open: false, coach: null, selectedAlternativeSlots: {} })}
                 className="px-4 py-2 rounded-xl border border-slate-300"
               >
                 Cancel
@@ -1542,8 +2079,200 @@ function CustomerCoachBookingPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Bio</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-700">{coachProfileModal.coach.bio || 'No bio available.'}</p>
                 </div>
+
+                <div className="gc-surface-plain">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Weekly availability</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {groupAvailabilityByDay(coachProfileModal.coach.availability).length === 0 ? (
+                      <p className="text-sm text-slate-500">No weekly availability published yet.</p>
+                    ) : (
+                      groupAvailabilityByDay(coachProfileModal.coach.availability).map((day) => (
+                        <div key={`profile-availability-${day.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                          <span className="font-semibold text-slate-900">{day.label}</span>
+                          <span className="mx-2 text-slate-300">•</span>
+                          <span>{day.slots.map((slot) => formatSlotLabel(Number(slot.timeSlotId))).join(', ')}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="gc-surface-plain">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Recent feedback</p>
+                  <div className="mt-3 space-y-3">
+                    {Array.isArray(coachProfileModal.coach.recentFeedback) && coachProfileModal.coach.recentFeedback.length > 0 ? (
+                      coachProfileModal.coach.recentFeedback.map((item, index) => (
+                        <div key={`feedback-${index}`} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-slate-900">{item.customerName || 'Customer'}</p>
+                            <p className="text-xs font-semibold text-amber-600">Rating {Number(item.rating || 0).toFixed(1)}</p>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-600">{item.comment || 'No comment left.'}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">No feedback yet.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {coachBookingModal.open && coachBookingModal.coach && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gym-600">Coach-first booking</p>
+                <h4 className="text-2xl font-bold text-slate-900">{coachBookingModal.coach.fullName || 'Coach'} availability</h4>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  Choose only the free recurring weekday slots. Occupied slots already have PT sessions in your booking window.
+                </p>
+                {(coachBookingModal.fromDate || coachBookingModal.toDate) && (
+                  <p className="text-xs font-semibold text-slate-500">
+                    Booking window: {coachBookingModal.fromDate || '-'} to {coachBookingModal.toDate || '-'}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={closeCoachBookingModal}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+
+            {coachBookingModal.loading ? (
+              <div className="py-16 text-center text-sm text-slate-500">Loading coach schedule...</div>
+            ) : (
+              <div className="mt-5 grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+                <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.16em]">
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">Free</span>
+                    <span className="rounded-full bg-rose-100 px-3 py-1 text-rose-700">Occupied</span>
+                    <span className="rounded-full bg-slate-200 px-3 py-1 text-slate-600">Not available</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {DAYS.map((day) => (
+                      <button
+                        key={`coach-booking-day-${day.id}`}
+                        type="button"
+                        onClick={() => setCoachBookingModal((prev) => ({ ...prev, focusDay: day.id }))}
+                        className={`rounded-2xl px-4 py-3 text-left transition ${coachBookingModal.focusDay === day.id ? 'bg-slate-950 text-white shadow-lg shadow-slate-950/15' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
+                      >
+                        <div className="text-sm font-bold">{day.label}</div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">
+                          {coachBookingSelectedCountByDay.get(day.id) || 0} selected
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Selected weekday</p>
+                    <p className="mt-1 text-lg font-bold text-slate-900">{getDayMeta(coachBookingModal.focusDay)?.label || '-'}</p>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {timeSlots.map((slot) => {
+                        const status = getCoachBookingSlotStatus(coachBookingModal.focusDay, slot.timeSlotId)
+                        const selected = isCoachBookingSlotSelected(coachBookingModal.focusDay, slot.timeSlotId)
+                        const statusStyles = status === 'AVAILABLE'
+                          ? selected
+                            ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400 hover:bg-emerald-100'
+                          : status === 'BOOKED'
+                            ? 'border-rose-200 bg-rose-50 text-rose-700 cursor-not-allowed'
+                            : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                        return (
+                          <button
+                            key={`coach-booking-slot-${coachBookingModal.focusDay}-${slot.timeSlotId}`}
+                            type="button"
+                            onClick={() => toggleCoachBookingSlot(coachBookingModal.focusDay, slot.timeSlotId)}
+                            disabled={status !== 'AVAILABLE'}
+                            className={`rounded-2xl border px-4 py-3 text-left transition ${statusStyles}`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="font-semibold">Slot {slot.slotIndex}</div>
+                                <div className="mt-1 text-xs opacity-80">
+                                  {String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}
+                                </div>
+                              </div>
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em]">
+                                {status === 'AVAILABLE' ? (selected ? 'Selected' : 'Free') : status === 'BOOKED' ? 'Occupied' : 'Unavailable'}
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Selected recurring slots</p>
+                    <p className="mt-1 text-sm text-slate-600">No need to set a match schedule first. Pick directly from this coach&apos;s free slots. One slot per weekday.</p>
+                  </div>
+
+                  {coachBookingModal.selectedSlots.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                      No slot selected yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {coachBookingModal.selectedSlots
+                        .slice()
+                        .sort((left, right) => {
+                          if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+                          return left.timeSlotId - right.timeSlotId
+                        })
+                        .map((slot) => (
+                          <button
+                            key={`coach-booking-picked-${slot.dayOfWeek}-${slot.timeSlotId}`}
+                            type="button"
+                            onClick={() => toggleCoachBookingSlot(slot.dayOfWeek, slot.timeSlotId)}
+                            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                          >
+                            <div>
+                              <div className="font-semibold text-slate-900">{getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`}</div>
+                              <div className="mt-1 text-xs text-slate-500">{formatSlotLabel(slot.timeSlotId)}</div>
+                            </div>
+                            <span className="text-xs font-semibold uppercase tracking-[0.16em]">Remove</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                    This coach-first flow uses the coach&apos;s own availability. It does not depend on the schedule from Find suitable personal trainer.
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={closeCoachBookingModal}
+                      className="gc-button-neutral"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitCoachSpecificBooking}
+                      disabled={loading || coachBookingModal.loading || coachBookingModal.selectedSlots.length === 0}
+                      className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700 disabled:opacity-50"
+                    >
+                      Request this coach
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1908,14 +2637,59 @@ function CustomerCoachBookingPage() {
           </div>
         </div>
       )}
+
+      {noCoachMatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+          <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <button
+              type="button"
+              aria-label="Close no match popup"
+              onClick={() => setNoCoachMatchModal(false)}
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
+            >
+              <X size={20} />
+            </button>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">PT match result</p>
+              <h4 className="text-2xl font-bold text-slate-900">No coach matched this schedule.</h4>
+              <p className="text-sm leading-relaxed text-slate-600">
+                Please change your recurring weekday slots and search again. Try fewer weekdays or different time slots to improve the chance of finding a matching PT.
+              </p>
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setNoCoachMatchModal(false)}
+                className="gc-button-neutral"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNoCoachMatchModal(false)
+                  openPlannerModal()
+                }}
+                className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gym-700"
+              >
+                Change schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </CoachBookingPageErrorBoundary>
     </WorkspaceScaffold>
   )
 }
 
 function CoachCard({ coach, onReview, onOpenProfile, onRemoveSlot, formatSlotLabel }) {
   const unavailableSlots = Array.isArray(coach.unavailableSlots) ? coach.unavailableSlots : []
+  const alternativeSlots = Array.isArray(coach.alternativeSlots) ? coach.alternativeSlots : []
   const bookedCount = unavailableSlots.filter((s) => s.reason === 'BOOKED_IN_RANGE').length
   const weeklyUnavailableCount = unavailableSlots.filter((s) => s.reason === 'NO_WEEKLY_AVAILABILITY').length
+  const alternativeCount = alternativeSlots.length
   const isFullMatch = String(coach.matchType || '').toUpperCase() === 'FULL'
 
   return (
@@ -1944,6 +2718,27 @@ function CoachCard({ coach, onReview, onOpenProfile, onRemoveSlot, formatSlotLab
         </span>
       </div>
       <p className="text-sm text-slate-600">{coach.bio || 'No bio'}</p>
+      {!isFullMatch && alternativeSlots.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+            <AlertTriangle size={16} />
+            <span>Some weekdays still work, but the coach needs a different slot on those days.</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {alternativeSlots.map((slot) => (
+              <div key={`${coach.coachId}-alt-${slot.dayOfWeek}-${slot.requestedTimeSlotId}`} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
+                <div className="text-sm font-semibold text-amber-800">{getDayMeta(slot.dayOfWeek)?.label || `Day ${slot.dayOfWeek}`}</div>
+                <div className="mt-1 text-xs text-slate-600">Picked: {formatSlotLabel(slot.requestedTimeSlotId)}</div>
+                <div className="text-xs font-semibold text-amber-700">
+                  Coach free at: {(Array.isArray(slot.freeTimeSlotIds) && slot.freeTimeSlotIds.length > 0 ? slot.freeTimeSlotIds : [slot.timeSlotId])
+                    .map((timeSlotId) => formatSlotLabel(timeSlotId))
+                    .join(', ')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {!isFullMatch && unavailableSlots.length > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
@@ -1971,6 +2766,7 @@ function CoachCard({ coach, onReview, onOpenProfile, onRemoveSlot, formatSlotLab
         </div>
       )}
       <div className="text-xs text-slate-600">
+        {alternativeCount > 0 && <div>{alternativeCount} weekday(s) need a different coach slot.</div>}
         {bookedCount > 0 && <div>{bookedCount} slot(s) already booked in selected range.</div>}
         {weeklyUnavailableCount > 0 && <div>{weeklyUnavailableCount} slot(s) not in coach weekly availability.</div>}
       </div>
@@ -1987,6 +2783,82 @@ function CoachCard({ coach, onReview, onOpenProfile, onRemoveSlot, formatSlotLab
         </button>
       </div>
     </article>
+  )
+}
+
+function CoachDirectoryRow({ coach, onBook, onOpenProfile, formatSlotLabel }) {
+  const availabilityGroups = groupAvailabilityByDay(coach.availability)
+
+  return (
+    <div className="px-4 py-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => onOpenProfile(coach.coachId)}
+              className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-slate-300 transition hover:border-gym-300 hover:text-white"
+              aria-label={`Open ${coach.fullName} profile`}
+            >
+              {coach.avatarUrl ? (
+                <img src={coach.avatarUrl} alt={coach.fullName || 'Coach avatar'} className="h-full w-full object-cover" />
+              ) : (
+                <UserCircle2 size={26} />
+              )}
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h5 className="truncate text-base font-bold text-white">{coach.fullName || 'Coach'}</h5>
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+                  {Number(coach.experienceYears || 0)} year{Number(coach.experienceYears || 0) === 1 ? '' : 's'}
+                </span>
+                <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
+                  Rating {Number(coach.avgRating || coach.averageRating || 0).toFixed(1)}
+                </span>
+              </div>
+              <p className="mt-1 truncate text-xs text-slate-400">{coach.email || 'No email'}</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">{coach.bio || 'No bio available yet.'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reviews</p>
+            <p className="mt-1 text-sm font-semibold text-white">{Number(coach.reviewCount || 0)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onBook(coach)}
+            className="rounded-full bg-gym-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gym-700"
+          >
+            Book coach
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenProfile(coach.coachId)}
+            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            View details
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {availabilityGroups.length > 0 ? (
+          availabilityGroups.map((day) => (
+            <div key={`directory-availability-${coach.coachId}-${day.id}`} className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+              <span className="font-semibold text-white">{day.label}</span>
+              <span className="text-slate-400">•</span>
+              <span className="text-slate-300">
+                {day.slots.map((slot) => formatSlotLabel(Number(slot.timeSlotId))).join(', ')}
+              </span>
+            </div>
+          ))
+        ) : null}
+      </div>
+    </div>
   )
 }
 

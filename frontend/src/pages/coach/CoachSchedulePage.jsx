@@ -6,6 +6,7 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { coachNav } from '../../config/navigation'
 import { coachApi } from '../../features/coach/api/coachApi'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
+import { broadcastMutationSync } from '../../features/dataSync/mutationSync'
 
 const DAYS = [
   { dayOfWeek: 1, name: 'Monday', shortLabel: 'Mon' },
@@ -401,6 +402,9 @@ function CoachSchedulePage() {
       await coachApi.updateAvailability({
         slots,
         acceptingCustomerRequests,
+      })
+      broadcastMutationSync({
+        scope: 'coach-availability',
       })
       setMessage('Availability updated successfully. Selected slots stay visible so you can keep adjusting them.')
       requestAnimationFrame(() => {

@@ -10,8 +10,8 @@ export const coachApi = {
   getCoachById(coachId) {
     return apiClient.get(`/v1/coaches/${coachId}`).then((response) => response.data)
   },
-  getCoachSchedule(coachId) {
-    return apiClient.get(`/v1/coaches/${coachId}/schedule`).then((response) => response.data)
+  getCoachSchedule(coachId, params) {
+    return apiClient.get(`/v1/coaches/${coachId}/schedule`, { params }).then((response) => response.data)
   },
   getMyCoachSchedule() {
     return apiClient.get('/v1/coach/schedule').then((response) => response.data)

@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { authApi } from '../../features/auth/api/authApi'
 import { persistSession, roleLandingPath } from '../../features/auth/session'
 
+function getPostLoginPath(role) {
+  return String(role || '').toUpperCase() === 'CUSTOMER' ? '/' : roleLandingPath(role)
+}
+
 function LoginPage() {
   const navigate = useNavigate()
   const googleButtonRef = useRef(null)
@@ -20,7 +24,7 @@ function LoginPage() {
       }
 
       persistSession(data)
-      navigate(roleLandingPath(data.user.role), { replace: true })
+      navigate(getPostLoginPath(data.user.role), { replace: true })
     },
     [navigate],
   )
@@ -113,10 +117,11 @@ function LoginPage() {
         <div className="gc-glass-panel p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <label htmlFor="login-email" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Email Address
               </label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -126,10 +131,11 @@ function LoginPage() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <label htmlFor="login-password" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Password
               </label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}

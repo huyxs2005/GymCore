@@ -225,7 +225,7 @@ public class CoachBookingService {
 
         List<Map<String, Object>> booked = jdbcTemplate.query(
                 """
-                        SELECT s.SessionDate, s.DayOfWeek, s.TimeSlotID, ts.SlotIndex, ts.StartTime, ts.EndTime, s.Status
+                        SELECT s.SessionDate, s.DayOfWeek, s.TimeSlotID, ts.SlotIndex, ts.StartTime, ts.EndTime, s.Status, s.CancelReason
                         FROM dbo.PTSessions s
                         JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
                         WHERE s.CoachID = ? AND s.SessionDate >= ? AND s.SessionDate <= ? AND s.Status IN ('SCHEDULED','COMPLETED')
@@ -263,7 +263,7 @@ public class CoachBookingService {
     private Map<String, Object> customerMatchCoaches(Map<String, Object> payload) {
         AuthService.AuthContext customer = requireCustomer(payload);
         ensureNoBlockingPtRequest(customer.userId());
-        LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
+        LocalDate startDate = LocalDate.now();
         MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate);
         if (membership.customerMembershipId() == null || !membership.allowsCoachBooking()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -291,16 +291,19 @@ public class CoachBookingService {
         for (Map<String, Object> coach : coaches) {
             int coachId = requireInteger(coach, "coachId");
             MatchSummary summary = evaluateCoachMatch(coachId, startDate, endDate, requestedSlots);
-            boolean fullMatch = summary.matchedSlots() == requestedSlots.size();
+            boolean fullMatch = summary.exactMatchedSlots() == requestedSlots.size();
             boolean partialMatch = !fullMatch
                     && (summary.matchedSlots() > 0 || summary.bookedConflictSlots() > 0);
 
             Map<String, Object> item = new LinkedHashMap<>(coach);
             item.put("matchType", fullMatch ? "FULL" : "PARTIAL");
             item.put("matchedSlots", summary.matchedSlots());
+            item.put("exactMatchedSlots", summary.exactMatchedSlots());
             item.put("bookedConflictSlots", summary.bookedConflictSlots());
             item.put("requestedSlots", requestedSlots.size());
             item.put("unavailableSlots", summary.unavailableSlots());
+            item.put("alternativeSlots", summary.alternativeSlots());
+            item.put("resolvedSlots", summary.resolvedSlots());
 
             if (fullMatch) {
                 fullMatches.add(item);
@@ -344,10 +347,12 @@ public class CoachBookingService {
                     "You need an ACTIVE Gym + Coach membership covering the selected period.");
         }
         requireCoachExists(coachId);
+        List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
+        List<Map<String, Object>> normalizedSlots = toRequestedSlotMaps(requestedSlots);
 
         int ptRequestId = insertPtRecurringRequest(customer.userId(), coachId, customerMembershipId, startDate, endDate,
                 "PENDING", "REQUEST");
-        insertPtRequestSlots(ptRequestId, slots);
+        insertPtRequestSlots(ptRequestId, normalizedSlots);
 
         notifyPtRequestCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
 
@@ -383,16 +388,17 @@ public class CoachBookingService {
         requireCoachExists(coachId);
 
         List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
+        List<Map<String, Object>> normalizedSlots = toRequestedSlotMaps(requestedSlots);
         MatchSummary summary = evaluateCoachMatch(coachId, startDate, endDate, requestedSlots);
-        if (summary.matchedSlots() != requestedSlots.size()) {
+        if (summary.exactMatchedSlots() != requestedSlots.size()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Selected coach does not have all requested recurring slots available for instant booking.");
         }
 
         int ptRequestId = insertPtRecurringRequest(customer.userId(), coachId, customerMembershipId, startDate, endDate,
                 "APPROVED", "INSTANT");
-        insertPtRequestSlots(ptRequestId, slots);
-        int sessionsCreated = generatePTSessions(ptRequestId, customer.userId(), coachId, startDate, endDate, slots);
+        insertPtRequestSlots(ptRequestId, normalizedSlots);
+        int sessionsCreated = generatePTSessions(ptRequestId, customer.userId(), coachId, startDate, endDate, normalizedSlots);
 
         notifyInstantPtBookingCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
 
@@ -1228,6 +1234,7 @@ public class CoachBookingService {
         }
 
         List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
+        List<Map<String, Object>> normalizedSlots = toRequestedSlotMaps(requestedSlots);
         for (RequestedSlot requestedSlot : requestedSlots) {
             if (!isCoachWeeklyAvailable(coachId, requestedSlot.dayOfWeek(), requestedSlot.timeSlotId())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -1258,10 +1265,10 @@ public class CoachBookingService {
                 """, ptRequestId, cutoverDate);
 
         jdbcTemplate.update("DELETE FROM dbo.PTRequestSlots WHERE PTRequestID = ?", ptRequestId);
-        insertPtRequestSlots(ptRequestId, slots);
+        insertPtRequestSlots(ptRequestId, normalizedSlots);
 
         int created = regenerateFuturePtSessions(ptRequestId, customer.userId(), coachId, cutoverDate, phaseEndDate,
-                slots, preservedFutureSessions);
+                normalizedSlots, preservedFutureSessions);
 
         notificationService.notifyUser(
                 coachId,
@@ -1379,13 +1386,7 @@ public class CoachBookingService {
             m.put("status", rs.getString("Status"));
             m.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
 
-            // Fetch slots for this request
-            List<Map<String, Object>> slots = jdbcTemplate.query("""
-                    SELECT DayOfWeek, TimeSlotID FROM dbo.PTRequestSlots WHERE PTRequestID = ?
-                    """,
-                    (rs2, i2) -> Map.of("dayOfWeek", rs2.getInt("DayOfWeek"), "timeSlotId", rs2.getInt("TimeSlotID")),
-                    id);
-            m.put("slots", slots);
+            m.put("slots", loadTemplateSlots(id));
             return m;
         }, coach.userId());
         return Map.of("items", items);
@@ -1578,7 +1579,11 @@ public class CoachBookingService {
                 """, (rs, i) -> Map.of("dayOfWeek", rs.getInt("DayOfWeek"), "timeSlotId", rs.getInt("TimeSlotID")),
                 requestId);
 
-        LocalDate actualStartDate = nextMondayAfter(LocalDate.now());
+        LocalDate requestedStartDate = (LocalDate) req.get("startDate");
+        LocalDate actualStartDate = LocalDate.now().plusDays(1);
+        if (requestedStartDate != null && requestedStartDate.isAfter(actualStartDate)) {
+            actualStartDate = requestedStartDate;
+        }
         LocalDate endDate = (LocalDate) req.get("endDate");
         if (actualStartDate.isAfter(endDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -2430,11 +2435,17 @@ public class CoachBookingService {
     private List<RequestedSlot> normalizeRequestedSlots(List<Map<String, Object>> slots) {
         List<RequestedSlot> normalized = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        Map<Integer, Integer> dayToSlot = new HashMap<>();
         for (Map<String, Object> slot : slots) {
             int dayOfWeek = requireInteger(slot, "dayOfWeek");
             int timeSlotId = requireInteger(slot, "timeSlotId");
             if (dayOfWeek < 1 || dayOfWeek > 7) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "dayOfWeek must be 1-7.");
+            }
+            Integer existingTimeSlotId = dayToSlot.putIfAbsent(dayOfWeek, timeSlotId);
+            if (existingTimeSlotId != null && existingTimeSlotId != timeSlotId) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Only one recurring slot can be selected per weekday.");
             }
             String key = dayOfWeek + "-" + timeSlotId;
             if (seen.add(key)) {
@@ -2444,12 +2455,30 @@ public class CoachBookingService {
         return normalized;
     }
 
+    private List<Map<String, Object>> toRequestedSlotMaps(List<RequestedSlot> requestedSlots) {
+        List<Map<String, Object>> normalizedSlots = new ArrayList<>();
+        for (RequestedSlot slot : requestedSlots) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("dayOfWeek", slot.dayOfWeek());
+            item.put("timeSlotId", slot.timeSlotId());
+            normalizedSlots.add(item);
+        }
+        return normalizedSlots;
+    }
+
     private MatchSummary evaluateCoachMatch(int coachId, LocalDate startDate, LocalDate endDate,
             List<RequestedSlot> requestedSlots) {
         List<Map<String, Object>> weeklyAvailability = loadWeeklyAvailability(coachId);
         Set<String> availablePairs = new HashSet<>();
+        Map<Integer, List<Integer>> availableSlotsByDay = new HashMap<>();
         for (Map<String, Object> item : weeklyAvailability) {
-            availablePairs.add(requireInteger(item, "dayOfWeek") + "-" + requireInteger(item, "timeSlotId"));
+            int dayOfWeek = requireInteger(item, "dayOfWeek");
+            int timeSlotId = requireInteger(item, "timeSlotId");
+            availablePairs.add(dayOfWeek + "-" + timeSlotId);
+            availableSlotsByDay.computeIfAbsent(dayOfWeek, ignored -> new ArrayList<>()).add(timeSlotId);
+        }
+        for (List<Integer> daySlots : availableSlotsByDay.values()) {
+            daySlots.sort(Integer::compareTo);
         }
 
         List<Map<String, Object>> booked = jdbcTemplate.query(
@@ -2465,30 +2494,59 @@ public class CoachBookingService {
             bookedPairs.add(requireInteger(item, "dayOfWeek") + "-" + requireInteger(item, "timeSlotId"));
         }
 
+        int exactMatched = 0;
         int matched = 0;
         int bookedConflicts = 0;
         List<Map<String, Object>> unavailable = new ArrayList<>();
+        List<Map<String, Object>> alternativeSlots = new ArrayList<>();
+        List<Map<String, Object>> resolvedSlots = new ArrayList<>();
         for (RequestedSlot slot : requestedSlots) {
             String key = slot.dayOfWeek() + "-" + slot.timeSlotId();
-            if (!availablePairs.contains(key)) {
-                unavailable.add(Map.of(
+            boolean exactWeeklyAvailable = availablePairs.contains(key);
+            boolean exactBooked = bookedPairs.contains(key);
+            if (exactWeeklyAvailable && !exactBooked) {
+                exactMatched++;
+                matched++;
+                resolvedSlots.add(Map.of(
                         "dayOfWeek", slot.dayOfWeek(),
                         "timeSlotId", slot.timeSlotId(),
-                        "reason", "NO_WEEKLY_AVAILABILITY"));
+                        "requestedTimeSlotId", slot.timeSlotId(),
+                        "exactMatch", true));
                 continue;
             }
-            if (bookedPairs.contains(key)) {
+
+            List<Integer> sameDayAvailable = availableSlotsByDay.getOrDefault(slot.dayOfWeek(), List.of());
+            List<Integer> freeTimeSlotIds = sameDayAvailable.stream()
+                    .filter(candidate -> !bookedPairs.contains(slot.dayOfWeek() + "-" + candidate))
+                    .toList();
+            if (!freeTimeSlotIds.isEmpty()) {
+                int fallbackTimeSlotId = freeTimeSlotIds.getFirst();
+                matched++;
+                alternativeSlots.add(Map.of(
+                        "dayOfWeek", slot.dayOfWeek(),
+                        "requestedTimeSlotId", slot.timeSlotId(),
+                        "timeSlotId", fallbackTimeSlotId,
+                        "freeTimeSlotIds", freeTimeSlotIds,
+                        "reason", exactBooked ? "BOOKED_IN_RANGE" : "DIFFERENT_SLOT_AVAILABLE"));
+                resolvedSlots.add(Map.of(
+                        "dayOfWeek", slot.dayOfWeek(),
+                        "timeSlotId", fallbackTimeSlotId,
+                        "requestedTimeSlotId", slot.timeSlotId(),
+                        "exactMatch", false));
+                continue;
+            }
+
+            String reason = exactBooked ? "BOOKED_IN_RANGE" : "NO_WEEKLY_AVAILABILITY";
+            if (exactBooked) {
                 bookedConflicts++;
-                unavailable.add(Map.of(
-                        "dayOfWeek", slot.dayOfWeek(),
-                        "timeSlotId", slot.timeSlotId(),
-                        "reason", "BOOKED_IN_RANGE"));
-                continue;
             }
-            matched++;
+            unavailable.add(Map.of(
+                    "dayOfWeek", slot.dayOfWeek(),
+                    "timeSlotId", slot.timeSlotId(),
+                    "reason", reason));
         }
 
-        return new MatchSummary(matched, bookedConflicts, unavailable);
+        return new MatchSummary(exactMatched, matched, bookedConflicts, unavailable, alternativeSlots, resolvedSlots);
     }
 
     // ---------- Helpers ----------
@@ -2575,7 +2633,7 @@ public class CoachBookingService {
     }
 
     private LocalDate resolveMinimumBookingStartDate(LocalDate requestDate) {
-        return nextMondayOnOrAfter(requestDate.plusDays(7));
+        return requestDate.plusDays(1);
     }
 
     private LocalDate nextMondayOnOrAfter(LocalDate date) {
@@ -3473,7 +3531,13 @@ public class CoachBookingService {
     private record RequestedSlot(int dayOfWeek, int timeSlotId) {
     }
 
-    private record MatchSummary(int matchedSlots, int bookedConflictSlots, List<Map<String, Object>> unavailableSlots) {
+    private record MatchSummary(
+            int exactMatchedSlots,
+            int matchedSlots,
+            int bookedConflictSlots,
+            List<Map<String, Object>> unavailableSlots,
+            List<Map<String, Object>> alternativeSlots,
+            List<Map<String, Object>> resolvedSlots) {
     }
 
     private record RescheduleMeta(String state, LocalDate requestedDate, int requestedTimeSlotId, String note) {

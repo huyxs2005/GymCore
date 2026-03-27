@@ -2,7 +2,7 @@ import { apiClient } from '../../../api/client'
 
 export const coachBookingApi = {
   matchCoaches(payload) {
-    return apiClient.post('/v1/coach-booking/match', payload).then((response) => response.data)
+    return apiClient.post('/v1/coach-booking/match', payload, { skipMutationSync: true }).then((response) => response.data)
   },
   createInstantBooking(payload) {
     return apiClient.post('/v1/coach-booking/bookings', payload).then((response) => response.data)

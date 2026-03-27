@@ -1,6 +1,7 @@
-import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Suspense, lazy, useEffect, useState } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useSession } from '../features/auth/useSession'
+import { GLOBAL_MUTATION_SYNC_EVENT } from '../features/dataSync/mutationSync'
 
 const LandingPage = lazy(() => import('../pages/public/LandingPage'))
 const LoginPage = lazy(() => import('../pages/public/LoginPage'))
@@ -75,12 +76,34 @@ function RequireRole({ roles, children }) {
 }
 
 function AppRouter() {
+  const location = useLocation()
+  const [mutationVersion, setMutationVersion] = useState(0)
   const withAuth = (element) => <RequireAuth>{element}</RequireAuth>
   const withRole = (roles, element) => <RequireRole roles={roles}>{element}</RequireRole>
 
+  useEffect(() => {
+    const handleMutationSync = () => {
+      setMutationVersion((prev) => prev + 1)
+    }
+
+    const handleStorageSync = (event) => {
+      if (event.key === 'gymcore:mutation-sync') {
+        setMutationVersion((prev) => prev + 1)
+      }
+    }
+
+    window.addEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleMutationSync)
+    window.addEventListener('storage', handleStorageSync)
+
+    return () => {
+      window.removeEventListener(GLOBAL_MUTATION_SYNC_EVENT, handleMutationSync)
+      window.removeEventListener('storage', handleStorageSync)
+    }
+  }, [])
+
   return (
     <Suspense fallback={<RouteFallback />}>
-      <Routes>
+      <Routes key={`${location.pathname}|${location.search}|${mutationVersion}`}>
         <Route path="/" element={<LandingPage />} />
 
         <Route path="/auth/login" element={<LoginPage />} />

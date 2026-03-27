@@ -61,7 +61,7 @@ describe('LoginPage', () => {
 
     await user.type(screen.getByLabelText(/Email/i), 'a@b.com')
     await user.type(screen.getByLabelText(/Password/i), 'secret123')
-    await user.click(screen.getByRole('button', { name: /^Login$/i }))
+    await user.click(screen.getByRole('button', { name: /^Sign In$/i }))
 
     expect(await screen.findByText('GymCore Home')).toBeInTheDocument()
     expect(getAccessToken()).toBe('ACCESS')
@@ -76,12 +76,12 @@ describe('LoginPage', () => {
 
     await user.type(screen.getByLabelText(/Email/i), 'a@b.com')
     await user.type(screen.getByLabelText(/Password/i), 'wrong')
-    await user.click(screen.getByRole('button', { name: /^Login$/i }))
+    await user.click(screen.getByRole('button', { name: /^Sign In$/i }))
 
     expect(await screen.findByText('Invalid email or password.')).toBeInTheDocument()
   })
 
-  it('initializes Google button when client id exists and navigates to the home page on Google login success', async () => {
+  it('initializes Google button and keeps customer login on the homepage', async () => {
     const user = userEvent.setup()
     import.meta.env.VITE_GOOGLE_CLIENT_ID = 'google-client-id'
 
@@ -101,7 +101,7 @@ describe('LoginPage', () => {
       success: true,
       data: {
         accessToken: 'ACCESS',
-        user: { userId: 2, fullName: 'Coach Alex', email: 'coach@gymcore.local', role: 'COACH' },
+        user: { userId: 2, fullName: 'Customer Minh', email: 'customer@gymcore.local', role: 'CUSTOMER' },
       },
     })
 
@@ -122,4 +122,23 @@ describe('LoginPage', () => {
     // Close any open timers/microtasks.
     await user.pointer([])
   })
+
+  it('navigates non-customer roles to their role landing page after login', async () => {
+    const user = userEvent.setup()
+    authApi.login.mockResolvedValue({
+      success: true,
+      data: {
+        accessToken: 'ACCESS',
+        user: { userId: 2, fullName: 'Coach Alex', email: 'coach@gymcore.local', role: 'COACH' },
+      },
+    })
+
+    renderAtLogin()
+
+    await user.type(screen.getByLabelText(/Email/i), 'coach@gymcore.local')
+    await user.type(screen.getByLabelText(/Password/i), 'secret123')
+    await user.click(screen.getByRole('button', { name: /^Sign In$/i }))
+
+    expect(await screen.findByText('Coach Schedule')).toBeInTheDocument()
+  }, 15000)
 })

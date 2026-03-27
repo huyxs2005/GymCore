@@ -94,6 +94,7 @@ function CustomerMembershipPage() {
   const [selectedPromoCode, setSelectedPromoCode] = useState('')
   const [couponPreview, setCouponPreview] = useState(null)
   const [couponPreviewError, setCouponPreviewError] = useState('')
+  const [successCountdown, setSuccessCountdown] = useState(10)
   const [showSuccessMessage, setShowSuccessMessage] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('status')
     const normalizedStatus = status ? status.trim().toUpperCase() : ''
@@ -129,6 +130,12 @@ function CustomerMembershipPage() {
   const invalidReason = currentMembershipQuery.data?.data?.reason || ''
   const hasActiveMembership = String(currentMembership?.status || '').toUpperCase() === 'ACTIVE'
   const hasQueuedMembership = Boolean(queuedMembership && Object.keys(queuedMembership).length > 0)
+
+  function dismissPaymentSuccessOverlay() {
+    setShowSuccessMessage(false)
+    setSuccessCountdown(10)
+    navigate('/customer/membership', { replace: true })
+  }
 
   const plansByCategory = useMemo(
     () =>
@@ -240,6 +247,8 @@ function CustomerMembershipPage() {
     const urlParams = new URLSearchParams(window.location.search)
     const status = (urlParams.get('status') || '').trim().toUpperCase()
     if (status === 'PAID' || status === 'SUCCESS') {
+      setShowSuccessMessage(true)
+      setSuccessCountdown(10)
       const paymentReturnPayload = Object.fromEntries(urlParams.entries())
       membershipApi
         .confirmPaymentReturn(paymentReturnPayload)
@@ -248,16 +257,29 @@ function CustomerMembershipPage() {
           queryClient.invalidateQueries({ queryKey: ['membershipCurrent'] })
           queryClient.invalidateQueries({ queryKey: ['membershipPlans'] })
         })
-      const timer = setTimeout(() => {
-        setShowSuccessMessage(false)
-        window.history.replaceState({}, document.title, window.location.pathname)
-      }, 3000)
-      return () => clearTimeout(timer)
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
     if (status === 'CANCELLED') {
       window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [queryClient])
+
+  useEffect(() => {
+    if (!showSuccessMessage) return undefined
+
+    const timer = window.setInterval(() => {
+      setSuccessCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer)
+          dismissPaymentSuccessOverlay()
+          return 0
+        }
+        return current - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [showSuccessMessage])
 
   const handleCheckout = (plan) => {
     const targetPlan = plan || selectedPlan
@@ -406,7 +428,19 @@ function CustomerMembershipPage() {
       links={customerNav}
     >
       {showSuccessMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              dismissPaymentSuccessOverlay()
+            }
+          }}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              dismissPaymentSuccessOverlay()
+            }
+          }}
+        >
           <div className="animate-in fade-in zoom-in-95 relative w-full max-w-sm rounded-[2rem] border border-white/10 bg-[#12121a] p-8 text-center shadow-2xl duration-300">
             <div className="absolute inset-0 overflow-hidden rounded-[2rem]">
               <div className="absolute -top-[50%] left-[50%] h-[200%] w-[200%] -translate-x-[50%] animate-[spin_10s_linear_infinite] opacity-20">
@@ -419,6 +453,9 @@ function CustomerMembershipPage() {
               </div>
               <h2 className="mb-2 text-2xl font-bold text-slate-100">Payment Successful!</h2>
               <p className="text-sm text-slate-400">Your membership space has been updated.</p>
+              <p className="mt-3 text-xs font-medium text-slate-500">
+                Click outside to return, or this closes in {successCountdown}s.
+              </p>
             </div>
           </div>
         </div>

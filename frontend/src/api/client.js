@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { clearSession, getAccessToken, setAccessToken } from '../features/auth/session'
+import { broadcastMutationSync } from '../features/dataSync/mutationSync'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -29,7 +30,20 @@ apiClient.interceptors.request.use((config) => {
 })
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = String(response?.config?.method || '').toLowerCase()
+    const shouldBroadcast = (method === 'post' || method === 'put' || method === 'patch' || method === 'delete')
+      && response?.config?.skipMutationSync !== true
+
+    if (shouldBroadcast) {
+      broadcastMutationSync({
+        method,
+        url: response?.config?.url || '',
+      })
+    }
+
+    return response
+  },
   async (error) => {
     const originalRequest = error?.config
     const status = error?.response?.status
@@ -45,7 +59,7 @@ apiClient.interceptors.response.use(
 
     originalRequest._retry = true
     try {
-      const refreshResponse = await apiClient.post('/v1/auth/refresh')
+      const refreshResponse = await apiClient.post('/v1/auth/refresh', null, { skipMutationSync: true })
       const nextAccessToken = refreshResponse?.data?.data?.accessToken
       if (!nextAccessToken) {
         throw new Error('Missing refreshed access token.')
