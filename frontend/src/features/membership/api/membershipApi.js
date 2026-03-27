@@ -10,6 +10,9 @@ export const membershipApi = {
   getCurrentMembership() {
     return apiClient.get('/v1/memberships/current').then((response) => response.data)
   },
+  getHistory() {
+    return apiClient.get('/v1/memberships/history').then((response) => response.data)
+  },
   purchase(payload) {
     return apiClient.post('/v1/memberships/purchase', payload).then((response) => response.data)
   },

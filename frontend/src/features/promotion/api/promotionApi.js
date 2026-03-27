@@ -11,8 +11,11 @@ export const promotionApi = {
   claimCoupon(payload) {
     return apiClient.post('/v1/promotions/claims', payload).then(unwrapApiData)
   },
+  claimCouponCode(payload) {
+    return apiClient.post('/v1/promotions/claims/code', payload, { skipMutationSync: true }).then(unwrapApiData)
+  },
   applyCoupon(payload) {
-    return apiClient.post('/v1/promotions/apply', payload).then(unwrapApiData)
+    return apiClient.post('/v1/promotions/apply', payload, { skipMutationSync: true }).then(unwrapApiData)
   },
   getMyClaims() {
     return apiClient.get('/v1/promotions/my-claims').then(unwrapApiData)

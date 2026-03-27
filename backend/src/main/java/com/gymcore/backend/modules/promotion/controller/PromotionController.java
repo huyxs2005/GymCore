@@ -48,6 +48,14 @@ public class PromotionController {
                                 promotionService.execute("customer-claim-coupon", authorization, payload));
         }
 
+        @PostMapping("/promotions/claims/code")
+        public ApiResponse<Map<String, Object>> claimCouponCode(
+                        @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization,
+                        @RequestBody Map<String, Object> payload) {
+                return ApiResponse.ok("Coupon code claimed",
+                                promotionService.execute("customer-claim-coupon-code", authorization, payload));
+        }
+
         @GetMapping("/promotions/my-claims")
         public ApiResponse<Map<String, Object>> getMyClaims(
                         @RequestHeader(org.springframework.http.HttpHeaders.AUTHORIZATION) String authorization) {

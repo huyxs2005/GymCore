@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Check, CreditCard, Ticket, WalletCards } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -27,12 +27,18 @@ function formatClaimBenefit(claim) {
   return parts.join(' + ') || 'No benefit'
 }
 
+function normalizeCouponCode(value) {
+  return String(value || '').trim().toUpperCase()
+}
+
 function CustomerMembershipCheckoutPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const { user } = useSession()
   const userId = user?.userId ?? null
   const [selectedPromoCode, setSelectedPromoCode] = useState('')
+  const [manualCouponCode, setManualCouponCode] = useState('')
   const [couponPreview, setCouponPreview] = useState(null)
   const [couponPreviewError, setCouponPreviewError] = useState('')
   const [checkoutWarning, setCheckoutWarning] = useState(null)
@@ -64,10 +70,23 @@ function CustomerMembershipCheckoutPage() {
       ),
     [claimsQuery.data],
   )
+  const normalizedMembershipCoupons = useMemo(
+    () =>
+      membershipCoupons.map((claim) => ({
+        ...claim,
+        normalizedPromoCode: normalizeCouponCode(claim.PromoCode || claim.promoCode),
+      })),
+    [membershipCoupons],
+  )
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => Number(plan.planId) === selectedPlanId) ?? null,
     [plans, selectedPlanId],
+  )
+  const selectedCouponClaim = useMemo(
+    () =>
+      normalizedMembershipCoupons.find((claim) => claim.normalizedPromoCode === normalizeCouponCode(selectedPromoCode)) ?? null,
+    [normalizedMembershipCoupons, selectedPromoCode],
   )
 
   const checkoutMode = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : 'PURCHASE'
@@ -82,6 +101,30 @@ function CustomerMembershipCheckoutPage() {
     onError: (error) => {
       setCouponPreview(null)
       setCouponPreviewError(error.response?.data?.message || error.message || 'Unable to preview coupon.')
+    },
+  })
+
+  const manualCouponMutation = useMutation({
+    mutationFn: (payload) => promotionApi.claimCouponCode(payload),
+    onSuccess: async (response, variables) => {
+      const normalizedCode = normalizeCouponCode(variables?.promoCode)
+      toast.success(response?.message || 'Coupon code added to your wallet!')
+      await queryClient.invalidateQueries({ queryKey: ['myClaims', userId] })
+      setSelectedPromoCode(normalizedCode)
+      setManualCouponCode(normalizedCode)
+      setCouponPreview(null)
+      setCouponPreviewError('')
+      if (normalizedCode && selectedPlan) {
+        previewCouponMutation.mutate({
+          promoCode: normalizedCode,
+          target: 'MEMBERSHIP',
+          subtotal: Number(selectedPlan.price || 0),
+        })
+      }
+    },
+    onError: (error) => {
+      setCouponPreview(null)
+      setCouponPreviewError(error.response?.data?.message || error.message || 'Unable to add coupon code.')
     },
   })
 
@@ -119,15 +162,29 @@ function CustomerMembershipCheckoutPage() {
   })
 
   const handlePromoCodeChange = (promoCode) => {
-    setSelectedPromoCode(promoCode)
+    const normalizedCode = normalizeCouponCode(promoCode)
+    setSelectedPromoCode(normalizedCode)
+    setManualCouponCode(normalizedCode)
     setCouponPreview(null)
     setCouponPreviewError('')
-    if (!promoCode || !selectedPlan) return
+    if (!normalizedCode || !selectedPlan) return
     previewCouponMutation.mutate({
-      promoCode,
+      promoCode: normalizedCode,
       target: 'MEMBERSHIP',
       subtotal: Number(selectedPlan.price || 0),
     })
+  }
+
+  const handleManualCouponApply = () => {
+    const normalizedCode = normalizeCouponCode(manualCouponCode)
+    setManualCouponCode(normalizedCode)
+    if (!normalizedCode) {
+      setSelectedPromoCode('')
+      setCouponPreview(null)
+      setCouponPreviewError('Please enter a coupon code.')
+      return
+    }
+    manualCouponMutation.mutate({ promoCode: normalizedCode })
   }
 
   const handleProceedPayment = () => {
@@ -187,9 +244,9 @@ function CustomerMembershipCheckoutPage() {
             <p className="mt-2 text-sm text-slate-400">Go back and choose a plan first.</p>
           </div>
         ) : (
-          <div className="grid gap-8 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-            <section>
-              <article className="group relative flex min-h-[580px] flex-col overflow-hidden rounded-3xl border border-emerald-500/50 bg-emerald-500/[0.08] p-7 text-left shadow-[0_20px_40px_-10px_rgba(0,0,0,0.4)] ring-1 ring-white/10">
+          <div className="grid gap-8 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-stretch">
+            <section className="flex h-full">
+              <article className="group relative flex min-h-[640px] w-full flex-1 flex-col overflow-hidden rounded-3xl border border-emerald-500/50 bg-emerald-500/[0.08] p-7 text-left shadow-[0_20px_40px_-10px_rgba(0,0,0,0.4)] ring-1 ring-white/10">
                 <div className="flex flex-col">
                   <div className="flex items-start justify-between min-h-[60px] mb-4 gap-3">
                     <h2 className="text-xl font-black tracking-tight text-white leading-tight pr-4">{selectedPlan.name}</h2>
@@ -245,7 +302,7 @@ function CustomerMembershipCheckoutPage() {
               </article>
             </section>
 
-            <aside className="min-h-[580px] rounded-[2rem] border border-white/10 bg-[#14141c] p-8">
+            <aside className="flex h-full min-h-[640px] flex-col rounded-[2rem] border border-white/10 bg-[#14141c] p-8">
               <div className="flex items-center gap-3 text-white">
                 <CreditCard size={18} />
                 <p className="text-xs font-black uppercase tracking-[0.25em] text-white">Payment summary</p>
@@ -281,6 +338,30 @@ function CustomerMembershipCheckoutPage() {
               </div>
 
               <div className="mt-6">
+                <label htmlFor="membership-manual-coupon-code" className="mb-3 block text-xs font-black uppercase tracking-[0.25em] text-white">
+                  Enter coupon code
+                </label>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    id="membership-manual-coupon-code"
+                    type="text"
+                    value={manualCouponCode}
+                    onChange={(event) => setManualCouponCode(normalizeCouponCode(event.target.value))}
+                    placeholder="Enter coupon code"
+                    className="min-h-[56px] flex-1 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white outline-none transition hover:bg-white/10 focus:border-gym-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualCouponApply}
+                    disabled={manualCouponMutation.isPending || previewCouponMutation.isPending}
+                    className="inline-flex min-h-[56px] items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {manualCouponMutation.isPending ? 'Checking code...' : 'Apply code'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6">
                 <p className="mb-3 text-xs font-black uppercase tracking-[0.25em] text-white">Apply coupon</p>
                 <div className="relative">
                   <select
@@ -289,8 +370,8 @@ function CustomerMembershipCheckoutPage() {
                     className="w-full appearance-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 pr-12 text-sm font-black text-white outline-none transition hover:bg-white/10 focus:border-gym-500"
                   >
                     <option value="">No coupon selected</option>
-                    {membershipCoupons.map((claim) => (
-                      <option key={claim.ClaimID || claim.claimId} value={claim.PromoCode || claim.promoCode} className="bg-[#12121a] text-white">
+                    {normalizedMembershipCoupons.map((claim) => (
+                      <option key={claim.ClaimID || claim.claimId} value={claim.normalizedPromoCode} className="bg-[#12121a] text-white">
                         {(claim.PromoCode || claim.promoCode)} • {formatClaimBenefit(claim)}
                       </option>
                     ))}
@@ -308,7 +389,11 @@ function CustomerMembershipCheckoutPage() {
                       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Selected coupon</p>
                       <p className="mt-2 text-base font-black text-white">{selectedPromoCode}</p>
                       <p className="mt-1 text-xs font-semibold text-gym-400">
-                        {bonusMonths > 0 ? `+${bonusMonths} month${bonusMonths > 1 ? 's' : ''}` : 'No bonus months'}
+                        {selectedCouponClaim
+                          ? formatClaimBenefit(selectedCouponClaim)
+                          : bonusMonths > 0
+                            ? `+${bonusMonths} month${bonusMonths > 1 ? 's' : ''}`
+                            : 'No bonus months'}
                       </p>
                     </div>
                     <button

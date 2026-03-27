@@ -46,6 +46,13 @@ public class MembershipController {
                 membershipService.execute("customer-get-current-membership", authorizationHeader, null));
     }
 
+    @GetMapping("/memberships/history")
+    public ApiResponse<Map<String, Object>> getMembershipHistory(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader) {
+        return ApiResponse.ok("Membership history retrieved",
+                membershipService.execute("customer-get-membership-history", authorizationHeader, null));
+    }
+
     @PostMapping("/memberships/purchase")
     public ApiResponse<Map<String, Object>> purchaseMembership(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,

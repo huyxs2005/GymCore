@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,7 @@ public class MembershipService {
             case "customer-get-plans" -> customerGetPlans();
             case "customer-get-plan-detail" -> customerGetPlanDetail(safePayload);
             case "customer-get-current-membership" -> customerGetCurrentMembership(authorizationHeader);
+            case "customer-get-membership-history" -> customerGetMembershipHistory(authorizationHeader);
             case "customer-purchase-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.PURCHASE);
             case "customer-renew-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.RENEW);
             case "customer-upgrade-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE);
@@ -455,6 +457,88 @@ public class MembershipService {
             membership.put("status", "ACTIVE");
         }
         return response;
+    }
+
+    private Map<String, Object> customerGetMembershipHistory(String authorizationHeader) {
+        UserInfo user = currentUserService.requireCustomer(authorizationHeader);
+        expireStalePendingCheckouts(user.userId());
+
+        String sql = """
+                SELECT
+                    cm.CustomerMembershipID,
+                    CASE
+                        WHEN cm.EndDate < CAST(GETDATE() AS DATE) THEN 'EXPIRED'
+                        ELSE cm.Status
+                    END AS Status,
+                    cm.StartDate,
+                    cm.EndDate,
+                    cm.CreatedAt AS MembershipCreatedAt,
+                    mp.MembershipPlanID,
+                    mp.PlanName,
+                    mp.PlanType,
+                    mp.Price,
+                    mp.DurationDays,
+                    mp.AllowsCoachBooking,
+                    pay.PaymentID,
+                    pay.Status AS PaymentStatus,
+                    pay.PaymentMethod AS PaymentMethod,
+                    pay.PayOS_Status,
+                    pay.PayOS_CheckoutUrl,
+                    pay.OriginalAmount AS OriginalAmount,
+                    pay.DiscountAmount AS DiscountAmount,
+                    pay.Amount AS PaymentAmount,
+                    pay.ClaimID AS ClaimID,
+                    pay.PromoCode AS PromoCode,
+                    pay.ApplyTarget AS ApplyTarget,
+                    pay.BonusDurationMonths AS BonusDurationMonths,
+                    pay.CreatedAt AS PaymentCreatedAt
+                FROM dbo.CustomerMemberships cm
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                OUTER APPLY (
+                    SELECT TOP (1)
+                        p.PaymentID,
+                        p.Status,
+                        p.PaymentMethod,
+                        p.PayOS_Status,
+                        p.PayOS_CheckoutUrl,
+                        p.OriginalAmount,
+                        p.DiscountAmount,
+                        p.Amount,
+                        p.ClaimID,
+                        promo.PromoCode,
+                        promo.ApplyTarget,
+                        promo.BonusDurationMonths,
+                        p.CreatedAt
+                    FROM dbo.Payments p
+                    LEFT JOIN dbo.UserPromotionClaims c ON c.ClaimID = p.ClaimID
+                    LEFT JOIN dbo.Promotions promo ON promo.PromotionID = c.PromotionID
+                    WHERE p.CustomerMembershipID = cm.CustomerMembershipID
+                    ORDER BY p.PaymentID DESC
+                ) pay
+                WHERE cm.CustomerID = ?
+                  AND (
+                      pay.PaymentID IS NOT NULL
+                      OR cm.Status IN ('ACTIVE', 'SCHEDULED', 'EXPIRED', 'CANCELLED')
+                      OR cm.EndDate < CAST(GETDATE() AS DATE)
+                  )
+                ORDER BY
+                    COALESCE(pay.CreatedAt, cm.CreatedAt) DESC,
+                    cm.CustomerMembershipID DESC
+                """;
+
+        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> mapMembershipStatusRow(rs), user.userId());
+        List<Map<String, Object>> memberships = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> membership = (Map<String, Object>) row.get("membership");
+            if (membership != null && !membership.isEmpty()) {
+                membership.put("validForCheckin", row.get("validForCheckin"));
+                membership.put("reason", row.get("reason"));
+                memberships.add(membership);
+            }
+        }
+
+        return Map.of("memberships", memberships);
     }
 
     private List<Map<String, Object>> findExpiredMembershipHistory(int customerId) {
