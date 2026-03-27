@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   ShieldCheck,
   Target,
+  Tags,
   UtensilsCrossed,
   UserSquare2,
   Users,
@@ -27,6 +28,7 @@ const adminNavIcons = {
   '/admin/goals': Target,
   '/admin/workouts': Dumbbell,
   '/admin/foods': UtensilsCrossed,
+  '/admin/food-categories': Tags,
   '/admin/coach-insights': Activity,
   '/admin/invoices': FileText,
   '/admin/promotions': BadgePercent,
@@ -40,7 +42,7 @@ const adminNavGroups = [
   },
   {
     title: 'Catalog',
-    match: ['/admin/goals', '/admin/workouts', '/admin/foods', '/admin/products'],
+    match: ['/admin/goals', '/admin/workouts', '/admin/foods', '/admin/food-categories', '/admin/products'],
   },
   {
     title: 'Commerce',

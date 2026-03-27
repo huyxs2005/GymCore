@@ -30,6 +30,7 @@ export const adminNav = [
   { to: '/admin/goals', label: 'Goals' },
   { to: '/admin/workouts', label: 'Workouts' },
   { to: '/admin/foods', label: 'Foods' },
+  { to: '/admin/food-categories', label: 'Food Categories' },
   { to: '/admin/coach-insights', label: 'Coach Insights' },
   { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/promotions', label: 'Promotions' },

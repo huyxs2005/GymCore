@@ -100,5 +100,45 @@ public class ContentAdminController {
         return ApiResponse.ok("Admin food restored",
                 contentAdminService.restoreFood(authorization, foodId));
     }
+
+        @GetMapping("/admin/food-categories")
+        public ApiResponse<Map<String, Object>> getFoodCategories(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        return ApiResponse.ok("Admin food categories retrieved",
+            contentAdminService.getFoodCategories(authorization));
+        }
+
+        @PostMapping("/admin/food-categories")
+        public ApiResponse<Map<String, Object>> createFoodCategory(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Admin food category created",
+            contentAdminService.createFoodCategory(authorization, payload));
+        }
+
+        @PutMapping("/admin/food-categories/{foodCategoryId}")
+        public ApiResponse<Map<String, Object>> updateFoodCategory(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @PathVariable Integer foodCategoryId,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok("Admin food category updated",
+            contentAdminService.updateFoodCategory(authorization, foodCategoryId, payload));
+        }
+
+        @DeleteMapping("/admin/food-categories/{foodCategoryId}")
+        public ApiResponse<Map<String, Object>> archiveFoodCategory(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @PathVariable Integer foodCategoryId) {
+        return ApiResponse.ok("Admin food category archived",
+            contentAdminService.archiveFoodCategory(authorization, foodCategoryId));
+        }
+
+        @PatchMapping("/admin/food-categories/{foodCategoryId}/restore")
+        public ApiResponse<Map<String, Object>> restoreFoodCategory(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @PathVariable Integer foodCategoryId) {
+        return ApiResponse.ok("Admin food category restored",
+            contentAdminService.restoreFoodCategory(authorization, foodCategoryId));
+        }
 }
 
