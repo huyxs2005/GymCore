@@ -123,15 +123,6 @@ public class CoachBookingController {
                         withAuth(authorizationHeader, null)));
     }
 
-    @PatchMapping("/coach-booking/requests/{requestId}/cancel")
-    public ApiResponse<Map<String, Object>> cancelBookingRequest(
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
-            @PathVariable Integer requestId) {
-        return ApiResponse.ok("PT booking request cancelled successfully",
-                coachBookingService.execute("customer-cancel-booking-request",
-                        withAuth(authorizationHeader, Map.of("requestId", requestId))));
-    }
-
     @DeleteMapping("/coach-booking/my-schedule/sessions/{sessionId}")
     public ApiResponse<Map<String, Object>> deleteMySession(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,

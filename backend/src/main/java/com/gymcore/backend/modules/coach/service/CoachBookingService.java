@@ -31,7 +31,6 @@ public class CoachBookingService {
     private static final int SELF_SERVICE_RESCHEDULE_CUTOFF_HOURS = 12;
     private static final String RESCHEDULE_REQUEST_PREFIX = "RESCHEDULE_REQUEST|";
     private static final String RESCHEDULE_DENIED_PREFIX = "RESCHEDULE_DENIED|";
-    private static final String COACH_MATCH_OPT_OUT_TOKEN = "[[PT_MATCH_DISABLED]]";
 
     private final JdbcTemplate jdbcTemplate;
     private final AuthService authService;
@@ -57,7 +56,6 @@ public class CoachBookingService {
             case "customer-get-my-schedule" -> customerGetMySchedule(request);
             case "customer-get-current-phase" -> customerGetCurrentPhase(request);
             case "customer-get-progress-context" -> customerGetProgressContext(request);
-            case "customer-cancel-booking-request" -> customerCancelBookingRequest(request);
             case "customer-delete-session" -> customerDeleteSession(request);
             case "coach-get-pt-requests" -> coachGetPtRequests(request);
             case "coach-approve-pt-request" -> coachApprovePtRequest(request);
@@ -167,9 +165,7 @@ public class CoachBookingService {
                 ) agg ON agg.CoachID = ch.CoachID
                 WHERE u.IsActive = 1
                 ORDER BY AvgRating DESC, u.FullName
-                """, coachListRowMapper()).stream()
-                .filter(item -> Boolean.TRUE.equals(item.get("acceptingCustomers")))
-                .toList();
+                """, coachListRowMapper());
         return Map.of("items", items);
     }
 
@@ -225,7 +221,7 @@ public class CoachBookingService {
 
         List<Map<String, Object>> booked = jdbcTemplate.query(
                 """
-                        SELECT s.SessionDate, s.DayOfWeek, s.TimeSlotID, ts.SlotIndex, ts.StartTime, ts.EndTime, s.Status, s.CancelReason
+                        SELECT s.SessionDate, s.DayOfWeek, s.TimeSlotID, ts.SlotIndex, ts.StartTime, ts.EndTime, s.Status
                         FROM dbo.PTSessions s
                         JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
                         WHERE s.CoachID = ? AND s.SessionDate >= ? AND s.SessionDate <= ? AND s.Status IN ('SCHEDULED','COMPLETED')
@@ -263,16 +259,12 @@ public class CoachBookingService {
     private Map<String, Object> customerMatchCoaches(Map<String, Object> payload) {
         AuthService.AuthContext customer = requireCustomer(payload);
         ensureNoBlockingPtRequest(customer.userId());
-        LocalDate startDate = LocalDate.now();
-        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate);
-        if (membership.customerMembershipId() == null || !membership.allowsCoachBooking()) {
+        String endDateStr = requireText(payload, "endDate");
+        LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
+        LocalDate endDate = LocalDate.parse(endDateStr);
+        if (endDate.isBefore(startDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "You need an ACTIVE Gym + Coach membership covering the selected period.");
-        }
-        LocalDate endDate = membership.coverageEndDate();
-        if (endDate == null || endDate.isBefore(startDate)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "You need an ACTIVE Gym + Coach membership covering the selected period.");
+                    "endDate must be on or after the earliest possible coaching start date.");
         }
 
         @SuppressWarnings("unchecked")
@@ -280,6 +272,12 @@ public class CoachBookingService {
         if (slots == null || slots.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "At least one slot (dayOfWeek, timeSlotId) is required.");
+        }
+
+        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate, endDate);
+        if (membership.customerMembershipId() == null || !membership.allowsCoachBooking()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "You need an ACTIVE Gym + Coach membership covering the selected period.");
         }
 
         List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
@@ -291,19 +289,16 @@ public class CoachBookingService {
         for (Map<String, Object> coach : coaches) {
             int coachId = requireInteger(coach, "coachId");
             MatchSummary summary = evaluateCoachMatch(coachId, startDate, endDate, requestedSlots);
-            boolean fullMatch = summary.exactMatchedSlots() == requestedSlots.size();
+            boolean fullMatch = summary.matchedSlots() == requestedSlots.size();
             boolean partialMatch = !fullMatch
                     && (summary.matchedSlots() > 0 || summary.bookedConflictSlots() > 0);
 
             Map<String, Object> item = new LinkedHashMap<>(coach);
             item.put("matchType", fullMatch ? "FULL" : "PARTIAL");
             item.put("matchedSlots", summary.matchedSlots());
-            item.put("exactMatchedSlots", summary.exactMatchedSlots());
             item.put("bookedConflictSlots", summary.bookedConflictSlots());
             item.put("requestedSlots", requestedSlots.size());
             item.put("unavailableSlots", summary.unavailableSlots());
-            item.put("alternativeSlots", summary.alternativeSlots());
-            item.put("resolvedSlots", summary.resolvedSlots());
 
             if (fullMatch) {
                 fullMatches.add(item);
@@ -331,6 +326,7 @@ public class CoachBookingService {
         AuthService.AuthContext customer = requireCustomer(payload);
         ensureNoBlockingPtRequest(customer.userId());
         int coachId = requireInteger(payload, "coachId");
+        String endDateStr = requireText(payload, "endDate");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> slots = (List<Map<String, Object>>) payload.get("slots");
         if (slots == null || slots.isEmpty()) {
@@ -339,20 +335,26 @@ public class CoachBookingService {
         }
 
         LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
-        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate);
+        LocalDate endDate = LocalDate.parse(endDateStr);
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after the earliest possible coaching start date.");
+        }
+
+        // Automatically resolve the customer's ACTIVE membership when available.
+        // If none exists, return NULL here and let the flow enforce the final rule.
+
+        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate, endDate);
         Integer customerMembershipId = membership.customerMembershipId();
-        LocalDate endDate = membership.coverageEndDate();
-        if (customerMembershipId == null || !membership.allowsCoachBooking() || endDate == null || endDate.isBefore(startDate)) {
+        if (customerMembershipId == null || !membership.allowsCoachBooking()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "You need an ACTIVE Gym + Coach membership covering the selected period.");
         }
         requireCoachExists(coachId);
-        List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
-        List<Map<String, Object>> normalizedSlots = toRequestedSlotMaps(requestedSlots);
 
         int ptRequestId = insertPtRecurringRequest(customer.userId(), coachId, customerMembershipId, startDate, endDate,
                 "PENDING", "REQUEST");
-        insertPtRequestSlots(ptRequestId, normalizedSlots);
+        insertPtRequestSlots(ptRequestId, slots);
 
         notifyPtRequestCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
 
@@ -370,6 +372,7 @@ public class CoachBookingService {
         AuthService.AuthContext customer = requireCustomer(payload);
         ensureNoBlockingPtRequest(customer.userId());
         int coachId = requireInteger(payload, "coachId");
+        String endDateStr = requireText(payload, "endDate");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> slots = (List<Map<String, Object>>) payload.get("slots");
         if (slots == null || slots.isEmpty()) {
@@ -378,27 +381,31 @@ public class CoachBookingService {
         }
 
         LocalDate startDate = resolveMinimumBookingStartDate(LocalDate.now());
-        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate);
+        LocalDate endDate = LocalDate.parse(endDateStr);
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after the earliest possible coaching start date.");
+        }
+
+        MembershipForPt membership = findActiveMembershipForPt(customer.userId(), startDate, endDate);
         Integer customerMembershipId = membership.customerMembershipId();
-        LocalDate endDate = membership.coverageEndDate();
-        if (customerMembershipId == null || !membership.allowsCoachBooking() || endDate == null || endDate.isBefore(startDate)) {
+        if (customerMembershipId == null || !membership.allowsCoachBooking()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "You need an ACTIVE Gym + Coach membership covering the selected period.");
         }
         requireCoachExists(coachId);
 
         List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
-        List<Map<String, Object>> normalizedSlots = toRequestedSlotMaps(requestedSlots);
         MatchSummary summary = evaluateCoachMatch(coachId, startDate, endDate, requestedSlots);
-        if (summary.exactMatchedSlots() != requestedSlots.size()) {
+        if (summary.matchedSlots() != requestedSlots.size()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Selected coach does not have all requested recurring slots available for instant booking.");
         }
 
         int ptRequestId = insertPtRecurringRequest(customer.userId(), coachId, customerMembershipId, startDate, endDate,
                 "APPROVED", "INSTANT");
-        insertPtRequestSlots(ptRequestId, normalizedSlots);
-        int sessionsCreated = generatePTSessions(ptRequestId, customer.userId(), coachId, startDate, endDate, normalizedSlots);
+        insertPtRequestSlots(ptRequestId, slots);
+        int sessionsCreated = generatePTSessions(ptRequestId, customer.userId(), coachId, startDate, endDate, slots);
 
         notifyInstantPtBookingCreated(ptRequestId, customer.userId(), coachId, startDate, endDate);
 
@@ -540,84 +547,6 @@ public class CoachBookingService {
     private Map<String, Object> customerGetProgressContext(Map<String, Object> payload) {
         AuthService.AuthContext customer = requireCustomer(payload);
         return buildCustomerProgressContext(customer.userId());
-    }
-
-    @Transactional
-    private Map<String, Object> customerCancelBookingRequest(Map<String, Object> payload) {
-        AuthService.AuthContext customer = requireCustomer(payload);
-        int requestId = requireInteger(payload, "requestId");
-
-        Map<String, Object> request = jdbcTemplate.query("""
-                SELECT TOP (1)
-                    r.PTRequestID,
-                    r.CoachID,
-                    r.Status,
-                    r.CreatedAt,
-                    u.FullName AS CoachName
-                FROM dbo.PTRecurringRequests r
-                JOIN dbo.Users u ON u.UserID = r.CoachID
-                WHERE r.PTRequestID = ?
-                  AND r.CustomerID = ?
-                """, (rs, i) -> {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("ptRequestId", rs.getInt("PTRequestID"));
-            item.put("coachId", rs.getInt("CoachID"));
-            item.put("coachName", rs.getString("CoachName"));
-            item.put("status", rs.getString("Status"));
-            item.put("createdAt", rs.getTimestamp("CreatedAt"));
-            return item;
-        }, requestId, customer.userId()).stream().findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PT request not found."));
-
-        String status = asText(request.get("status")).toUpperCase();
-        if (!"PENDING".equals(status)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only pending PT requests can be cancelled.");
-        }
-
-        Timestamp createdAt = (Timestamp) request.get("createdAt");
-        if (createdAt == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Request creation time is missing.");
-        }
-
-        LocalDateTime cancelDeadline = createdAt.toLocalDateTime().plusMinutes(5);
-        if (LocalDateTime.now().isAfter(cancelDeadline)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "This PT request can only be cancelled within 5 minutes after booking.");
-        }
-
-        jdbcTemplate.update("DELETE FROM dbo.PTRequestSlots WHERE PTRequestID = ?", requestId);
-        jdbcTemplate.update(
-                "DELETE FROM dbo.PTRecurringRequests WHERE PTRequestID = ? AND CustomerID = ? AND Status = 'PENDING'",
-                requestId, customer.userId());
-
-        Integer coachId = (Integer) request.get("coachId");
-        if (coachId != null) {
-            String customerName = loadUserFullName(customer.userId());
-            notificationService.notifyUser(
-                    coachId,
-                    "PT_REQUEST_CANCELLED_BY_CUSTOMER",
-                    "PT booking request cancelled",
-                    customerName + " cancelled the PT booking request before coach approval.",
-                    "/coach/booking-requests",
-                    requestId,
-                    "PT_REQUEST_CANCELLED_BY_CUSTOMER_" + requestId);
-        }
-
-        notificationService.notifyUser(
-                customer.userId(),
-                "PT_REQUEST_CANCELLED",
-                "PT booking request cancelled",
-                "Your PT booking request was cancelled successfully.",
-                "/customer/coach-booking",
-                requestId,
-                "PT_REQUEST_CANCELLED_" + requestId);
-
-        return Map.of(
-                "ptRequestId", requestId,
-                "status", "CANCELLED",
-                "message", "PT booking request cancelled successfully.");
     }
 
     public Map<String, Object> getCustomerProgressContext(int customerId) {
@@ -1234,7 +1163,6 @@ public class CoachBookingService {
         }
 
         List<RequestedSlot> requestedSlots = normalizeRequestedSlots(slots);
-        List<Map<String, Object>> normalizedSlots = toRequestedSlotMaps(requestedSlots);
         for (RequestedSlot requestedSlot : requestedSlots) {
             if (!isCoachWeeklyAvailable(coachId, requestedSlot.dayOfWeek(), requestedSlot.timeSlotId())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -1265,10 +1193,10 @@ public class CoachBookingService {
                 """, ptRequestId, cutoverDate);
 
         jdbcTemplate.update("DELETE FROM dbo.PTRequestSlots WHERE PTRequestID = ?", ptRequestId);
-        insertPtRequestSlots(ptRequestId, normalizedSlots);
+        insertPtRequestSlots(ptRequestId, slots);
 
         int created = regenerateFuturePtSessions(ptRequestId, customer.userId(), coachId, cutoverDate, phaseEndDate,
-                normalizedSlots, preservedFutureSessions);
+                slots, preservedFutureSessions);
 
         notificationService.notifyUser(
                 coachId,
@@ -1386,7 +1314,13 @@ public class CoachBookingService {
             m.put("status", rs.getString("Status"));
             m.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
 
-            m.put("slots", loadTemplateSlots(id));
+            // Fetch slots for this request
+            List<Map<String, Object>> slots = jdbcTemplate.query("""
+                    SELECT DayOfWeek, TimeSlotID FROM dbo.PTRequestSlots WHERE PTRequestID = ?
+                    """,
+                    (rs2, i2) -> Map.of("dayOfWeek", rs2.getInt("DayOfWeek"), "timeSlotId", rs2.getInt("TimeSlotID")),
+                    id);
+            m.put("slots", slots);
             return m;
         }, coach.userId());
         return Map.of("items", items);
@@ -1579,11 +1513,7 @@ public class CoachBookingService {
                 """, (rs, i) -> Map.of("dayOfWeek", rs.getInt("DayOfWeek"), "timeSlotId", rs.getInt("TimeSlotID")),
                 requestId);
 
-        LocalDate requestedStartDate = (LocalDate) req.get("startDate");
-        LocalDate actualStartDate = LocalDate.now().plusDays(1);
-        if (requestedStartDate != null && requestedStartDate.isAfter(actualStartDate)) {
-            actualStartDate = requestedStartDate;
-        }
+        LocalDate actualStartDate = nextMondayAfter(LocalDate.now());
         LocalDate endDate = (LocalDate) req.get("endDate");
         if (actualStartDate.isAfter(endDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -1659,8 +1589,6 @@ public class CoachBookingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "slots array is required.");
         }
         int coachId = coach.userId();
-        boolean acceptingCustomerRequests = payload.get("acceptingCustomerRequests") == null
-                || Boolean.TRUE.equals(payload.get("acceptingCustomerRequests"));
         jdbcTemplate.update("DELETE FROM dbo.CoachWeeklyAvailability WHERE CoachID = ?", coachId);
         int insertedCount = 0;
         for (Map<String, Object> slot : slots) {
@@ -1675,31 +1603,16 @@ public class CoachBookingService {
                     """, coachId, dayOfWeek, timeSlotId);
             insertedCount++;
         }
-        String existingBio = jdbcTemplate.queryForObject(
-                "SELECT Bio FROM dbo.Coaches WHERE CoachID = ?",
-                String.class,
-                coachId);
-        jdbcTemplate.update(
-                "UPDATE dbo.Coaches SET Bio = ? WHERE CoachID = ?",
-                mergeCoachAvailabilityFlagIntoBio(existingBio, acceptingCustomerRequests),
-                coachId);
         return Map.of(
                 "message", "Availability updated successfully.",
                 "inserted", insertedCount,
-                "total", insertedCount,
-                "acceptingCustomerRequests", acceptingCustomerRequests);
+                "total", insertedCount);
     }
 
     private Map<String, Object> coachGetMyAvailability(Map<String, Object> payload) {
         AuthService.AuthContext coach = requireCoach(payload);
         List<Map<String, Object>> weeklyAvailability = loadWeeklyAvailability(coach.userId());
-        String rawBio = jdbcTemplate.queryForObject(
-                "SELECT Bio FROM dbo.Coaches WHERE CoachID = ?",
-                String.class,
-                coach.userId());
-        return Map.of(
-                "weeklyAvailability", weeklyAvailability,
-                "acceptingCustomerRequests", extractCoachMatchAvailability(rawBio));
+        return Map.of("weeklyAvailability", weeklyAvailability);
     }
 
     private Map<String, Object> coachGetSchedule(Map<String, Object> payload) {
@@ -2299,7 +2212,6 @@ public class CoachBookingService {
         String bio = asText(body.get("bio"));
         String dateOfBirth = asText(body.get("dateOfBirth"));
         String gender = asText(body.get("gender"));
-        Boolean acceptingCustomerRequests = body.get("acceptingCustomerRequests") instanceof Boolean flag ? flag : null;
 
         Integer coachCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(1) FROM dbo.Coaches WHERE CoachID = ?",
@@ -2338,18 +2250,6 @@ public class CoachBookingService {
         if (phone != null)
             jdbcTemplate.update("UPDATE dbo.Users SET Phone = ?, UpdatedAt = SYSDATETIME() WHERE UserID = ?", phone,
                     coachId);
-        String existingBio = jdbcTemplate.queryForObject(
-                "SELECT Bio FROM dbo.Coaches WHERE CoachID = ?",
-                String.class,
-                coachId);
-        boolean acceptingCustomers = acceptingCustomerRequests != null
-                ? acceptingCustomerRequests
-                : extractCoachMatchAvailability(existingBio);
-        String persistedBio = bio != null
-                ? mergeCoachAvailabilityFlagIntoBio(bio, acceptingCustomers)
-                : (acceptingCustomerRequests != null
-                        ? mergeCoachAvailabilityFlagIntoBio(existingBio, acceptingCustomers)
-                        : null);
         int updatedRows = jdbcTemplate.update("""
                 UPDATE dbo.Coaches SET ExperienceYears = COALESCE(?, ExperienceYears), Bio = COALESCE(?, Bio),
                        DateOfBirth = CASE WHEN ? IS NOT NULL THEN ? ELSE DateOfBirth END,
@@ -2357,7 +2257,7 @@ public class CoachBookingService {
                 WHERE CoachID = ?
                 """,
                 experienceYears,
-                persistedBio,
+                bio,
                 parsedDateOfBirth == null ? null : java.sql.Date.valueOf(parsedDateOfBirth),
                 parsedDateOfBirth == null ? null : java.sql.Date.valueOf(parsedDateOfBirth),
                 gender,
@@ -2435,17 +2335,11 @@ public class CoachBookingService {
     private List<RequestedSlot> normalizeRequestedSlots(List<Map<String, Object>> slots) {
         List<RequestedSlot> normalized = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        Map<Integer, Integer> dayToSlot = new HashMap<>();
         for (Map<String, Object> slot : slots) {
             int dayOfWeek = requireInteger(slot, "dayOfWeek");
             int timeSlotId = requireInteger(slot, "timeSlotId");
             if (dayOfWeek < 1 || dayOfWeek > 7) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "dayOfWeek must be 1-7.");
-            }
-            Integer existingTimeSlotId = dayToSlot.putIfAbsent(dayOfWeek, timeSlotId);
-            if (existingTimeSlotId != null && existingTimeSlotId != timeSlotId) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Only one recurring slot can be selected per weekday.");
             }
             String key = dayOfWeek + "-" + timeSlotId;
             if (seen.add(key)) {
@@ -2455,30 +2349,12 @@ public class CoachBookingService {
         return normalized;
     }
 
-    private List<Map<String, Object>> toRequestedSlotMaps(List<RequestedSlot> requestedSlots) {
-        List<Map<String, Object>> normalizedSlots = new ArrayList<>();
-        for (RequestedSlot slot : requestedSlots) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("dayOfWeek", slot.dayOfWeek());
-            item.put("timeSlotId", slot.timeSlotId());
-            normalizedSlots.add(item);
-        }
-        return normalizedSlots;
-    }
-
     private MatchSummary evaluateCoachMatch(int coachId, LocalDate startDate, LocalDate endDate,
             List<RequestedSlot> requestedSlots) {
         List<Map<String, Object>> weeklyAvailability = loadWeeklyAvailability(coachId);
         Set<String> availablePairs = new HashSet<>();
-        Map<Integer, List<Integer>> availableSlotsByDay = new HashMap<>();
         for (Map<String, Object> item : weeklyAvailability) {
-            int dayOfWeek = requireInteger(item, "dayOfWeek");
-            int timeSlotId = requireInteger(item, "timeSlotId");
-            availablePairs.add(dayOfWeek + "-" + timeSlotId);
-            availableSlotsByDay.computeIfAbsent(dayOfWeek, ignored -> new ArrayList<>()).add(timeSlotId);
-        }
-        for (List<Integer> daySlots : availableSlotsByDay.values()) {
-            daySlots.sort(Integer::compareTo);
+            availablePairs.add(requireInteger(item, "dayOfWeek") + "-" + requireInteger(item, "timeSlotId"));
         }
 
         List<Map<String, Object>> booked = jdbcTemplate.query(
@@ -2494,59 +2370,30 @@ public class CoachBookingService {
             bookedPairs.add(requireInteger(item, "dayOfWeek") + "-" + requireInteger(item, "timeSlotId"));
         }
 
-        int exactMatched = 0;
         int matched = 0;
         int bookedConflicts = 0;
         List<Map<String, Object>> unavailable = new ArrayList<>();
-        List<Map<String, Object>> alternativeSlots = new ArrayList<>();
-        List<Map<String, Object>> resolvedSlots = new ArrayList<>();
         for (RequestedSlot slot : requestedSlots) {
             String key = slot.dayOfWeek() + "-" + slot.timeSlotId();
-            boolean exactWeeklyAvailable = availablePairs.contains(key);
-            boolean exactBooked = bookedPairs.contains(key);
-            if (exactWeeklyAvailable && !exactBooked) {
-                exactMatched++;
-                matched++;
-                resolvedSlots.add(Map.of(
+            if (!availablePairs.contains(key)) {
+                unavailable.add(Map.of(
                         "dayOfWeek", slot.dayOfWeek(),
                         "timeSlotId", slot.timeSlotId(),
-                        "requestedTimeSlotId", slot.timeSlotId(),
-                        "exactMatch", true));
+                        "reason", "NO_WEEKLY_AVAILABILITY"));
                 continue;
             }
-
-            List<Integer> sameDayAvailable = availableSlotsByDay.getOrDefault(slot.dayOfWeek(), List.of());
-            List<Integer> freeTimeSlotIds = sameDayAvailable.stream()
-                    .filter(candidate -> !bookedPairs.contains(slot.dayOfWeek() + "-" + candidate))
-                    .toList();
-            if (!freeTimeSlotIds.isEmpty()) {
-                int fallbackTimeSlotId = freeTimeSlotIds.getFirst();
-                matched++;
-                alternativeSlots.add(Map.of(
-                        "dayOfWeek", slot.dayOfWeek(),
-                        "requestedTimeSlotId", slot.timeSlotId(),
-                        "timeSlotId", fallbackTimeSlotId,
-                        "freeTimeSlotIds", freeTimeSlotIds,
-                        "reason", exactBooked ? "BOOKED_IN_RANGE" : "DIFFERENT_SLOT_AVAILABLE"));
-                resolvedSlots.add(Map.of(
-                        "dayOfWeek", slot.dayOfWeek(),
-                        "timeSlotId", fallbackTimeSlotId,
-                        "requestedTimeSlotId", slot.timeSlotId(),
-                        "exactMatch", false));
-                continue;
-            }
-
-            String reason = exactBooked ? "BOOKED_IN_RANGE" : "NO_WEEKLY_AVAILABILITY";
-            if (exactBooked) {
+            if (bookedPairs.contains(key)) {
                 bookedConflicts++;
+                unavailable.add(Map.of(
+                        "dayOfWeek", slot.dayOfWeek(),
+                        "timeSlotId", slot.timeSlotId(),
+                        "reason", "BOOKED_IN_RANGE"));
+                continue;
             }
-            unavailable.add(Map.of(
-                    "dayOfWeek", slot.dayOfWeek(),
-                    "timeSlotId", slot.timeSlotId(),
-                    "reason", reason));
+            matched++;
         }
 
-        return new MatchSummary(exactMatched, matched, bookedConflicts, unavailable, alternativeSlots, resolvedSlots);
+        return new MatchSummary(matched, bookedConflicts, unavailable);
     }
 
     // ---------- Helpers ----------
@@ -2580,60 +2427,50 @@ public class CoachBookingService {
         return authService.requireAuthContext(authorizationHeader);
     }
 
-    private MembershipForPt findActiveMembershipForPt(int customerId, LocalDate startDate) {
-        return jdbcTemplate.query("""
-                SELECT TOP (1)
-                    cm.CustomerMembershipID,
-                    cm.EndDate,
-                    mp.AllowsCoachBooking
-                FROM dbo.CustomerMemberships cm
-                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
-                WHERE cm.CustomerID = ?
-                  AND cm.Status = 'ACTIVE'
-                  AND cm.StartDate <= ?
-                  AND cm.EndDate >= ?
-                  AND UPPER(mp.PlanType) IN ('GYM_PLUS_COACH', 'GYM_COACH')
-                  AND mp.AllowsCoachBooking = 1
-                ORDER BY cm.EndDate ASC, cm.CustomerMembershipID ASC
-                """,
-                (rs, i) -> new MembershipForPt(
-                        rs.getInt("CustomerMembershipID"),
-                        rs.getBoolean("AllowsCoachBooking"),
-                        rs.getDate("EndDate").toLocalDate()),
-                customerId, startDate, startDate).stream()
-                .findFirst()
-                .orElse(new MembershipForPt(null, false, null));
+    private MembershipForPt findActiveMembershipForPt(int customerId, LocalDate startDate, LocalDate endDate) {
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT TOP 1 cm.CustomerMembershipID, mp.AllowsCoachBooking
+                    FROM dbo.CustomerMemberships cm
+                    JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                    WHERE cm.CustomerID = ? AND cm.Status = 'ACTIVE'
+                      AND ? >= cm.StartDate AND ? <= cm.EndDate
+                      AND mp.PlanType = 'GYM_PLUS_COACH'
+                      AND mp.AllowsCoachBooking = 1
+                    ORDER BY cm.EndDate ASC
+                    """,
+                    (rs, i) -> new MembershipForPt(rs.getInt("CustomerMembershipID"),
+                            rs.getBoolean("AllowsCoachBooking")),
+                    customerId, startDate, endDate);
+        } catch (EmptyResultDataAccessException e) {
+            // Allow returning a NULL membership ID when no membership exists.
+            // The caller then decides whether a membership is required.
+            return new MembershipForPt(null, false);
+        }
     }
 
     private MembershipForPt requireValidMembershipForPt(int customerId, int customerMembershipId,
             LocalDate startDate, LocalDate endDate) {
-        return jdbcTemplate.query("""
-                SELECT TOP (1)
-                    cm.CustomerMembershipID,
-                    cm.EndDate,
-                    mp.AllowsCoachBooking
+        List<MembershipForPt> list = jdbcTemplate.query("""
+                SELECT cm.CustomerMembershipID, mp.AllowsCoachBooking
                 FROM dbo.CustomerMemberships cm
                 JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
-                WHERE cm.CustomerMembershipID = ?
-                  AND cm.CustomerID = ?
-                  AND cm.Status = 'ACTIVE'
-                  AND cm.StartDate <= ?
-                  AND cm.EndDate >= ?
-                  AND UPPER(mp.PlanType) IN ('GYM_PLUS_COACH', 'GYM_COACH')
+                WHERE cm.CustomerID = ? AND cm.CustomerMembershipID = ? AND cm.Status = 'ACTIVE'
+                  AND ? >= cm.StartDate AND ? <= cm.EndDate
+                  AND mp.PlanType = 'GYM_PLUS_COACH'
                   AND mp.AllowsCoachBooking = 1
                 """,
-                (rs, i) -> new MembershipForPt(
-                        rs.getInt("CustomerMembershipID"),
-                        rs.getBoolean("AllowsCoachBooking"),
-                        rs.getDate("EndDate").toLocalDate()),
-                customerMembershipId, customerId, startDate, endDate).stream()
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Membership ID is invalid, inactive, or does not allow PT booking. Leave it empty to let the system use your active membership automatically."));
+                (rs, i) -> new MembershipForPt(rs.getInt("CustomerMembershipID"), rs.getBoolean("AllowsCoachBooking")),
+                customerId, customerMembershipId, startDate, endDate);
+        if (list.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Membership ID is invalid, inactive, or does not allow PT booking. Leave it empty to let the system use your active membership automatically.");
+        }
+        return list.get(0);
     }
 
     private LocalDate resolveMinimumBookingStartDate(LocalDate requestDate) {
-        return requestDate.plusDays(1);
+        return nextMondayOnOrAfter(requestDate.plusDays(7));
     }
 
     private LocalDate nextMondayOnOrAfter(LocalDate date) {
@@ -3064,15 +2901,13 @@ public class CoachBookingService {
     private RowMapper<Map<String, Object>> coachListRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
-            String rawBio = rs.getString("Bio");
             m.put("coachId", rs.getInt("CoachID"));
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
             m.put("phone", rs.getString("Phone"));
             m.put("avatarUrl", rs.getString("AvatarUrl"));
             m.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
-            m.put("bio", sanitizeCoachBio(rawBio));
-            m.put("acceptingCustomers", extractCoachMatchAvailability(rawBio));
+            m.put("bio", rs.getString("Bio"));
             m.put("averageRating",
                     rs.getObject("AvgRating") != null ? Math.round(rs.getDouble("AvgRating") * 100.0) / 100.0 : 0);
             m.put("reviewCount", rs.getInt("ReviewCount"));
@@ -3083,7 +2918,6 @@ public class CoachBookingService {
     private RowMapper<Map<String, Object>> coachDetailRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
-            String rawBio = rs.getString("Bio");
             m.put("coachId", rs.getInt("CoachID"));
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
@@ -3093,8 +2927,7 @@ public class CoachBookingService {
             m.put("dateOfBirth", dob != null ? dob.toLocalDate().format(DATE_FORMAT) : null);
             m.put("gender", rs.getString("Gender"));
             m.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
-            m.put("bio", sanitizeCoachBio(rawBio));
-            m.put("acceptingCustomers", extractCoachMatchAvailability(rawBio));
+            m.put("bio", rs.getString("Bio"));
             m.put("averageRating",
                     rs.getObject("AvgRating") != null ? Math.round(rs.getDouble("AvgRating") * 100.0) / 100.0 : 0);
             m.put("reviewCount", rs.getInt("ReviewCount"));
@@ -3482,14 +3315,12 @@ public class CoachBookingService {
     private RowMapper<Map<String, Object>> adminCoachListRowMapper() {
         return (rs, i) -> {
             Map<String, Object> m = new LinkedHashMap<>();
-            String rawBio = rs.getString("Bio");
             m.put("coachId", rs.getInt("CoachID"));
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
             m.put("phone", rs.getString("Phone"));
             m.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
-            m.put("bio", sanitizeCoachBio(rawBio));
-            m.put("acceptingCustomers", extractCoachMatchAvailability(rawBio));
+            m.put("bio", rs.getString("Bio"));
             m.put("averageRating",
                     rs.getObject("AvgRating") != null ? Math.round(rs.getDouble("AvgRating") * 100.0) / 100.0 : 0);
             m.put("reviewCount", rs.getInt("ReviewCount"));
@@ -3498,31 +3329,11 @@ public class CoachBookingService {
         };
     }
 
-    private boolean extractCoachMatchAvailability(String rawBio) {
-        return rawBio == null || !rawBio.contains(COACH_MATCH_OPT_OUT_TOKEN);
-    }
-
-    private String sanitizeCoachBio(String rawBio) {
-        if (rawBio == null) {
-            return null;
-        }
-        String sanitized = rawBio.replace(COACH_MATCH_OPT_OUT_TOKEN, "").trim();
-        return sanitized.isBlank() ? null : sanitized;
-    }
-
-    private String mergeCoachAvailabilityFlagIntoBio(String rawBio, boolean acceptingCustomers) {
-        String cleanBio = sanitizeCoachBio(rawBio);
-        if (acceptingCustomers) {
-            return cleanBio;
-        }
-        return cleanBio == null ? COACH_MATCH_OPT_OUT_TOKEN : cleanBio + "\n" + COACH_MATCH_OPT_OUT_TOKEN;
-    }
-
     private ResponseStatusException unsupportedAction(String action) {
         return new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Unsupported coach-booking action: " + action);
     }
 
-    private record MembershipForPt(Integer customerMembershipId, boolean allowsCoachBooking, LocalDate coverageEndDate) {
+    private record MembershipForPt(Integer customerMembershipId, boolean allowsCoachBooking) {
     }
 
     private record ExistingPtBooking(String status, LocalDate startDate, LocalDate endDate, int coachId) {
@@ -3531,13 +3342,7 @@ public class CoachBookingService {
     private record RequestedSlot(int dayOfWeek, int timeSlotId) {
     }
 
-    private record MatchSummary(
-            int exactMatchedSlots,
-            int matchedSlots,
-            int bookedConflictSlots,
-            List<Map<String, Object>> unavailableSlots,
-            List<Map<String, Object>> alternativeSlots,
-            List<Map<String, Object>> resolvedSlots) {
+    private record MatchSummary(int matchedSlots, int bookedConflictSlots, List<Map<String, Object>> unavailableSlots) {
     }
 
     private record RescheduleMeta(String state, LocalDate requestedDate, int requestedTimeSlotId, String note) {
@@ -3547,3 +3352,4 @@ public class CoachBookingService {
             String coachName, String sessionDate, String timeLabel) {
     }
 }
+

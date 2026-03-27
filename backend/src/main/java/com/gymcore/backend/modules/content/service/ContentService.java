@@ -65,6 +65,7 @@ public class ContentService {
             case "ai-weekly-plan" -> getAiWeeklyPlan(safePayload);
             case "ai-food-personalized" -> getAiFoodPersonalized(safePayload);
             case "ai-workout-assistant" -> getWorkoutAssistantAnswer(safePayload);
+            case "ai-food-assistant" -> getFoodAssistantAnswer(safePayload);
             case "ai-coach-booking-assistant" -> getCoachBookingAssistantAnswer(safePayload);
             default -> throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
                     "Unsupported content action: " + action);
@@ -292,6 +293,39 @@ public class ContentService {
         response.put("source", aiContext.goalSelection().source());
         response.put("workouts", workouts);
         return withAiContext(response, aiContext, "ai-workout-assistant");
+    }
+
+    private Map<String, Object> getFoodAssistantAnswer(Map<String, Object> payload) {
+        AiContextResolution aiContext = resolveAiContext(payload);
+        int limit = clampInt(payload.get("limitFoods"), 4, 1, 8);
+        List<Map<String, Object>> foods = recommendFoods(aiContext, limit);
+        String question = normalizeText(payload.get("question"));
+
+        List<String> lines = new ArrayList<>();
+        if (aiContext.goalSelection().goalCodes().isEmpty()) {
+            lines.add("Chua chon fitness goal, nen toi goi y mon an theo muc moi nhat trong database.");
+        } else {
+            lines.add("Mon an goi y duoc loc theo goals: "
+                    + String.join(", ", aiContext.goalSelection().goalCodes()) + ".");
+        }
+        if (StringUtils.hasText(question)) {
+            lines.add("Cau hoi cua ban: " + question + ".");
+        }
+        if (foods.isEmpty()) {
+            lines.add("Hien chua tim thay mon an phu hop trong database.");
+        } else {
+            lines.add("Duoi day la mot so mon an ban co the tham khao:");
+            for (Map<String, Object> food : foods) {
+                lines.add("- " + food.get("name"));
+            }
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("answer", String.join("\n", lines));
+        response.put("goalCodes", aiContext.goalSelection().goalCodes());
+        response.put("source", aiContext.goalSelection().source());
+        response.put("foods", foods);
+        return withAiContext(response, aiContext, "ai-food-assistant");
     }
 
     private Map<String, Object> getCoachBookingAssistantAnswer(Map<String, Object> payload) {

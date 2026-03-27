@@ -290,6 +290,78 @@ public class ContentAdminService {
         return Map.of("foodId", foodId, "active", true);
     }
 
+    public Map<String, Object> getFoodCategories(String authorizationHeader) {
+        currentUserService.requireAdmin(authorizationHeader);
+        List<Map<String, Object>> categories = loadFoodCategories(true);
+        return Map.of("items", categories);
+    }
+
+    public Map<String, Object> createFoodCategory(String authorizationHeader, Map<String, Object> payload) {
+        currentUserService.requireAdmin(authorizationHeader);
+        Map<String, Object> safePayload = payload == null ? Map.of() : payload;
+
+        String name = requireNonBlankString(safePayload.get("name"), "Food category name is required.");
+        String description = trimToNull(safePayload.get("description"));
+        boolean active = safePayload.get("active") == null || Boolean.TRUE.equals(toBoolean(safePayload.get("active")));
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            var ps = connection.prepareStatement("""
+                    INSERT INTO dbo.FoodCategories (CategoryName, Description, IsActive)
+                    VALUES (?, ?, ?)
+                    """, new String[] { "FoodCategoryID" });
+            ps.setString(1, name);
+            ps.setString(2, description);
+            ps.setBoolean(3, active);
+            return ps;
+        }, keyHolder);
+
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not create food category.");
+        }
+        return getFoodCategoryDetailInternal(key.intValue());
+    }
+
+    public Map<String, Object> updateFoodCategory(String authorizationHeader, int foodCategoryId, Map<String, Object> payload) {
+        currentUserService.requireAdmin(authorizationHeader);
+        Map<String, Object> safePayload = payload == null ? Map.of() : payload;
+
+        String name = requireNonBlankString(safePayload.get("name"), "Food category name is required.");
+        String description = trimToNull(safePayload.get("description"));
+        boolean active = safePayload.get("active") == null || Boolean.TRUE.equals(toBoolean(safePayload.get("active")));
+
+        int updated = jdbcTemplate.update("""
+                UPDATE dbo.FoodCategories
+                SET CategoryName = ?,
+                    Description = ?,
+                    IsActive = ?
+                WHERE FoodCategoryID = ?
+                """, name, description, active, foodCategoryId);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Food category not found.");
+        }
+        return getFoodCategoryDetailInternal(foodCategoryId);
+    }
+
+    public Map<String, Object> archiveFoodCategory(String authorizationHeader, int foodCategoryId) {
+        currentUserService.requireAdmin(authorizationHeader);
+        int updated = jdbcTemplate.update("UPDATE dbo.FoodCategories SET IsActive = 0 WHERE FoodCategoryID = ?", foodCategoryId);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Food category not found.");
+        }
+        return Map.of("foodCategoryId", foodCategoryId, "active", false);
+    }
+
+    public Map<String, Object> restoreFoodCategory(String authorizationHeader, int foodCategoryId) {
+        currentUserService.requireAdmin(authorizationHeader);
+        int updated = jdbcTemplate.update("UPDATE dbo.FoodCategories SET IsActive = 1 WHERE FoodCategoryID = ?", foodCategoryId);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Food category not found.");
+        }
+        return Map.of("foodCategoryId", foodCategoryId, "active", true);
+    }
+
     private Map<String, Object> getWorkoutDetailInternal(int workoutId) {
         try {
             Map<String, Object> workout = jdbcTemplate.queryForObject("""
@@ -348,6 +420,23 @@ public class ContentAdminService {
                 WHERE (? = 1) OR IsActive = 1
                 ORDER BY CategoryName
                 """, (rs, rowNum) -> mapWorkoutCategoryAdmin(rs), includeInactive ? 1 : 0);
+    }
+
+    private Map<String, Object> getFoodCategoryDetailInternal(int foodCategoryId) {
+        try {
+            Map<String, Object> category = jdbcTemplate.queryForObject("""
+                    SELECT FoodCategoryID,
+                           CategoryName,
+                           Description,
+                           IsActive
+                    FROM dbo.FoodCategories
+                    WHERE FoodCategoryID = ?
+                    """, (rs, rowNum) -> mapFoodCategoryAdmin(rs), foodCategoryId);
+            if (category == null) throw new EmptyResultDataAccessException(1);
+            return category;
+        } catch (EmptyResultDataAccessException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Food category not found.");
+        }
     }
 
     private List<Map<String, Object>> loadFoodCategories(boolean includeInactive) {

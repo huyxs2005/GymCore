@@ -42,6 +42,8 @@ public class AdminController {
             @RequestParam(required = false) String to,
             @RequestParam(required = false) String month,
             @RequestParam(required = false) String year) {
+
+
         Map<String, Object> filters = collectRevenueFilters(preset, from, to, month, year);
         return ApiResponse.ok("Revenue overview generated.",
                 adminService.execute("get-revenue-overview", authorizationHeader, filters));
