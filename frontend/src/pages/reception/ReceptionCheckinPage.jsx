@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { QrCode, Search, Camera, CameraOff, History, CheckCircle2, AlertCircle, UserRound, X, ShieldAlert, MonitorCheck, Loader2 } from 'lucide-react'
-import jsQR from 'jsqr'
+import QrScanner from 'qr-scanner'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { receptionCheckinApi } from '../../features/checkin/api/receptionCheckinApi'
 import { receptionCustomerApi } from '../../features/users/api/receptionCustomerApi'
@@ -49,9 +49,7 @@ function ReceptionCheckinPage() {
   const [scanPopup, setScanPopup] = useState(null)
 
   const videoRef = useRef(null)
-  const canvasRef = useRef(null)
-  const streamRef = useRef(null)
-  const detectorTimerRef = useRef(null)
+  const scannerRef = useRef(null)
   const handlingScanRef = useRef(false)
 
   const cameraSupported = useMemo(() => {
@@ -101,14 +99,16 @@ function ReceptionCheckinPage() {
   }, [])
 
   function stopCamera() {
-    if (detectorTimerRef.current) {
-      window.clearInterval(detectorTimerRef.current)
-      detectorTimerRef.current = null
+    const scanner = scannerRef.current
+    if (scanner) {
+      scanner.stop()
+      scanner.destroy()
+      scannerRef.current = null
     }
-    const stream = streamRef.current
+
+    const stream = videoRef.current?.srcObject
     if (stream) {
       stream.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
     }
     const video = videoRef.current
     if (video) {
@@ -118,6 +118,36 @@ function ReceptionCheckinPage() {
     setCameraOpen(false)
     setCameraReady(false)
     handlingScanRef.current = false
+  }
+
+  async function enhanceCameraTrack(track) {
+    if (!track || typeof track.getCapabilities !== 'function' || typeof track.applyConstraints !== 'function') {
+      return
+    }
+
+    const capabilities = track.getCapabilities()
+    const advanced = []
+
+    if (Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
+      advanced.push({ focusMode: 'continuous' })
+    }
+
+    if (typeof capabilities.zoom?.max === 'number' && typeof capabilities.zoom?.min === 'number') {
+      const preferredZoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 2))
+      if (preferredZoom > capabilities.zoom.min) {
+        advanced.push({ zoom: preferredZoom })
+      }
+    }
+
+    if (advanced.length === 0) {
+      return
+    }
+
+    try {
+      await track.applyConstraints({ advanced })
+    } catch {
+      // Best-effort enhancement only.
+    }
   }
 
   async function performCheckin(payload) {
@@ -160,118 +190,56 @@ function ReceptionCheckinPage() {
     handlingScanRef.current = false
   }
 
-  function decodeQrFromVideoFrame() {
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas || video.videoWidth <= 0 || video.videoHeight <= 0) {
-      return null
-    }
-
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    if (!ctx) {
-      return null
-    }
-
-    const attempts = [
-      { sx: 0, sy: 0, sw: video.videoWidth, sh: video.videoHeight },
-    ]
-
-    const side = Math.min(video.videoWidth, video.videoHeight)
-    if (side > 0) {
-      attempts.push({
-        sx: Math.floor((video.videoWidth - side) / 2),
-        sy: Math.floor((video.videoHeight - side) / 2),
-        sw: side,
-        sh: side,
-      })
-    }
-
-    for (const attempt of attempts) {
-      canvas.width = attempt.sw
-      canvas.height = attempt.sh
-      ctx.drawImage(video, attempt.sx, attempt.sy, attempt.sw, attempt.sh, 0, 0, attempt.sw, attempt.sh)
-      const imageData = ctx.getImageData(0, 0, attempt.sw, attempt.sh)
-      const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth',
-      })
-      if (decoded?.data) {
-        return decoded.data
-      }
-    }
-
-    return null
-  }
-
-  function startScanLoop(detector) {
-    if (detectorTimerRef.current) {
-      window.clearInterval(detectorTimerRef.current)
-    }
-
-    detectorTimerRef.current = window.setInterval(async () => {
-      if (handlingScanRef.current || !videoRef.current || videoRef.current.readyState < 2) {
-        return
-      }
-
-      try {
-        if (detector) {
-          const barcodes = await detector.detect(videoRef.current)
-          if (barcodes?.length) {
-            const barcode = barcodes[0]
-            await handleQrTokenDetected(barcode.rawValue || barcode.displayValue || '')
-            return
-          }
-        }
-
-        const token = decodeQrFromVideoFrame()
-        if (token) {
-          await handleQrTokenDetected(token)
-        }
-      } catch {
-        // Ignore per-frame decode errors.
-      }
-    }, 350)
-  }
-
   async function openCamera() {
     if (!cameraSupported) {
       setCameraError('Camera is not supported in this browser.')
       return
     }
 
+    stopCamera()
     setCameraError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-      })
-
       const video = videoRef.current
       if (!video) {
-        stream.getTracks().forEach((track) => track.stop())
         return
       }
 
-      video.srcObject = stream
-      await video.play()
-      streamRef.current = stream
+      const scanner = new QrScanner(
+        video,
+        (result) => {
+          handleQrTokenDetected(result?.data || '')
+        },
+        {
+          onDecodeError: () => {},
+          preferredCamera: 'environment',
+          maxScansPerSecond: 30,
+          calculateScanRegion: (videoElement) => {
+            const width = videoElement.videoWidth || 1280
+            const height = videoElement.videoHeight || 720
+            return {
+              x: 0,
+              y: 0,
+              width,
+              height,
+              downScaledWidth: Math.min(width, 1280),
+              downScaledHeight: Math.min(height, 720),
+            }
+          },
+          returnDetailedScanResult: true,
+        },
+      )
+      scanner.setInversionMode('both')
+      scannerRef.current = scanner
+      await scanner.start()
+
+      const stream = video.srcObject
+      const [videoTrack] = stream instanceof MediaStream ? stream.getVideoTracks() : []
+      await enhanceCameraTrack(videoTrack)
+
       setCameraOpen(true)
       setCameraReady(true)
-
-      const supportsBarcode = typeof window !== 'undefined' && typeof window.BarcodeDetector !== 'undefined'
-      if (!supportsBarcode) {
-        startScanLoop(null)
-        return
-      }
-
-      let detector
-      try {
-        detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-      } catch {
-        startScanLoop(null)
-        return
-      }
-
-      startScanLoop(detector)
     } catch {
+      stopCamera()
       setCameraError('Cannot access camera. Please allow camera permission and retry.')
     }
   }
@@ -518,7 +486,7 @@ function ReceptionCheckinPage() {
                 <div className="mt-8 flex justify-center">
                   <div className="flex items-center gap-3 rounded-full bg-emerald-500/10 px-4 py-2 ring-1 ring-emerald-500/20">
                     <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500 shadow-glow" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">System Processing Active</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">QR scanning</span>
                   </div>
                 </div>
               )}
