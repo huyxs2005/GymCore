@@ -13,6 +13,7 @@ const MAX_COUPON_DISCOUNT_PERCENT = 100
 const MAX_COUPON_DISCOUNT_AMOUNT = 9999999999.99
 const DECIMAL_INPUT_PATTERN = /^\d+(\.\d{1,2})?$/
 const WHOLE_NUMBER_INPUT_PATTERN = /^\d+$/
+const ADMIN_PROMOTIONS_ACTIVE_TAB_KEY = 'gymcore.admin.promotions.activeTab'
 
 function toOptionalNumber(value) {
   if (value == null) return null
@@ -165,7 +166,11 @@ function SummaryCard({ label, value, icon, tone = 'slate' }) {
 
 const AdminPromotionsPage = () => {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState('coupons')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === 'undefined') return 'coupons'
+    const savedTab = window.sessionStorage.getItem(ADMIN_PROMOTIONS_ACTIVE_TAB_KEY)
+    return savedTab === 'posts' ? 'posts' : 'coupons'
+  })
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
@@ -291,6 +296,11 @@ const AdminPromotionsPage = () => {
       }
     }
   }, [postBannerPreviewUrl])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.setItem(ADMIN_PROMOTIONS_ACTIVE_TAB_KEY, activeTab)
+  }, [activeTab])
 
   const coupons = useMemo(() => couponsData?.data?.coupons ?? [], [couponsData])
   const posts = useMemo(() => postsData?.data?.posts ?? [], [postsData])
@@ -418,6 +428,7 @@ const AdminPromotionsPage = () => {
   }, [couponForm])
 
   function openCouponModal(coupon = null) {
+    setActiveTab('coupons')
     setEditingItem(coupon)
     setCouponForm(coupon ? mapCouponToForm(coupon) : createEmptyCouponForm())
     setCouponFormError('')
@@ -430,6 +441,7 @@ const AdminPromotionsPage = () => {
   }
 
   function openPostModal(post = null) {
+    setActiveTab('posts')
     setEditingItem(post)
     setPostForm(post ? mapPostToForm(post) : createEmptyPostForm())
     setPostBannerPreviewUrl('')
@@ -685,41 +697,6 @@ const AdminPromotionsPage = () => {
       links={adminNav}
     >
       <div className="space-y-8">
-        {/* Quick Create Section */}
-        <section className="relative overflow-hidden bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-gym-200/50 group">
-          <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-96 h-96 bg-gym-600/20 rounded-full blur-[80px] group-hover:bg-gym-600/30 transition-colors duration-700"></div>
-          <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-64 h-64 bg-blue-600/10 rounded-full blur-[60px]"></div>
-
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-            <div className="max-w-xl">
-              <h2 className="text-3xl font-black mb-3 flex items-center gap-3">
-                <Sparkles className="text-gym-400 animate-pulse" />
-                Create New Promotion
-              </h2>
-              <p className="text-slate-400 font-medium text-lg leading-relaxed">
-                Launch a new marketing campaign or create standalone discount coupons to drive customer engagement and sales.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={() => openCouponModal()}
-                className="px-8 py-4 bg-gym-600 hover:bg-gym-700 text-white rounded-2xl font-bold flex items-center gap-3 transition-all active:scale-95 shadow-lg shadow-gym-600/20"
-              >
-                <Ticket size={20} />
-                New Coupon
-              </button>
-              <button
-                onClick={() => openPostModal()}
-                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl font-bold flex items-center gap-3 transition-all active:scale-95 backdrop-blur-md"
-              >
-                <Layout size={20} />
-                New Marketing Post
-              </button>
-            </div>
-          </div>
-        </section>
-
         <div className="flex border-b border-slate-200">
           <button
             onClick={() => setActiveTab('coupons')}
@@ -822,7 +799,7 @@ const AdminPromotionsPage = () => {
                   ) : filteredCoupons.length === 0 ? (
                     <tr><td colSpan="6" className="p-10 text-center text-slate-400">No coupons match the current filters.</td></tr>
                   ) : filteredCoupons.map(coupon => (
-                    <tr key={coupon.PromotionID} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={coupon.PromotionID} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <span className="font-mono font-bold text-gym-600 bg-gym-50 px-2 py-1 rounded">
                           {coupon.PromoCode}
@@ -945,7 +922,7 @@ const AdminPromotionsPage = () => {
                   ) : filteredPosts.length === 0 ? (
                     <tr><td colSpan="5" className="p-10 text-center text-slate-400">No promotion posts match the current filters.</td></tr>
                   ) : filteredPosts.map(post => (
-                    <tr key={post.PromotionPostID} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={post.PromotionPostID} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {post.BannerUrl ? (

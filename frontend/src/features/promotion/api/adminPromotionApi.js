@@ -16,12 +16,15 @@ export const adminPromotionApi = {
   uploadBanner(file) {
     const formData = new FormData()
     formData.append('file', file)
-    return apiClient.post('/v1/admin/promotions/banners', formData)
+    return apiClient.post('/v1/admin/promotions/banners', formData, {
+      skipMutationSync: true,
+    })
       .then((response) => response.data?.data ?? response.data)
   },
   deleteUploadedBanner(imageUrl) {
     return apiClient.delete('/v1/admin/promotions/banners', {
       params: { imageUrl },
+      skipMutationSync: true,
     }).then((response) => response.data?.data ?? response.data)
   },
   updatePost(postId, payload) {

@@ -4,6 +4,34 @@ import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
 import { User, Star, Activity, ClipboardList, TrendingUp, Phone, Mail, ChevronRight, X, Plus, Edit2, Check, Scale, Calendar, Clock, CheckCircle2, Users, Search, Quote } from 'lucide-react'
 
+function getInitials(name) {
+  return String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'CU'
+}
+
+function CustomerAvatar({ avatarUrl, name, className = 'h-14 w-14 rounded-2xl', iconClassName = 'h-7 w-7 text-slate-400' }) {
+  return (
+    <div className={`flex shrink-0 items-center justify-center overflow-hidden bg-white/5 ring-1 ring-white/10 ${className}`}>
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={name || 'Customer avatar'}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="text-sm font-black uppercase tracking-[0.18em] text-slate-200">
+          {getInitials(name)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function StarDisplay({ rating }) {
   return (
     <span className="flex items-center gap-0.5">
@@ -45,6 +73,7 @@ function StudentDetailModal({ student, onClose }) {
   const [noteLoading, setNoteLoading] = useState(false)
   const [noteMsg, setNoteMsg] = useState('')
   const [error, setError] = useState('')
+  const completedSessions = (history?.sessions ?? []).filter((session) => session.status === 'COMPLETED')
 
   const loadHistory = useCallback(async () => {
     try {
@@ -150,9 +179,7 @@ function StudentDetailModal({ student, onClose }) {
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col bg-transparent overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="gc-glass-panel flex flex-col h-full overflow-hidden border-white/10 shadow-2xl">
           <div className="flex items-center gap-4 border-b border-white/5 p-6 bg-white/[0.02]">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-              <User className="h-7 w-7 text-slate-400" />
-            </div>
+            <CustomerAvatar avatarUrl={studentInfo.avatarUrl} name={studentInfo.fullName} />
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-xl font-bold text-white font-display">{student.fullName}</h3>
               <p className="text-sm font-medium text-slate-500">{student.sessionCount} sessions &bull; {student.email}</p>
@@ -387,7 +414,7 @@ function StudentDetailModal({ student, onClose }) {
                 )}
 
                 <div className="gc-card-compact border-white/10 bg-white/[0.02]">
-                  <p className="gc-section-kicker mb-4">Chronicle New Note</p>
+                  <p className="gc-section-kicker mb-4">New note</p>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Target Session</label>
@@ -397,12 +424,17 @@ function StudentDetailModal({ student, onClose }) {
                         className="gc-input"
                       >
                         <option value="" className="bg-slate-900">-- Choose associated session --</option>
-                        {historyLoading ? <option disabled>Loading history...</option> : (history?.sessions ?? []).map(s => (
+                        {historyLoading ? <option disabled>Loading history...</option> : completedSessions.map(s => (
                           <option key={s.ptSessionId} value={s.ptSessionId} className="bg-slate-900">
                             {new Date(s.sessionDate).toLocaleDateString()} | Slot {s.slotIndex} | {s.status}
                           </option>
                         ))}
                       </select>
+                      {!historyLoading && completedSessions.length === 0 && (
+                        <p className="text-xs font-medium text-slate-500">
+                          Only sessions marked as completed in your timetable can be selected for notes.
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Note Content</label>
@@ -566,8 +598,7 @@ function CoachCustomersPage() {
 
   return (
     <WorkspaceScaffold
-      title="Training Ecosystem"
-      subtitle="Comprehensive intelligence on your trainee base, satisfaction metrics, and performance history."
+      showHeader={false}
     >
       <div className="max-w-7xl space-y-8 pb-20">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -639,9 +670,11 @@ function CoachCustomersPage() {
                   >
                     <div className="p-7 flex-1">
                       <div className="mb-6 flex items-start justify-between">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 transition group-hover:bg-gym-500 group-hover:ring-gym-500">
-                          <User className="h-7 w-7 text-slate-400 group-hover:text-slate-900" />
-                        </div>
+                        <CustomerAvatar
+                          avatarUrl={student.avatarUrl}
+                          name={student.fullName}
+                          className="h-14 w-14 rounded-2xl transition group-hover:bg-gym-500 group-hover:ring-gym-500"
+                        />
                         <ChevronRight className="h-5 w-5 text-slate-600 transition-all group-hover:text-white group-hover:translate-x-1" />
                       </div>
                       

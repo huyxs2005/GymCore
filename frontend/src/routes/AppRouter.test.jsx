@@ -21,10 +21,6 @@ vi.mock('../pages/reception/ReceptionCustomersPage', () => ({
   default: () => <div>Reception Customer Lookup</div>,
 }))
 
-vi.mock('../pages/admin/AdminSupportConsolePage', () => ({
-  default: () => <div>Admin Support Console</div>,
-}))
-
 vi.mock('../pages/admin/AdminGoalsPage', () => ({
   default: () => <div>Admin Goals</div>,
 }))
@@ -218,7 +214,7 @@ describe('AppRouter role guards', () => {
     expect((await screen.findAllByText(/Admin Invoice Center/i)).length).toBeGreaterThan(0)
   })
 
-  it('allows admin to open the support console route', async () => {
+  it('redirects the removed admin support route to dashboard', async () => {
     act(() => {
       setAccessToken('token')
       setAuthUser({
@@ -229,7 +225,7 @@ describe('AppRouter role guards', () => {
       })
     })
     renderAt('/admin/support')
-    expect(await screen.findByText(/Admin Support Console/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Operations snapshot/i)).toBeInTheDocument()
   })
 
   it('redirects receptionist away from the admin support route', async () => {

@@ -197,6 +197,27 @@
   .gc-scrollbar-hidden::-webkit-scrollbar {
     display: none; /* Chrome/Safari */
   }
+
+  .gc-scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(245, 158, 11, 0.3) rgba(255, 255, 255, 0.03);
+  }
+
+  .gc-scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .gc-scrollbar-thin::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .gc-scrollbar-thin::-webkit-scrollbar-thumb {
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    background: rgba(245, 158, 11, 0.3);
+    background-clip: content-box;
+  }
 }
 
 @layer utilities {

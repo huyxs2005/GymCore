@@ -1,5 +1,5 @@
 import { Component, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { AlertTriangle, BadgeCheck, ChevronDown, Search, UserCircle2, X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
@@ -118,6 +118,15 @@ function formatWeekRangeLabel(weekCursor) {
   return `${weekStart.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })} to ${weekEnd.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}`
 }
 
+function getCustomerCoachBookingTab(search) {
+  const params = new URLSearchParams(search || '')
+  const tab = String(params.get('tab') || '').trim().toLowerCase()
+  if (tab === 'match' || tab === 'feedback' || tab === 'schedule') {
+    return tab
+  }
+  return 'schedule'
+}
+
 function getDayMeta(dayOfWeek) {
   return DAYS.find((day) => day.id === dayOfWeek) || null
 }
@@ -171,6 +180,15 @@ function formatApprovalEta(value) {
     month: 'short',
     year: 'numeric',
   })}`
+}
+
+function getScheduleCellStatusLabel(sessions) {
+  if (!Array.isArray(sessions) || sessions.length === 0) return ''
+  if (sessions.length > 1) return `${sessions.length} sessions`
+  const normalized = String(sessions[0]?.status || '').toUpperCase()
+  if (normalized === 'COMPLETED') return 'Session completed'
+  if (normalized === 'CANCELLED') return 'Session cancelled'
+  return 'Session booked'
 }
 
 function canCancelPendingRequest(createdAt) {
@@ -402,7 +420,8 @@ function sortPartialMatchesByLeastConflict(items) {
 }
 
 function CustomerCoachBookingPage() {
-  const [activeTab, setActiveTab] = useState('schedule')
+  const location = useLocation()
+  const [activeTab, setActiveTab] = useState(() => getCustomerCoachBookingTab(location.search))
   const [timeSlots, setTimeSlots] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -468,6 +487,11 @@ function CustomerCoachBookingPage() {
     rating: 0,
     comment: '',
   })
+
+  useEffect(() => {
+    const nextTab = getCustomerCoachBookingTab(location.search)
+    setActiveTab((current) => (current === nextTab ? current : nextTab))
+  }, [location.search])
   const [seriesModal, setSeriesModal] = useState({
     open: false,
     focusDay: 1,
@@ -775,9 +799,45 @@ function CustomerCoachBookingPage() {
     })
   }
 
-  function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
-    setHasPreviewedMatches(false)
-    setRequestedWeeklySlots((prev) => prev.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)))
+  async function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
+    const nextSlots = requestedWeeklySlots.filter(
+      (slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId),
+    )
+
+    if (nextSlots.length === requestedWeeklySlots.length) {
+      return
+    }
+
+    setRequestedWeeklySlots(nextSlots)
+
+    if (nextSlots.length === 0) {
+      setHasPreviewedMatches(false)
+      setMatches({
+        fullMatches: [],
+        partialMatches: [],
+      })
+      return
+    }
+
+    if (activeTab !== 'match' || !hasPreviewedMatches) {
+      return
+    }
+
+    try {
+      setError('')
+      const response = await coachBookingApi.matchCoaches({
+        slots: nextSlots
+          .slice()
+          .sort((left, right) => {
+            if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+            return left.timeSlotId - right.timeSlotId
+          }),
+      })
+      const payload = response?.data ?? response
+      setMatches(normalizeMatchResults(payload))
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot refresh coach matches')
+    }
   }
 
   const formatSlotLabel = useCallback((timeSlotId) => {
@@ -1390,11 +1450,25 @@ function CustomerCoachBookingPage() {
     }
     try {
       setLoading(true)
+      const submittedFeedback = {
+        ptSessionId: feedbackModal.session.ptSessionId,
+        rating: feedbackModal.rating,
+        comment: feedbackModal.comment || '',
+        createdAt: new Date().toISOString(),
+      }
       await coachBookingApi.submitFeedback({
         ptSessionId: feedbackModal.session.ptSessionId,
         rating: feedbackModal.rating,
         comment: feedbackModal.comment || '',
       })
+      setScheduleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => (
+          item.ptSessionId === feedbackModal.session.ptSessionId
+            ? { ...item, hasFeedback: true, feedback: submittedFeedback }
+            : item
+        )),
+      }))
       setFeedbackModal({ open: false, session: null, rating: 0, comment: '' })
       setMessage('Feedback submitted.')
       await loadMySchedule()
@@ -1811,6 +1885,8 @@ function CustomerCoachBookingPage() {
                           {scheduleWeekDays.map((day) => {
                             const daySessions = scheduleGridSessions.get(`${day.value}__${slot.timeSlotId}`) || []
                             const hasSessions = daySessions.length > 0
+                            const primarySession = daySessions[0] || null
+                            const statusAppearance = getSessionStatusAppearance(primarySession?.status)
                             return (
                               <div key={`schedule-cell-${day.value}-${slot.timeSlotId}`} className="border-r border-white/10 p-1.5 align-top last:border-r-0">
                                 {hasSessions ? (
@@ -1828,9 +1904,9 @@ function CustomerCoachBookingPage() {
                                       <p className="text-sm font-bold leading-tight text-slate-100">{daySessions[0].coachName || 'Assigned coach'}</p>
                                       <p className="mt-0.5 text-[11px] leading-tight text-slate-400">{formatSlotLabel(slot.timeSlotId)}</p>
                                     </div>
-                                    <div className="inline-flex items-center gap-1.5 rounded-full bg-[#23242c] px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
-                                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                      <span>{daySessions.length === 1 ? 'Session booked' : `${daySessions.length} sessions`}</span>
+                                    <div className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusAppearance.badge}`}>
+                                      <span className={`h-2 w-2 rounded-full ${statusAppearance.dot}`} />
+                                      <span>{getScheduleCellStatusLabel(daySessions)}</span>
                                     </div>
                                   </button>
                                 ) : (
@@ -1857,7 +1933,21 @@ function CustomerCoachBookingPage() {
                 <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4">
                   <div className="font-semibold text-slate-900">{s.coachName}</div>
                   <div className="text-sm text-slate-600">{s.sessionDate} | Slot {s.slotIndex}</div>
-                  <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gym-600 text-white">Rate this session</button>
+                  {s.hasFeedback ? (
+                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                        Review submitted
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        Rating {Number(s.feedback?.rating || 0).toFixed(1)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {s.feedback?.comment || 'No comment left.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gym-600 text-white">Rate this session</button>
+                  )}
                 </div>
               ))}
               {!loading && completedSessions.length === 0 && <div className="text-sm text-slate-500">No completed sessions to rate.</div>}
@@ -2761,6 +2851,7 @@ function CustomerCoachBookingPage() {
                 .map((session) => {
                   const normalizedStatus = String(session.status || '').toUpperCase()
                   const canManage = normalizedStatus === 'SCHEDULED'
+                  const sessionNotes = Array.isArray(session.notes) ? session.notes : []
                   return (
                     <div key={`schedule-modal-session-${session.ptSessionId}`} className="rounded-[24px] border border-white/10 bg-white/2 px-5 py-6">
                       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2783,6 +2874,26 @@ function CustomerCoachBookingPage() {
 
                       {session.cancelReason ? (
                         <p className="mt-4 text-sm text-rose-300">Cancellation reason: {session.cancelReason}</p>
+                      ) : null}
+
+                      {normalizedStatus === 'COMPLETED' ? (
+                        <div className="mt-5 rounded-2xl border border-sky-400/20 bg-sky-500/10 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-200">Coach notes</p>
+                          {sessionNotes.length > 0 ? (
+                            <div className="mt-3 space-y-3">
+                              {sessionNotes.map((note, index) => (
+                                <div key={`session-note-${session.ptSessionId}-${index}`} className="rounded-xl border border-white/10 bg-black/15 px-4 py-3">
+                                  <p className="text-sm leading-relaxed text-slate-100">{note.noteContent || 'No details provided.'}</p>
+                                  <p className="mt-2 text-xs text-slate-400">
+                                    {formatDateTimeLabel(note.updatedAt || note.createdAt)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-slate-300">No coach note was added for this completed session.</p>
+                          )}
+                        </div>
                       ) : null}
 
                       {canManage ? (

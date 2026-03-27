@@ -204,10 +204,10 @@ function AdminCoachInsightsPage() {
                   Open coach management <ArrowRight size={16} />
                 </Link>
                 <Link
-                  to="/admin/support"
+                  to="/admin/dashboard"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
-                  Open support console <ArrowRight size={16} />
+                  Open dashboard <ArrowRight size={16} />
                 </Link>
               </div>
             </div>

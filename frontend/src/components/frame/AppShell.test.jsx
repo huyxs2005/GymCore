@@ -198,6 +198,14 @@ describe('AppShell cart button', () => {
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
   })
 
+  it('removes top workspace navigation on admin routes', () => {
+    mockSessionState.user = { userId: 7, role: 'ADMIN', fullName: 'Admin GymCore' }
+
+    renderShell('/admin/dashboard')
+
+    expect(screen.queryByRole('navigation', { name: /workspace navigation/i })).not.toBeInTheDocument()
+  })
+
   it('does not reuse another customer cart badge when the session user changes', async () => {
     const client = new QueryClient({
       defaultOptions: {

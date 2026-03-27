@@ -996,6 +996,22 @@ public class CoachBookingService {
             m.put("ptSessionId", rs.getInt("PTSessionID"));
             m.put("noteContent", rs.getString("NoteContent"));
             m.put("updatedAt", timestampToIso(rs.getTimestamp("UpdatedAt")));
+                m.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
+            return m;
+        }, customer.userId());
+
+        List<Map<String, Object>> allFeedback = jdbcTemplate.query("""
+                SELECT cf.PTSessionID, cf.CoachFeedbackID, cf.Rating, cf.Comment, cf.CreatedAt
+                FROM dbo.CoachFeedback cf
+                JOIN dbo.PTSessions s ON s.PTSessionID = cf.PTSessionID
+                WHERE s.CustomerID = ?
+                ORDER BY cf.CreatedAt DESC
+                """, (rs, i) -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("ptSessionId", rs.getInt("PTSessionID"));
+            m.put("coachFeedbackId", rs.getInt("CoachFeedbackID"));
+            m.put("rating", rs.getInt("Rating"));
+            m.put("comment", rs.getString("Comment"));
             m.put("createdAt", timestampToIso(rs.getTimestamp("CreatedAt")));
             return m;
         }, customer.userId());
@@ -1007,10 +1023,19 @@ public class CoachBookingService {
             notesBySession.computeIfAbsent(sid, k -> new java.util.ArrayList<>()).add(note);
         }
 
+        Map<Integer, Map<String, Object>> feedbackBySession = new LinkedHashMap<>();
+        for (Map<String, Object> feedback : allFeedback) {
+            int sid = (Integer) feedback.get("ptSessionId");
+            feedbackBySession.putIfAbsent(sid, feedback);
+        }
+
         // Attach notes to each session
         for (Map<String, Object> session : items) {
             int sid = (Integer) session.get("ptSessionId");
             session.put("notes", notesBySession.getOrDefault(sid, List.of()));
+            Map<String, Object> feedback = feedbackBySession.get(sid);
+            session.put("feedback", feedback == null ? Map.of() : feedback);
+            session.put("hasFeedback", feedback != null);
             RescheduleMeta meta = parseRescheduleMeta(asText(session.get("cancelReason")));
             if (meta != null) {
                 Map<String, Object> reschedule = new LinkedHashMap<>();
@@ -1721,7 +1746,8 @@ public class CoachBookingService {
         List<Map<String, Object>> items = jdbcTemplate.query(
                 """
                         SELECT s.PTSessionID, s.PTRequestID, s.CustomerID, s.SessionDate, s.DayOfWeek, s.TimeSlotID, s.Status,
-                               ts.SlotIndex, ts.StartTime, ts.EndTime, u.FullName AS CustomerName, u.Email AS CustomerEmail, u.Phone AS CustomerPhone
+                               ts.SlotIndex, ts.StartTime, ts.EndTime, u.FullName AS CustomerName, u.Email AS CustomerEmail, u.Phone AS CustomerPhone,
+                               u.AvatarUrl
                         FROM dbo.PTSessions s
                         JOIN dbo.TimeSlots ts ON ts.TimeSlotID = s.TimeSlotID
                         JOIN dbo.Users u ON u.UserID = s.CustomerID
@@ -2005,6 +2031,15 @@ public class CoachBookingService {
         String noteContent = requireText(((Map<?, ?>) payload.getOrDefault("body", Map.of())), "noteContent");
 
         requireSessionBelongsToCoach(sessionId, coach.userId());
+        String sessionStatus = jdbcTemplate.queryForObject(
+                "SELECT Status FROM dbo.PTSessions WHERE PTSessionID = ? AND CoachID = ?",
+                String.class,
+                sessionId,
+                coach.userId());
+        if (!"COMPLETED".equalsIgnoreCase(sessionStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Session not found or not completed. Only completed sessions can be used for notes.");
+        }
         jdbcTemplate.update("INSERT INTO dbo.PTSessionNotes (PTSessionID, NoteContent) VALUES (?, ?)", sessionId,
                 noteContent);
         return Map.of("ptSessionId", sessionId, "message", "Note added.");
@@ -2095,7 +2130,7 @@ public class CoachBookingService {
         AuthService.AuthContext coach = requireCoach(payload);
         List<Map<String, Object>> items = jdbcTemplate.query(
                 """
-                        SELECT DISTINCT u.UserID AS CustomerID, u.FullName, u.Email, u.Phone,
+                        SELECT DISTINCT u.UserID AS CustomerID, u.FullName, u.Email, u.Phone, u.AvatarUrl,
                                (SELECT COUNT(*) FROM dbo.PTSessions s WHERE s.CoachID = ? AND s.CustomerID = u.UserID AND s.Status IN ('SCHEDULED','COMPLETED')) AS SessionCount
                         FROM dbo.PTSessions s
                         JOIN dbo.Users u ON u.UserID = s.CustomerID
@@ -3221,6 +3256,7 @@ public class CoachBookingService {
             m.put("customerName", rs.getString("CustomerName"));
             m.put("customerEmail", rs.getString("CustomerEmail"));
             m.put("customerPhone", rs.getString("CustomerPhone"));
+            m.put("avatarUrl", rs.getString("AvatarUrl"));
             m.put("sessionDate", dateToString(rs.getDate("SessionDate").toLocalDate()));
             m.put("dayOfWeek", rs.getInt("DayOfWeek"));
             m.put("timeSlotId", rs.getInt("TimeSlotID"));
@@ -3239,6 +3275,7 @@ public class CoachBookingService {
             m.put("fullName", rs.getString("FullName"));
             m.put("email", rs.getString("Email"));
             m.put("phone", rs.getString("Phone"));
+            m.put("avatarUrl", rs.getString("AvatarUrl"));
             m.put("sessionCount", rs.getInt("SessionCount"));
             return m;
         };

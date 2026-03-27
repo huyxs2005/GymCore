@@ -41,7 +41,6 @@ function getQuickLinks(pathname, role) {
   if (pathname.startsWith('/admin/')) {
     return [
       { to: '/admin/dashboard', label: 'Dashboard' },
-      { to: '/admin/support', label: 'Support Console' },
       { to: '/admin/reports', label: 'Reports' },
     ]
   }
@@ -106,7 +105,6 @@ function getAiQuickActions(pathname, role) {
 
   const adminActions = [
     { id: 'ai-admin-dashboard', label: 'Open dashboard', route: '/admin/dashboard', type: 'route' },
-    { id: 'ai-admin-support', label: 'Open support console', route: '/admin/support', type: 'route' },
     { id: 'ai-admin-reports', label: 'Open reports', route: '/admin/reports', type: 'route' },
   ]
 
@@ -187,7 +185,7 @@ function AppShell({ children }) {
   const roleLinks = getRoleLinks(userRole)
   const workspaceLinks = getWorkspaceLinks(pathname)
   const headerLinks = workspaceLinks.length > 0 ? workspaceLinks : (isAuthenticated && shouldUseRoleHeader(pathname) ? roleLinks : [])
-  const showWorkspaceNav = headerLinks.length > 0
+  const showWorkspaceNav = !pathname.startsWith('/admin/') && headerLinks.length > 0
   const showShopCartButton = isAuthenticated && userRole === 'CUSTOMER'
   const desktopNavRef = useRef(null)
   const mobileNavRef = useRef(null)
@@ -270,6 +268,10 @@ function AppShell({ children }) {
     el.scrollLeft = mobileDragRef.current.scrollLeft - walk
     setMobileOverflow(getOverflowState(el))
   }
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
 
   useEffect(() => {
     if (!showWorkspaceNav) {

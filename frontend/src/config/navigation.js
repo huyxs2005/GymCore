@@ -21,7 +21,6 @@ export const receptionNav = [
 
 export const adminNav = [
   { to: '/admin/dashboard', label: 'Dashboard' },
-  { to: '/admin/support', label: 'Support Console' },
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/memberships', label: 'Memberships' },
   { to: '/admin/coach-management', label: 'Coach Management' },
