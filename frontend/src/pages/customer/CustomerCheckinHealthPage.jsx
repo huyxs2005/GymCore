@@ -157,7 +157,7 @@ function CustomerCheckinHealthPage() {
   return (
     <WorkspaceScaffold
       title="Check-in & Health Log"
-      subtitle="Use this page for check-in QR, manual body metrics, and raw history. Progress Hub remains the main overview for follow-up."
+      subtitle="Use this page for check-in QR, manual body metrics, and raw history."
       links={customerNav}
       showHeader={false}
     >

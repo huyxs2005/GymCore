@@ -167,21 +167,19 @@ describe('AppShell cart button', () => {
       .map((link) => link.textContent?.trim())
       .filter(Boolean)
     expect(labels).toEqual([
-      'Progress Hub',
       'Health Status',
       'Personal Trainer',
-      'Workout/Food/AI',
+      'Training & Nutrition',
       'Membership',
       'Promotions',
       'Product Shop',
     ])
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
-    expect(within(headerNav).getByRole('link', { name: /^Progress Hub$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Health Status$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Personal Trainer$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Promotions$/i })).toBeInTheDocument()
-    expect(within(headerNav).getByRole('link', { name: /^Workout\/Food\/AI$/i })).toBeInTheDocument()
+    expect(within(headerNav).getByRole('link', { name: /^Training & Nutrition$/i })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Open Customer/i })).not.toBeInTheDocument()
   })
 
@@ -198,6 +196,14 @@ describe('AppShell cart button', () => {
     headerNav = screen.getAllByRole('navigation')[0]
     expect(within(headerNav).getByRole('link', { name: /^Membership$/i })).toBeInTheDocument()
     expect(within(headerNav).getByRole('link', { name: /^Product Shop$/i })).toBeInTheDocument()
+  })
+
+  it('removes top workspace navigation on admin routes', () => {
+    mockSessionState.user = { userId: 7, role: 'ADMIN', fullName: 'Admin GymCore' }
+
+    renderShell('/admin/dashboard')
+
+    expect(screen.queryByRole('navigation', { name: /workspace navigation/i })).not.toBeInTheDocument()
   })
 
   it('does not reuse another customer cart badge when the session user changes', async () => {

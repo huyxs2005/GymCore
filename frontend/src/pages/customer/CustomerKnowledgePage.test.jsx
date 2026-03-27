@@ -210,9 +210,9 @@ describe('CustomerKnowledgePage', () => {
           workoutId: 11,
         },
         {
-          id: 'review-progress-hub',
+          id: 'review-health-status',
           label: 'Review latest progress signals',
-          route: '/customer/progress-hub',
+          route: '/customer/checkin-health',
           type: 'route',
         },
       ],
@@ -265,9 +265,9 @@ describe('CustomerKnowledgePage', () => {
       ],
       nextActions: [
         {
-          id: 'review-progress-hub',
+          id: 'review-health-status',
           label: 'Review latest progress signals',
-          route: '/customer/progress-hub',
+          route: '/customer/checkin-health',
           type: 'route',
         },
       ],

@@ -1,5 +1,5 @@
 import { Component, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { AlertTriangle, BadgeCheck, ChevronDown, Search, UserCircle2, X } from 'lucide-react'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
@@ -85,6 +85,48 @@ function getMinimumBookingStartDate(baseDate = new Date()) {
   return getNextMondayOnOrAfter(addDays(baseDate, 7))
 }
 
+function getWeekStart(date) {
+  const source = new Date(date)
+  const day = source.getDay()
+  const offset = day === 0 ? -6 : 1 - day
+  return addDays(source, offset)
+}
+
+function buildWeekDays(weekCursor) {
+  const weekStart = parseDateValue(weekCursor)
+  if (!weekStart) return []
+  return DAYS.map((day, index) => {
+    const current = addDays(weekStart, index)
+    return {
+      ...day,
+      value: formatDateValue(current),
+      dateLabel: current.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
+    }
+  })
+}
+
+function shiftWeek(weekCursor, delta) {
+  const current = parseDateValue(weekCursor)
+  if (!current) return weekCursor
+  return formatDateValue(addDays(current, delta * 7))
+}
+
+function formatWeekRangeLabel(weekCursor) {
+  const weekStart = parseDateValue(weekCursor)
+  if (!weekStart) return ''
+  const weekEnd = addDays(weekStart, 6)
+  return `${weekStart.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })} to ${weekEnd.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}`
+}
+
+function getCustomerCoachBookingTab(search) {
+  const params = new URLSearchParams(search || '')
+  const tab = String(params.get('tab') || '').trim().toLowerCase()
+  if (tab === 'match' || tab === 'feedback' || tab === 'schedule') {
+    return tab
+  }
+  return 'schedule'
+}
+
 function getDayMeta(dayOfWeek) {
   return DAYS.find((day) => day.id === dayOfWeek) || null
 }
@@ -99,29 +141,6 @@ function getAdjustedReason(reason) {
   if (reason === 'BOOKED_IN_RANGE') return 'Chosen time is occupied, but this weekday still has another free slot'
   if (reason === 'DIFFERENT_SLOT_AVAILABLE') return 'This weekday is still compatible with another free slot'
   return 'Alternative slot available on this weekday'
-}
-
-function buildMonthGrid(monthCursor) {
-  const monthStart = parseDateValue(monthCursor)
-  if (!monthStart) return []
-  const first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
-  const startOffset = (first.getDay() + 6) % 7
-  const gridStart = addDays(first, -startOffset)
-
-  return Array.from({ length: 35 }, (_, index) => {
-    const current = addDays(gridStart, index)
-    return {
-      value: formatDateValue(current),
-      dayNumber: current.getDate(),
-      isCurrentMonth: current.getMonth() === first.getMonth(),
-    }
-  })
-}
-
-function shiftMonth(monthCursor, delta) {
-  const current = parseDateValue(monthCursor)
-  if (!current) return monthCursor
-  return formatDateValue(new Date(current.getFullYear(), current.getMonth() + delta, 1))
 }
 
 function formatHumanDate(value) {
@@ -161,6 +180,15 @@ function formatApprovalEta(value) {
     month: 'short',
     year: 'numeric',
   })}`
+}
+
+function getScheduleCellStatusLabel(sessions) {
+  if (!Array.isArray(sessions) || sessions.length === 0) return ''
+  if (sessions.length > 1) return `${sessions.length} sessions`
+  const normalized = String(sessions[0]?.status || '').toUpperCase()
+  if (normalized === 'COMPLETED') return 'Session completed'
+  if (normalized === 'CANCELLED') return 'Session cancelled'
+  return 'Session booked'
 }
 
 function canCancelPendingRequest(createdAt) {
@@ -392,7 +420,8 @@ function sortPartialMatchesByLeastConflict(items) {
 }
 
 function CustomerCoachBookingPage() {
-  const [activeTab, setActiveTab] = useState('schedule')
+  const location = useLocation()
+  const [activeTab, setActiveTab] = useState(() => getCustomerCoachBookingTab(location.search))
   const [timeSlots, setTimeSlots] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -413,6 +442,8 @@ function CustomerCoachBookingPage() {
     loading: false,
     coach: null,
   })
+  const [coachProfileReviewSort, setCoachProfileReviewSort] = useState('highest')
+  const [coachProfileReviewPage, setCoachProfileReviewPage] = useState(1)
   const [coachBookingModal, setCoachBookingModal] = useState({
     open: false,
     loading: false,
@@ -458,6 +489,11 @@ function CustomerCoachBookingPage() {
     rating: 0,
     comment: '',
   })
+
+  useEffect(() => {
+    const nextTab = getCustomerCoachBookingTab(location.search)
+    setActiveTab((current) => (current === nextTab ? current : nextTab))
+  }, [location.search])
   const [seriesModal, setSeriesModal] = useState({
     open: false,
     focusDay: 1,
@@ -468,6 +504,10 @@ function CustomerCoachBookingPage() {
     open: false,
     session: null,
     reason: '',
+  })
+  const [scheduleSessionModal, setScheduleSessionModal] = useState({
+    open: false,
+    date: '',
   })
   const [membershipGate, setMembershipGate] = useState({
     loading: true,
@@ -486,7 +526,7 @@ function CustomerCoachBookingPage() {
     activeSession: null,
   })
   const [ptBookingBlockedModal, setPtBookingBlockedModal] = useState(false)
-  const [scheduleMonthCursor, setScheduleMonthCursor] = useState('')
+  const [scheduleWeekCursor, setScheduleWeekCursor] = useState('')
   const [selectedScheduleDate, setSelectedScheduleDate] = useState('')
   const minimumBookingStartValue = useMemo(() => formatDateValue(getMinimumBookingStartDate(new Date())), [])
 
@@ -761,9 +801,45 @@ function CustomerCoachBookingPage() {
     })
   }
 
-  function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
-    setHasPreviewedMatches(false)
-    setRequestedWeeklySlots((prev) => prev.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId)))
+  async function removeRequestedWeeklySlot(dayOfWeek, timeSlotId) {
+    const nextSlots = requestedWeeklySlots.filter(
+      (slot) => !(slot.dayOfWeek === dayOfWeek && slot.timeSlotId === timeSlotId),
+    )
+
+    if (nextSlots.length === requestedWeeklySlots.length) {
+      return
+    }
+
+    setRequestedWeeklySlots(nextSlots)
+
+    if (nextSlots.length === 0) {
+      setHasPreviewedMatches(false)
+      setMatches({
+        fullMatches: [],
+        partialMatches: [],
+      })
+      return
+    }
+
+    if (activeTab !== 'match' || !hasPreviewedMatches) {
+      return
+    }
+
+    try {
+      setError('')
+      const response = await coachBookingApi.matchCoaches({
+        slots: nextSlots
+          .slice()
+          .sort((left, right) => {
+            if (left.dayOfWeek !== right.dayOfWeek) return left.dayOfWeek - right.dayOfWeek
+            return left.timeSlotId - right.timeSlotId
+          }),
+      })
+      const payload = response?.data ?? response
+      setMatches(normalizeMatchResults(payload))
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot refresh coach matches')
+    }
   }
 
   const formatSlotLabel = useCallback((timeSlotId) => {
@@ -866,6 +942,8 @@ function CustomerCoachBookingPage() {
 
   async function openCoachProfile(coachId) {
     try {
+      setCoachProfileReviewSort('highest')
+      setCoachProfileReviewPage(1)
       setCoachProfileModal({
         open: true,
         loading: true,
@@ -889,6 +967,8 @@ function CustomerCoachBookingPage() {
   }
 
   function closeCoachProfile() {
+    setCoachProfileReviewSort('highest')
+    setCoachProfileReviewPage(1)
     setCoachProfileModal({
       open: false,
       loading: false,
@@ -1320,6 +1400,15 @@ function CustomerCoachBookingPage() {
     })
   }
 
+  function openScheduleSessionModal(date) {
+    setSelectedScheduleDate(date)
+    setScheduleSessionModal({ open: true, date })
+  }
+
+  function closeScheduleSessionModal() {
+    setScheduleSessionModal({ open: false, date: '' })
+  }
+
   async function confirmCancelSession() {
     const sessionId = cancelModal.session?.ptSessionId
     if (!sessionId) return
@@ -1367,11 +1456,25 @@ function CustomerCoachBookingPage() {
     }
     try {
       setLoading(true)
+      const submittedFeedback = {
+        ptSessionId: feedbackModal.session.ptSessionId,
+        rating: feedbackModal.rating,
+        comment: feedbackModal.comment || '',
+        createdAt: new Date().toISOString(),
+      }
       await coachBookingApi.submitFeedback({
         ptSessionId: feedbackModal.session.ptSessionId,
         rating: feedbackModal.rating,
         comment: feedbackModal.comment || '',
       })
+      setScheduleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => (
+          item.ptSessionId === feedbackModal.session.ptSessionId
+            ? { ...item, hasFeedback: true, feedback: submittedFeedback }
+            : item
+        )),
+      }))
       setFeedbackModal({ open: false, session: null, rating: 0, comment: '' })
       setMessage('Feedback submitted.')
       await loadMySchedule()
@@ -1386,6 +1489,28 @@ function CustomerCoachBookingPage() {
     () => scheduleData.items.filter((s) => String(s.status || '').toUpperCase() === 'COMPLETED'),
     [scheduleData.items],
   )
+  const coachProfileReviews = useMemo(() => {
+    const items = Array.isArray(coachProfileModal.coach?.recentFeedback) ? coachProfileModal.coach.recentFeedback.slice() : []
+    items.sort((left, right) => {
+      const ratingDelta = Number(right.rating || 0) - Number(left.rating || 0)
+      if (ratingDelta !== 0) {
+        return coachProfileReviewSort === 'highest' ? ratingDelta : -ratingDelta
+      }
+      return String(right.createdAt || '').localeCompare(String(left.createdAt || ''))
+    })
+    return items
+  }, [coachProfileModal.coach, coachProfileReviewSort])
+  const coachProfileReviewPageCount = useMemo(
+    () => Math.max(1, Math.ceil(coachProfileReviews.length / 5)),
+    [coachProfileReviews.length],
+  )
+  const paginatedCoachProfileReviews = useMemo(() => {
+    const start = (coachProfileReviewPage - 1) * 5
+    return coachProfileReviews.slice(start, start + 5)
+  }, [coachProfileReviewPage, coachProfileReviews])
+  useEffect(() => {
+    setCoachProfileReviewPage((current) => Math.min(current, coachProfileReviewPageCount))
+  }, [coachProfileReviewPageCount])
   const activePhase = scheduleData.activePhase
   const ptDashboard = scheduleData.dashboard ?? {}
   const weeklyDashboardSchedule = Array.isArray(ptDashboard.weeklySchedule) ? ptDashboard.weeklySchedule : []
@@ -1403,11 +1528,54 @@ function CustomerCoachBookingPage() {
     })
     return grouped
   }, [scheduleData.items])
-  const scheduleCalendarDays = useMemo(() => buildMonthGrid(scheduleMonthCursor), [scheduleMonthCursor])
+  const scheduleWeekDays = useMemo(() => buildWeekDays(scheduleWeekCursor), [scheduleWeekCursor])
   const selectedScheduleItems = useMemo(
     () => (selectedScheduleDate ? sessionsByDate.get(selectedScheduleDate) || [] : []),
     [selectedScheduleDate, sessionsByDate],
   )
+  const scheduleGridSlots = useMemo(() => {
+    const slots = new Map()
+
+    timeSlots.forEach((slot) => {
+      const key = Number(slot.timeSlotId || 0)
+      if (!key) return
+      slots.set(key, {
+        timeSlotId: key,
+        slotIndex: Number(slot.slotIndex || key),
+        startTime: slot.startTime || '',
+        endTime: slot.endTime || '',
+      })
+    })
+
+    scheduleData.items.forEach((session) => {
+      const key = Number(session.timeSlotId || session.slotIndex || 0)
+      if (!key || slots.has(key)) return
+      slots.set(key, {
+        timeSlotId: key,
+        slotIndex: Number(session.slotIndex || key),
+        startTime: session.startTime || '',
+        endTime: session.endTime || '',
+      })
+    })
+
+    return Array.from(slots.values()).sort((left, right) => {
+      if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex
+      return left.timeSlotId - right.timeSlotId
+    })
+  }, [scheduleData.items, timeSlots])
+  const scheduleGridSessions = useMemo(() => {
+    const grouped = new Map()
+    scheduleData.items.forEach((session) => {
+      const date = session.sessionDate
+      const slotKey = Number(session.timeSlotId || session.slotIndex || 0)
+      if (!date || !slotKey) return
+      const key = `${date}__${slotKey}`
+      const existing = grouped.get(key) || []
+      existing.push(session)
+      grouped.set(key, existing)
+    })
+    return grouped
+  }, [scheduleData.items])
   const groupedSeriesSlots = useMemo(() => {
     return DAYS.map((day) => ({
       ...day,
@@ -1433,15 +1601,15 @@ function CustomerCoachBookingPage() {
     if (firstSessionDate) {
       const firstDate = parseDateValue(firstSessionDate)
       if (firstDate) {
-        const firstMonth = formatDateValue(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1))
-        setScheduleMonthCursor((prev) => prev || firstMonth)
+        const firstWeek = formatDateValue(getWeekStart(firstDate))
+        setScheduleWeekCursor((prev) => prev || firstWeek)
       }
       setSelectedScheduleDate((prev) => prev || firstSessionDate)
       return
     }
 
-    const currentMonth = formatDateValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
-    setScheduleMonthCursor((prev) => prev || currentMonth)
+    const currentWeek = formatDateValue(getWeekStart(new Date()))
+    setScheduleWeekCursor((prev) => prev || currentWeek)
     setSelectedScheduleDate('')
   }, [scheduleData.items])
 
@@ -1674,25 +1842,31 @@ function CustomerCoachBookingPage() {
             ) : (
               <section className="space-y-4">
                 <div className="p-1">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Monthly view</p>
-                      <h4 className="text-lg font-bold text-slate-900">Your coaching calendar</h4>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Weekly view</p>
+                      <h4 className="text-lg font-bold text-slate-900">Your coaching timetable</h4>
+                      <p className="mt-1 text-xs text-slate-500">Scheduled sessions are highlighted in green inside the weekly board.</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
+                        onClick={() => setScheduleWeekCursor((prev) => shiftWeek(prev, -1))}
                         className="gc-hover-text-green rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition"
                       >
                         Prev
                       </button>
-                      <div className="min-w-32 text-center text-sm font-bold text-slate-800">
-                        {parseDateValue(scheduleMonthCursor)?.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                      <div className="min-w-40 text-center">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {parseDateValue(scheduleWeekCursor)?.getFullYear() || ''}
+                        </div>
+                        <div className="text-sm font-bold text-slate-800">
+                          {formatWeekRangeLabel(scheduleWeekCursor)}
+                        </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
+                        onClick={() => setScheduleWeekCursor((prev) => shiftWeek(prev, 1))}
                         className="gc-hover-text-green rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition"
                       >
                         Next
@@ -1700,48 +1874,77 @@ function CustomerCoachBookingPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 p-1">
-                    <div className="grid grid-cols-7 gap-1">
-                      {DAYS.map((day) => (
-                        <div key={`schedule-header-${day.id}`} className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                          {day.shortLabel}
+                  <div className="mt-4 overflow-x-auto rounded-3xl border border-white/10 bg-[#13141d] shadow-[0_16px_48px_rgba(0,0,0,0.28)]">
+                    <div className="min-w-[860px]">
+                      <div className="grid grid-cols-[112px_repeat(7,minmax(0,1fr))] border-b border-white/10 bg-[#242535]">
+                        <div className="border-r border-white/10 px-3 py-2.5">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Week</p>
+                          <p className="mt-1 text-sm font-bold text-slate-100">{formatWeekRangeLabel(scheduleWeekCursor)}</p>
+                        </div>
+                        {scheduleWeekDays.map((day) => {
+                          const daySessions = sessionsByDate.get(day.value) || []
+                          const isSelected = selectedScheduleDate === day.value
+                          return (
+                            <button
+                              key={`schedule-header-${day.value}`}
+                              type="button"
+                              onClick={() => daySessions.length > 0 && openScheduleSessionModal(day.value)}
+                              aria-label={daySessions.length > 0 ? `${day.value}, ${daySessions.length} coaching slot${daySessions.length > 1 ? 's' : ''}` : day.value}
+                              className={`border-r border-white/10 px-3 py-2.5 text-left last:border-r-0 ${daySessions.length > 0 ? 'transition hover:bg-white/5' : ''} ${isSelected ? 'bg-[#3a302a]' : ''}`}
+                            >
+                              <p className="text-base font-bold uppercase tracking-wide text-slate-100">{day.shortLabel}</p>
+                              <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+                                <span>{day.dateLabel}</span>
+                                {daySessions.length > 0 ? <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> : null}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {scheduleGridSlots.map((slot) => (
+                        <div key={`schedule-row-${slot.timeSlotId}`} className="grid grid-cols-[112px_repeat(7,minmax(0,1fr))] border-b border-white/10 bg-[#171821] last:border-b-0">
+                          <div className="border-r border-white/10 px-3 py-3">
+                            <p className="text-sm font-bold text-slate-100">Slot {slot.slotIndex}</p>
+                            <p className="mt-0.5 text-[11px] text-slate-400">
+                              {String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}
+                            </p>
+                          </div>
+                          {scheduleWeekDays.map((day) => {
+                            const daySessions = scheduleGridSessions.get(`${day.value}__${slot.timeSlotId}`) || []
+                            const hasSessions = daySessions.length > 0
+                            const primarySession = daySessions[0] || null
+                            const statusAppearance = getSessionStatusAppearance(primarySession?.status)
+                            return (
+                              <div key={`schedule-cell-${day.value}-${slot.timeSlotId}`} className="border-r border-white/10 p-1.5 align-top last:border-r-0">
+                                {hasSessions ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openScheduleSessionModal(day.value)}
+                                    aria-label={`${day.value}, Slot ${slot.slotIndex}, ${daySessions.length} coaching session${daySessions.length > 1 ? 's' : ''}`}
+                                    className={`flex min-h-16 w-full flex-col items-start justify-between rounded-lg border border-transparent px-2.5 py-2 text-left transition ${
+                                      selectedScheduleDate === day.value
+                                        ? 'bg-[#2e241f]'
+                                        : 'bg-transparent hover:bg-white/5'
+                                    }`}
+                                  >
+                                    <div>
+                                      <p className="text-sm font-bold leading-tight text-slate-100">{daySessions[0].coachName || 'Assigned coach'}</p>
+                                      <p className="mt-0.5 text-[11px] leading-tight text-slate-400">{formatSlotLabel(slot.timeSlotId)}</p>
+                                    </div>
+                                    <div className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusAppearance.badge}`}>
+                                      <span className={`h-2 w-2 rounded-full ${statusAppearance.dot}`} />
+                                      <span>{getScheduleCellStatusLabel(daySessions)}</span>
+                                    </div>
+                                  </button>
+                                ) : (
+                                  <div className="flex min-h-16 items-center justify-center rounded-lg border border-transparent text-sm text-slate-500">-</div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       ))}
-                      {scheduleCalendarDays.map((day) => {
-                        const daySessions = sessionsByDate.get(day.value) || []
-                        const hasSessions = daySessions.length > 0
-                        const isSelected = selectedScheduleDate === day.value
-                        return (
-                          <button
-                            key={`schedule-day-${day.value}`}
-                            type="button"
-                            onClick={() => hasSessions && setSelectedScheduleDate(day.value)}
-                            aria-label={hasSessions ? `${day.value}, ${daySessions.length} coaching slot${daySessions.length > 1 ? 's' : ''}` : day.value}
-                            className={`min-h-24 rounded-2xl border p-2 text-left transition ${
-                              isSelected
-                                ? 'border-gym-600 bg-gym-50 shadow-sm'
-                                : hasSessions
-                                  ? 'border-emerald-200 bg-emerald-50/70 hover:border-gym-400 hover:bg-gym-50'
-                                  : day.isCurrentMonth
-                                    ? 'border-slate-200 bg-white text-slate-700'
-                                    : 'border-slate-100 bg-slate-100 text-slate-300'
-                            } ${hasSessions ? 'cursor-pointer' : 'cursor-default'}`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <span className={`text-sm font-semibold ${day.isCurrentMonth ? 'text-slate-800' : 'text-slate-300'}`}>{day.dayNumber}</span>
-                              {hasSessions && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.14)]" />}
-                            </div>
-                            {hasSessions && (
-                              <div className="mt-6">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                                  <span>{daySessions.length}</span>
-                                  <span>{daySessions.length === 1 ? 'slot' : 'slots'}</span>
-                                </div>
-                              </div>
-                            )}
-                          </button>
-                        )
-                      })}
                     </div>
                   </div>
                 </div>
@@ -1758,7 +1961,21 @@ function CustomerCoachBookingPage() {
                 <div key={s.ptSessionId} className="bg-white border border-slate-200 rounded-2xl p-4">
                   <div className="font-semibold text-slate-900">{s.coachName}</div>
                   <div className="text-sm text-slate-600">{s.sessionDate} | Slot {s.slotIndex}</div>
-                  <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gym-600 text-white">Rate this session</button>
+                  {s.hasFeedback ? (
+                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                        Review submitted
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        Rating {Number(s.feedback?.rating || 0).toFixed(1)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {s.feedback?.comment || 'No comment left.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <button onClick={() => setFeedbackModal({ open: true, session: s, rating: 0, comment: '' })} className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gym-600 text-white">Rate this session</button>
+                  )}
                 </div>
               ))}
               {!loading && completedSessions.length === 0 && <div className="text-sm text-slate-500">No completed sessions to rate.</div>}
@@ -2098,20 +2315,88 @@ function CustomerCoachBookingPage() {
                 </div>
 
                 <div className="gc-surface-plain">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Recent feedback</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reviews</p>
+                    <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCoachProfileReviewSort('highest')
+                          setCoachProfileReviewPage(1)
+                        }}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          coachProfileReviewSort === 'highest'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Highest
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCoachProfileReviewSort('lowest')
+                          setCoachProfileReviewPage(1)
+                        }}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          coachProfileReviewSort === 'lowest'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Lowest
+                      </button>
+                    </div>
+                  </div>
                   <div className="mt-3 space-y-3">
-                    {Array.isArray(coachProfileModal.coach.recentFeedback) && coachProfileModal.coach.recentFeedback.length > 0 ? (
-                      coachProfileModal.coach.recentFeedback.map((item, index) => (
-                        <div key={`feedback-${index}`} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{item.customerName || 'Customer'}</p>
-                            <p className="text-xs font-semibold text-amber-600">Rating {Number(item.rating || 0).toFixed(1)}</p>
+                    {coachProfileReviews.length > 0 ? (
+                      <>
+                        {paginatedCoachProfileReviews.map((item, index) => (
+                          <div key={`feedback-${coachProfileReviewPage}-${index}-${item.createdAt || index}`} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-900">{item.customerName || 'Customer'}</p>
+                              <p className="text-xs font-semibold text-amber-600">Rating {Number(item.rating || 0).toFixed(1)}</p>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-600">{item.comment || 'No comment left.'}</p>
                           </div>
-                          <p className="mt-1 text-sm text-slate-600">{item.comment || 'No comment left.'}</p>
-                        </div>
-                      ))
+                        ))}
+                        {coachProfileReviewPageCount > 1 ? (
+                          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setCoachProfileReviewPage((current) => Math.max(1, current - 1))}
+                              disabled={coachProfileReviewPage === 1}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Prev
+                            </button>
+                            {Array.from({ length: coachProfileReviewPageCount }, (_, index) => index + 1).map((page) => (
+                              <button
+                                key={`coach-review-page-${page}`}
+                                type="button"
+                                onClick={() => setCoachProfileReviewPage(page)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                  coachProfileReviewPage === page
+                                    ? 'bg-slate-900 text-white'
+                                    : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setCoachProfileReviewPage((current) => Math.min(coachProfileReviewPageCount, current + 1))}
+                              disabled={coachProfileReviewPage === coachProfileReviewPageCount}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Next
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
-                      <p className="text-sm text-slate-500">No feedback yet.</p>
+                      <p className="text-sm text-slate-500">No reviews yet.</p>
                     )}
                   </div>
                 </div>
@@ -2633,6 +2918,107 @@ function CustomerCoachBookingPage() {
               >
                 Buy Gym + Coach plan
               </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleSessionModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-6xl rounded-[28px] border border-white/10 bg-[#14151f] px-6 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Selected day</p>
+                <h4 className="mt-2 text-3xl font-bold text-white">{formatHumanDate(scheduleSessionModal.date)}</h4>
+              </div>
+              <button
+                type="button"
+                onClick={closeScheduleSessionModal}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {selectedScheduleItems
+                .slice()
+                .sort((left, right) => Number(left.timeSlotId || left.slotIndex || 0) - Number(right.timeSlotId || right.slotIndex || 0))
+                .map((session) => {
+                  const normalizedStatus = String(session.status || '').toUpperCase()
+                  const canManage = normalizedStatus === 'SCHEDULED'
+                  const sessionNotes = Array.isArray(session.notes) ? session.notes : []
+                  return (
+                    <div key={`schedule-modal-session-${session.ptSessionId}`} className="rounded-[24px] border border-white/10 bg-white/2 px-5 py-6">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-2xl font-bold text-white">{session.coachName || 'Assigned coach'}</p>
+                          <p className="mt-2 text-lg text-slate-400">
+                            {session.sessionDate || '-'} | {formatSlotLabel(session.timeSlotId || session.slotIndex)}
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-4 py-2 text-xs font-semibold tracking-[0.16em] ${
+                          normalizedStatus === 'COMPLETED'
+                            ? 'bg-emerald-500/15 text-emerald-300'
+                            : normalizedStatus === 'CANCELLED'
+                              ? 'bg-rose-500/15 text-rose-300'
+                              : 'bg-sky-500/15 text-sky-300'
+                        }`}>
+                          {normalizedStatus || 'SCHEDULED'}
+                        </span>
+                      </div>
+
+                      {session.cancelReason ? (
+                        <p className="mt-4 text-sm text-rose-300">Cancellation reason: {session.cancelReason}</p>
+                      ) : null}
+
+                      {normalizedStatus === 'COMPLETED' ? (
+                        <div className="mt-5 rounded-2xl border border-sky-400/20 bg-sky-500/10 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-200">Coach notes</p>
+                          {sessionNotes.length > 0 ? (
+                            <div className="mt-3 space-y-3">
+                              {sessionNotes.map((note, index) => (
+                                <div key={`session-note-${session.ptSessionId}-${index}`} className="rounded-xl border border-white/10 bg-black/15 px-4 py-3">
+                                  <p className="text-sm leading-relaxed text-slate-100">{note.noteContent || 'No details provided.'}</p>
+                                  <p className="mt-2 text-xs text-slate-400">
+                                    {formatDateTimeLabel(note.updatedAt || note.createdAt)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-slate-300">No coach note was added for this completed session.</p>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {canManage ? (
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              closeScheduleSessionModal()
+                              openCancelModal(session)
+                            }}
+                            className="rounded-2xl border border-rose-200/70 bg-transparent px-5 py-3 text-base font-semibold text-rose-400 transition hover:bg-rose-500/10"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              closeScheduleSessionModal()
+                              openRescheduleModal(session)
+                            }}
+                            className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-base font-semibold text-slate-200 transition hover:bg-white/10"
+                          >
+                            Reschedule
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
             </div>
           </div>
         </div>

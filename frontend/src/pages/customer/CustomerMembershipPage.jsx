@@ -134,7 +134,7 @@ function CustomerMembershipPage() {
   function dismissPaymentSuccessOverlay() {
     setShowSuccessMessage(false)
     setSuccessCountdown(10)
-    navigate('/customer/coach-booking', { replace: true })
+    navigate('/customer/coach-booking?tab=match', { replace: true })
   }
 
   const plansByCategory = useMemo(

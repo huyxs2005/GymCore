@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import CoachSchedulePage from './CoachSchedulePage'
@@ -69,14 +68,13 @@ describe('CoachSchedulePage', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/Customer Minh/i)).toBeInTheDocument()
-    expect(screen.getByText(/Cancellation reason: Family emergency/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Booked sessions/i }).className).toContain('border-gym-600')
-    const cancelledDayButton = screen.getByRole('button', { name: /2026-03-10, 1 booked session/i })
-    expect(cancelledDayButton).toBeInTheDocument()
-    expect(cancelledDayButton.className).toContain('ring-sky-400')
-    const redSignal = within(cancelledDayButton).getByText('', { selector: 'span.bg-red-500' })
-    expect(redSignal).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /weekly timetable/i })).toBeInTheDocument()
+    expect(await screen.findByText(/1\/1 visible/i)).toBeInTheDocument()
+    await userEvent.setup().click(await screen.findByRole('button', { name: /Customer Minh/i }))
+    expect(await screen.findByRole('heading', { name: /10 Mar 2026/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Customer Minh/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/Cancelled/i).length).toBeGreaterThan(0)
+    expect(screen.getByText((content) => content.includes('Family emergency'))).toBeInTheDocument()
   })
 
   it('submits the coach cancellation reason through the custom modal', async () => {
@@ -107,10 +105,12 @@ describe('CoachSchedulePage', () => {
       </MemoryRouter>,
     )
 
-    await user.click(await screen.findByRole('button', { name: /2026-03-12, 1 booked session/i }))
-    await user.click(await screen.findByRole('button', { name: /^Cancel$/i }))
-    await user.type(screen.getByLabelText(/Reason for cancellation/i), 'Customer requested a makeup session')
-    await user.click(screen.getByRole('button', { name: /Confirm cancel/i }))
+    expect(await screen.findByText(/1\/1 visible/i)).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /Customer Minh/i }))
+    expect(await screen.findByRole('heading', { name: /Customer Minh/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Cancel$/i }))
+    await user.type(screen.getByLabelText(/Rationale for Termination/i), 'Customer requested a makeup session')
+    await user.click(screen.getByRole('button', { name: /Confirm Termination/i }))
 
     await waitFor(() => {
       expect(coachBookingApi.cancelCoachSession).toHaveBeenCalledWith(15, {
@@ -121,25 +121,59 @@ describe('CoachSchedulePage', () => {
     expect(await screen.findByText(/Session cancelled and the customer was notified/i)).toBeInTheDocument()
   }, 20000)
 
-  it('groups selected availability by weekday instead of one flat slot list', async () => {
-    coachApi.getMyAvailability.mockResolvedValue({
+  it('filters the weekly timetable by selected customers', async () => {
+    coachApi.getMyCoachSchedule.mockResolvedValue({
       data: {
-        weeklyAvailability: [
-          { dayOfWeek: 1, timeSlotId: 1 },
-          { dayOfWeek: 2, timeSlotId: 1 },
+        items: [
+          {
+            ptSessionId: 21,
+            customerId: 101,
+            customerName: 'Customer Minh',
+            customerEmail: 'minh@gymcore.local',
+            customerPhone: '0900000004',
+            sessionDate: '2026-03-10',
+            timeSlotId: 1,
+            slotIndex: 1,
+            startTime: '07:00:00',
+            endTime: '08:30:00',
+            status: 'SCHEDULED',
+          },
+          {
+            ptSessionId: 22,
+            customerId: 102,
+            customerName: 'Customer Lan',
+            customerEmail: 'lan@gymcore.local',
+            customerPhone: '0900000005',
+            sessionDate: '2026-03-11',
+            timeSlotId: 1,
+            slotIndex: 1,
+            startTime: '07:00:00',
+            endTime: '08:30:00',
+            status: 'SCHEDULED',
+          },
         ],
       },
     })
 
+    const user = userEvent.setup()
     render(
-      <MemoryRouter initialEntries={['/coach/schedule']}>
+      <MemoryRouter initialEntries={['/coach/schedule?tab=schedule']}>
         <CoachSchedulePage />
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/Selected availability/i)).toBeInTheDocument()
-    const weekdaySelect = screen.getByLabelText(/Weekday/i)
-    expect(weekdaySelect).toHaveTextContent('Monday')
-    expect(screen.getByText(/1 slot\(s\) selected for Monday/i)).toBeInTheDocument()
+    expect(await screen.findByText(/2\/2 visible/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Customer Minh/i)).toBeChecked()
+    expect(screen.getByLabelText(/Customer Lan/i)).toBeChecked()
+    expect(await screen.findByRole('button', { name: /Customer Minh/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Customer Lan/i })).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/Customer Lan/i))
+
+    expect(screen.getByText(/1\/2 visible/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Customer Lan/i })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Customer Minh/i })).toBeInTheDocument()
   })
 })

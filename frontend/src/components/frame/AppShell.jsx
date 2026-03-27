@@ -41,7 +41,6 @@ function getQuickLinks(pathname, role) {
   if (pathname.startsWith('/admin/')) {
     return [
       { to: '/admin/dashboard', label: 'Dashboard' },
-      { to: '/admin/support', label: 'Support Console' },
       { to: '/admin/reports', label: 'Reports' },
     ]
   }
@@ -63,7 +62,7 @@ function getQuickLinks(pathname, role) {
 
   if (pathname.startsWith('/customer/') || role === 'CUSTOMER') {
     return [
-      { to: '/customer/progress-hub', label: 'Progress Hub' },
+      { to: '/customer/checkin-health', label: 'Health Status' },
       { to: '/customer/membership', label: 'Membership' },
       { to: '/customer/shop', label: 'Product Shop' },
     ]
@@ -77,7 +76,7 @@ function getAiMode(pathname, role) {
   if (pathname.startsWith('/customer/shop') || pathname.startsWith('/customer/cart') || pathname.startsWith('/customer/orders')) return 'PRODUCTS'
   if (pathname.startsWith('/customer/membership')) return 'MEMBERSHIP'
   if (pathname.startsWith('/customer/coach-booking')) return 'COACH_BOOKING'
-  if (pathname.startsWith('/customer/progress-hub')) return 'PROGRESS_HUB'
+  if (pathname.startsWith('/customer/checkin-health')) return 'HEALTH'
   if (pathname.startsWith('/admin/')) return 'ADMIN'
   if (pathname.startsWith('/coach/')) return 'COACH'
   if (pathname.startsWith('/reception/')) return 'RECEPTION'
@@ -87,7 +86,7 @@ function getAiMode(pathname, role) {
 function getAiQuickActions(pathname, role) {
   const customerActions = [
     { id: 'ai-membership', label: 'Open membership', route: '/customer/membership', type: 'route' },
-    { id: 'ai-progress-hub', label: 'Open progress hub', route: '/customer/progress-hub', type: 'route' },
+    { id: 'ai-health-status', label: 'Open health status', route: '/customer/checkin-health', type: 'route' },
     { id: 'ai-coach-booking', label: 'Open coach booking', route: '/customer/coach-booking', type: 'route' },
     { id: 'ai-product-shop', label: 'Open product shop', route: '/customer/shop', type: 'route' },
     { id: 'ai-knowledge', label: 'Open workout/food AI', route: '/customer/knowledge', type: 'route' },
@@ -106,7 +105,6 @@ function getAiQuickActions(pathname, role) {
 
   const adminActions = [
     { id: 'ai-admin-dashboard', label: 'Open dashboard', route: '/admin/dashboard', type: 'route' },
-    { id: 'ai-admin-support', label: 'Open support console', route: '/admin/support', type: 'route' },
     { id: 'ai-admin-reports', label: 'Open reports', route: '/admin/reports', type: 'route' },
   ]
 
@@ -187,7 +185,7 @@ function AppShell({ children }) {
   const roleLinks = getRoleLinks(userRole)
   const workspaceLinks = getWorkspaceLinks(pathname)
   const headerLinks = workspaceLinks.length > 0 ? workspaceLinks : (isAuthenticated && shouldUseRoleHeader(pathname) ? roleLinks : [])
-  const showWorkspaceNav = headerLinks.length > 0
+  const showWorkspaceNav = !pathname.startsWith('/admin/') && headerLinks.length > 0
   const showShopCartButton = isAuthenticated && userRole === 'CUSTOMER'
   const desktopNavRef = useRef(null)
   const mobileNavRef = useRef(null)
@@ -270,6 +268,10 @@ function AppShell({ children }) {
     el.scrollLeft = mobileDragRef.current.scrollLeft - walk
     setMobileOverflow(getOverflowState(el))
   }
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
 
   useEffect(() => {
     if (!showWorkspaceNav) {

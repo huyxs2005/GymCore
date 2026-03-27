@@ -3,10 +3,20 @@ import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import PaginationControls from '../../components/common/PaginationControls'
 import { coachNav } from '../../config/navigation'
 import { coachBookingApi } from '../../features/coach/api/coachBookingApi'
-import { Calendar, Clock, User, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react'
+import { Calendar, Clock, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react'
 import { usePagination } from '../../hooks/usePagination'
 
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function getInitials(name) {
+  return String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'CU'
+}
 
 function CoachBookingManagementPage() {
   const [requests, setRequests] = useState([])
@@ -231,8 +241,18 @@ function CoachBookingManagementPage() {
                 <div key={req.ptSessionId} className="gc-card-compact group border-white/5 bg-white/[0.03] transition duration-300 hover:border-white/10 hover:bg-white/[0.05]">
                   <div className="mb-4 flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 group-hover:ring-white/20">
-                        <User className="h-5 w-5 text-slate-400" />
+                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 group-hover:ring-white/20">
+                        {req.avatarUrl ? (
+                          <img
+                            src={req.avatarUrl}
+                            alt={req.customerName || 'Customer avatar'}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-200">
+                            {getInitials(req.customerName)}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <h4 className="font-bold text-white">{req.customerName}</h4>
@@ -344,8 +364,18 @@ function CoachBookingManagementPage() {
               <div key={req.ptRequestId} className="gc-card group border-white/5 bg-white/[0.03] transition duration-300 hover:border-white/10 hover:bg-white/[0.05]">
                 <div className="mb-6 flex items-start justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10 group-hover:ring-emerald-500/30">
-                      <User className="h-6 w-6 text-slate-400" />
+                    <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 group-hover:ring-emerald-500/30">
+                      {req.avatarUrl ? (
+                        <img
+                          src={req.avatarUrl}
+                          alt={req.customerName || 'Customer avatar'}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-black uppercase tracking-[0.18em] text-slate-200">
+                          {getInitials(req.customerName)}
+                        </span>
+                      )}
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-white">{req.customerName}</h3>
@@ -363,11 +393,6 @@ function CoachBookingManagementPage() {
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500">Submitted On</span>
                     <span className="font-medium text-slate-400">{new Date(req.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                  </div>
-                  <div className="pt-2 border-t border-white/5">
-                    <p className="text-[10px] font-bold text-amber-500/80 leading-relaxed uppercase tracking-wider">
-                      Note: Approval will automatically generate recurring sessions from the following Monday.
-                    </p>
                   </div>
                 </div>
 

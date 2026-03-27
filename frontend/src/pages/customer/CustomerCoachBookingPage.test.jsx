@@ -226,7 +226,7 @@ describe('CustomerCoachBookingPage', () => {
     expect(screen.getByText(/Already fully booked in selected period/i)).toBeInTheDocument()
   })
 
-  it('shows coaching dates with a green-marked calendar signal in My PT Schedule', async () => {
+  it('shows coaching sessions inside the weekly board in My PT Schedule', async () => {
     coachBookingApi.getMySchedule.mockResolvedValue({
       data: {
         items: [
@@ -256,7 +256,7 @@ describe('CustomerCoachBookingPage', () => {
     await user.click(sessionDay)
 
     expect((await screen.findAllByText(/Coach Alex/i)).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Dates with coaching sessions are marked with a green signal in the calendar/i)).toBeInTheDocument()
+    expect(screen.getByText(/Scheduled sessions are highlighted in green inside the weekly board/i)).toBeInTheDocument()
   })
 
   it('shows coach cancellation reason on cancelled PT sessions', async () => {

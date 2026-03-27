@@ -1,0 +1,104 @@
+USE GymCore;
+GO
+
+SET NOCOUNT ON;
+GO
+
+IF OBJECT_ID('dbo.Users', 'U') IS NULL
+    THROW 50001, 'dbo.Users not found. Run docs/GymCore.txt first.', 1;
+
+IF OBJECT_ID('dbo.Coaches', 'U') IS NULL
+    THROW 50002, 'dbo.Coaches not found. Run docs/GymCore.txt first.', 1;
+
+IF COL_LENGTH('dbo.Users', 'RoleID') IS NULL
+    THROW 50003, 'Current dbo.Users schema does not match docs/GymCore.txt.', 1;
+
+DECLARE @RoleCoach INT;
+SELECT @RoleCoach = RoleID
+FROM dbo.Roles
+WHERE RoleName = N'Coach';
+
+IF @RoleCoach IS NULL
+    THROW 50004, 'Role Coach not found. Run docs/InsertValues.txt first, or insert Roles first.', 1;
+
+BEGIN TRANSACTION;
+
+INSERT INTO dbo.Users (RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+SELECT v.RoleID, v.FullName, v.Email, v.Phone, v.PasswordHash, v.IsEmailVerified, v.EmailVerifiedAt
+FROM (VALUES
+    (@RoleCoach, N'Coach Aaron',   N'coach.aaron@gymcore.local',   N'0901000001', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Bella',   N'coach.bella@gymcore.local',   N'0901000002', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Carter',  N'coach.carter@gymcore.local',  N'0901000003', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Diana',   N'coach.diana@gymcore.local',   N'0901000004', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Ethan',   N'coach.ethan@gymcore.local',   N'0901000005', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Fiona',   N'coach.fiona@gymcore.local',   N'0901000006', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Gavin',   N'coach.gavin@gymcore.local',   N'0901000007', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Hazel',   N'coach.hazel@gymcore.local',   N'0901000008', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Isaac',   N'coach.isaac@gymcore.local',   N'0901000009', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME()),
+    (@RoleCoach, N'Coach Julia',   N'coach.julia@gymcore.local',   N'0901000010', N'$2a$10$qIOW.bdmO/4t.1OkG1rFBedNhn4hcMVnwesGbTnwTEcIpZMKkJC4G', CAST(1 AS BIT), SYSDATETIME())
+) AS v(RoleID, FullName, Email, Phone, PasswordHash, IsEmailVerified, EmailVerifiedAt)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.Users u
+    WHERE u.Email = v.Email
+);
+
+INSERT INTO dbo.Coaches (CoachID, DateOfBirth, Gender, ExperienceYears, Bio)
+SELECT u.UserID, v.DateOfBirth, v.Gender, v.ExperienceYears, v.Bio
+FROM (VALUES
+    (N'coach.aaron@gymcore.local',  CAST('1995-02-14' AS DATE), N'Male',   6, N'Strength and hypertrophy coach.'),
+    (N'coach.bella@gymcore.local',  CAST('1997-04-21' AS DATE), N'Female', 4, N'Fat-loss and beginner transformation coach.'),
+    (N'coach.carter@gymcore.local', CAST('1993-07-08' AS DATE), N'Male',   8, N'Functional training and mobility coach.'),
+    (N'coach.diana@gymcore.local',  CAST('1998-01-30' AS DATE), N'Female', 5, N'Women fitness and toning coach.'),
+    (N'coach.ethan@gymcore.local',  CAST('1994-09-12' AS DATE), N'Male',   7, N'Powerlifting and barbell technique coach.'),
+    (N'coach.fiona@gymcore.local',  CAST('1996-11-03' AS DATE), N'Female', 5, N'Cardio conditioning and endurance coach.'),
+    (N'coach.gavin@gymcore.local',  CAST('1992-05-26' AS DATE), N'Male',   9, N'Athletic performance and agility coach.'),
+    (N'coach.hazel@gymcore.local',  CAST('1999-03-17' AS DATE), N'Female', 3, N'Posture, mobility, and rehab-focused coach.'),
+    (N'coach.isaac@gymcore.local',  CAST('1991-12-09' AS DATE), N'Male',  10, N'Body recomposition and nutrition-support coach.'),
+    (N'coach.julia@gymcore.local',  CAST('1997-08-25' AS DATE), N'Female', 4, N'General fitness and lifestyle habit coach.')
+) AS v(Email, DateOfBirth, Gender, ExperienceYears, Bio)
+JOIN dbo.Users u ON u.Email = v.Email
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.Coaches c
+    WHERE c.CoachID = u.UserID
+);
+
+COMMIT TRANSACTION;
+
+SELECT u.UserID, u.FullName, u.Email
+FROM dbo.Users u
+WHERE u.Email IN (
+    N'coach.aaron@gymcore.local',
+    N'coach.bella@gymcore.local',
+    N'coach.carter@gymcore.local',
+    N'coach.diana@gymcore.local',
+    N'coach.ethan@gymcore.local',
+    N'coach.fiona@gymcore.local',
+    N'coach.gavin@gymcore.local',
+    N'coach.hazel@gymcore.local',
+    N'coach.isaac@gymcore.local',
+    N'coach.julia@gymcore.local'
+)
+ORDER BY u.UserID;
+GO
+
+/* =========================
+   accounts
+
+Logins:
+
+coach.aaron@gymcore.local
+coach.bella@gymcore.local
+coach.carter@gymcore.local
+coach.diana@gymcore.local
+coach.ethan@gymcore.local
+coach.fiona@gymcore.local
+coach.gavin@gymcore.local
+coach.hazel@gymcore.local
+coach.isaac@gymcore.local
+coach.julia@gymcore.local
+Password for all 10:
+
+Coach123456!
+========================= */

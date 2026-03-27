@@ -53,27 +53,37 @@ function addDays(date, amount) {
   return nextDate
 }
 
-function buildMonthGrid(monthCursor) {
-  const monthStart = parseDateValue(monthCursor)
-  if (!monthStart) return []
-  const first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
-  const startOffset = (first.getDay() + 6) % 7
-  const gridStart = addDays(first, -startOffset)
+function getWeekStart(date) {
+  const source = new Date(date)
+  const day = source.getDay()
+  const offset = day === 0 ? -6 : 1 - day
+  return addDays(source, offset)
+}
 
-  return Array.from({ length: 35 }, (_, index) => {
-    const current = addDays(gridStart, index)
+function buildWeekDays(weekCursor) {
+  const weekStart = parseDateValue(weekCursor)
+  if (!weekStart) return []
+  return DAYS.map((day, index) => {
+    const current = addDays(weekStart, index)
     return {
+      ...day,
       value: formatDateValue(current),
-      dayNumber: current.getDate(),
-      isCurrentMonth: current.getMonth() === first.getMonth(),
+      dateLabel: current.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
     }
   })
 }
 
-function shiftMonth(monthCursor, delta) {
-  const current = parseDateValue(monthCursor)
-  if (!current) return monthCursor
-  return formatDateValue(new Date(current.getFullYear(), current.getMonth() + delta, 1))
+function shiftWeek(weekCursor, delta) {
+  const current = parseDateValue(weekCursor)
+  if (!current) return weekCursor
+  return formatDateValue(addDays(current, delta * 7))
+}
+
+function formatWeekRangeLabel(weekCursor) {
+  const weekStart = parseDateValue(weekCursor)
+  if (!weekStart) return ''
+  const weekEnd = addDays(weekStart, 6)
+  return `${weekStart.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })} to ${weekEnd.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}`
 }
 
 function formatHumanDate(value) {
@@ -151,8 +161,14 @@ function CoachSchedulePage() {
   const [availability, setAvailability] = useState({})
   const [acceptingCustomerRequests, setAcceptingCustomerRequests] = useState(true)
   const [selectedAvailabilityDay, setSelectedAvailabilityDay] = useState(1)
-  const [scheduleMonthCursor, setScheduleMonthCursor] = useState('')
+  const [scheduleWeekCursor, setScheduleWeekCursor] = useState('')
   const [selectedScheduleDate, setSelectedScheduleDate] = useState('')
+  const [sessionDetailModal, setSessionDetailModal] = useState({
+    open: false,
+    session: null,
+  })
+  const [selectedCustomerKeys, setSelectedCustomerKeys] = useState([])
+  const [hasCustomCustomerFilter, setHasCustomCustomerFilter] = useState(false)
   const [cancelModal, setCancelModal] = useState({
     open: false,
     session: null,
@@ -348,6 +364,21 @@ function CoachSchedulePage() {
     })
   }
 
+  function openSessionDetailModal(session, dateValue) {
+    setSelectedScheduleDate(dateValue || session?.sessionDate || '')
+    setSessionDetailModal({
+      open: true,
+      session,
+    })
+  }
+
+  function closeSessionDetailModal() {
+    setSessionDetailModal({
+      open: false,
+      session: null,
+    })
+  }
+
   async function confirmCancelSession() {
     const sessionId = cancelModal.session?.ptSessionId
     if (!sessionId) return
@@ -461,9 +492,59 @@ function CoachSchedulePage() {
     return DAYS.find((day) => day.dayOfWeek === selectedAvailabilityDay)?.name || 'Monday'
   }, [selectedAvailabilityDay])
 
+  const customerFilterOptions = useMemo(() => {
+    const seen = new Set()
+    return mySchedule
+      .map((session) => {
+        const key = String(
+          session.customerId
+            || session.customerEmail
+            || session.customerPhone
+            || session.customerName
+            || session.ptSessionId,
+        )
+        const label = session.customerName || session.customerEmail || `Customer ${key}`
+        return { key, label }
+      })
+      .filter((item) => {
+        if (!item.key || seen.has(item.key)) return false
+        seen.add(item.key)
+        return true
+      })
+      .sort((left, right) => left.label.localeCompare(right.label))
+  }, [mySchedule])
+
+  useEffect(() => {
+    const allKeys = customerFilterOptions.map((item) => item.key)
+    setSelectedCustomerKeys((prev) => {
+      if (!hasCustomCustomerFilter) {
+        return allKeys
+      }
+      return prev.filter((key) => allKeys.includes(key))
+    })
+  }, [customerFilterOptions, hasCustomCustomerFilter])
+
+  const selectedCustomerKeySet = useMemo(() => new Set(selectedCustomerKeys), [selectedCustomerKeys])
+  const areAllCustomersSelected = customerFilterOptions.length > 0
+    && selectedCustomerKeys.length === customerFilterOptions.length
+
+  const filteredSchedule = useMemo(() => {
+    if (selectedCustomerKeys.length === 0) return []
+    return mySchedule.filter((session) => {
+      const key = String(
+        session.customerId
+          || session.customerEmail
+          || session.customerPhone
+          || session.customerName
+          || session.ptSessionId,
+      )
+      return selectedCustomerKeySet.has(key)
+    })
+  }, [mySchedule, selectedCustomerKeySet, selectedCustomerKeys.length])
+
   const sessionsByDate = useMemo(() => {
     const grouped = new Map()
-    mySchedule.forEach((session) => {
+    filteredSchedule.forEach((session) => {
       const date = session.sessionDate
       if (!date) return
       const existing = grouped.get(date) || []
@@ -477,16 +558,27 @@ function CoachSchedulePage() {
       grouped.set(date, existing)
     })
     return grouped
-  }, [mySchedule])
+  }, [filteredSchedule])
 
-  const scheduleCalendarDays = useMemo(() => buildMonthGrid(scheduleMonthCursor), [scheduleMonthCursor])
-  const selectedScheduleItems = useMemo(
-    () => (selectedScheduleDate ? sessionsByDate.get(selectedScheduleDate) || [] : []),
-    [selectedScheduleDate, sessionsByDate],
-  )
+  const sessionsByDateAndSlot = useMemo(() => {
+    const grouped = new Map()
+    filteredSchedule.forEach((session) => {
+      const date = session.sessionDate
+      const timeSlotId = Number(session.timeSlotId || session.slotIndex || 0)
+      if (!date || !timeSlotId) return
+      const key = `${date}-${timeSlotId}`
+      const existing = grouped.get(key) || []
+      existing.push(session)
+      existing.sort((left, right) => String(left.customerName || '').localeCompare(String(right.customerName || '')))
+      grouped.set(key, existing)
+    })
+    return grouped
+  }, [filteredSchedule])
+
+  const scheduleWeekDays = useMemo(() => buildWeekDays(scheduleWeekCursor), [scheduleWeekCursor])
 
   useEffect(() => {
-    const firstSessionDate = mySchedule
+    const firstSessionDate = filteredSchedule
       .map((session) => session.sessionDate)
       .filter(Boolean)
       .sort()[0]
@@ -494,17 +586,40 @@ function CoachSchedulePage() {
     if (firstSessionDate) {
       const firstDate = parseDateValue(firstSessionDate)
       if (firstDate) {
-        const firstMonth = formatDateValue(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1))
-        setScheduleMonthCursor((prev) => prev || firstMonth)
+        const firstWeek = formatDateValue(getWeekStart(firstDate))
+        setScheduleWeekCursor((prev) => {
+          if (!prev) return firstWeek
+          const visibleDays = buildWeekDays(prev).map((day) => day.value)
+          return visibleDays.includes(firstSessionDate) ? prev : firstWeek
+        })
       }
       setSelectedScheduleDate((prev) => (prev && sessionsByDate.has(prev) ? prev : firstSessionDate))
       return
     }
 
-    const currentMonth = formatDateValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
-    setScheduleMonthCursor((prev) => prev || currentMonth)
+    const currentWeek = formatDateValue(getWeekStart(new Date()))
+    setScheduleWeekCursor((prev) => prev || currentWeek)
     setSelectedScheduleDate('')
-  }, [mySchedule, sessionsByDate])
+    setSessionDetailModal({
+      open: false,
+      session: null,
+    })
+  }, [filteredSchedule, sessionsByDate])
+
+  function handleToggleAllCustomers(nextChecked) {
+    setHasCustomCustomerFilter(!nextChecked)
+    setSelectedCustomerKeys(nextChecked ? customerFilterOptions.map((item) => item.key) : [])
+  }
+
+  function handleToggleCustomerKey(customerKey, nextChecked) {
+    setHasCustomCustomerFilter(true)
+    setSelectedCustomerKeys((prev) => {
+      if (nextChecked) {
+        return Array.from(new Set([...prev, customerKey]))
+      }
+      return prev.filter((key) => key !== customerKey)
+    })
+  }
 
   return (
     <WorkspaceScaffold
@@ -722,26 +837,69 @@ function CoachSchedulePage() {
             )}
 
             {!loading && mySchedule.length > 0 && (
-              <section className="grid gap-8 xl:grid-cols-[1.4fr_0.6fr]">
-                <div className="gc-glass-panel border-white/10 bg-white/[0.01] p-6 shadow-2xl">
-                  <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <section>
+                <div className="gc-glass-panel border-white/10 bg-white/[0.01] p-5 shadow-2xl">
+                  <div className="mb-5 space-y-4">
                     <div>
                       <h4 className="text-lg font-black text-white font-display uppercase tracking-tight">Weekly timetable</h4>
+                      <p className="mt-2 text-sm text-slate-500">Filter by customer, then inspect the week board slot by slot.</p>
                     </div>
-                    <div className="flex items-center gap-3 rounded-2xl bg-black/40 p-1.5 ring-1 ring-white/10">
+
+                    <div className="rounded-[1.5rem] border border-white/5 bg-white/[0.03] p-3.5">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white">
+                          <input
+                            type="checkbox"
+                            checked={areAllCustomersSelected}
+                            onChange={(event) => handleToggleAllCustomers(event.target.checked)}
+                            className="h-4 w-4 rounded border-white/20 bg-transparent text-gym-500 focus:ring-gym-500"
+                          />
+                          All customers
+                        </label>
+                        <span className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                          {selectedCustomerKeys.length}/{customerFilterOptions.length || 0} visible
+                        </span>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {customerFilterOptions.map((customer) => {
+                          const checked = selectedCustomerKeySet.has(customer.key)
+                          return (
+                            <label
+                              key={`schedule-customer-filter-${customer.key}`}
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
+                                checked
+                                  ? 'border-gym-500 bg-gym-500/12 text-gym-300'
+                                  : 'border-white/10 bg-white/[0.02] text-slate-400'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) => handleToggleCustomerKey(customer.key, event.target.checked)}
+                                className="h-4 w-4 rounded border-white/20 bg-transparent text-gym-500 focus:ring-gym-500"
+                              />
+                              <span>{customer.label}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 rounded-2xl bg-black/40 p-1 ring-1 ring-white/10">
                       <button
                         type="button"
-                        onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, -1))}
+                        onClick={() => setScheduleWeekCursor((prev) => shiftWeek(prev, -1))}
                         className="rounded-xl p-2 text-slate-500 hover:bg-white/5 hover:text-white transition-all"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
-                      <div className="min-w-[120px] text-center text-xs font-black uppercase tracking-widest text-white">
-                        {parseDateValue(scheduleMonthCursor)?.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                      <div className="min-w-[136px] text-center">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Week</p>
+                        <p className="mt-1 text-xs font-black uppercase tracking-widest text-white">{formatWeekRangeLabel(scheduleWeekCursor)}</p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setScheduleMonthCursor((prev) => shiftMonth(prev, 1))}
+                        onClick={() => setScheduleWeekCursor((prev) => shiftWeek(prev, 1))}
                         className="rounded-xl p-2 text-slate-500 hover:bg-white/5 hover:text-white transition-all"
                       >
                         <ChevronRight className="h-4 w-4" />
@@ -749,149 +907,222 @@ function CoachSchedulePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-[2rem] border border-white/5 bg-black/20 p-4">
-                    <div className="grid grid-cols-7 gap-2">
-                      {DAYS.map((day) => (
-                        <div key={`schedule-header-${day.dayOfWeek}`} className="pb-3 text-center text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">
-                          {day.shortLabel}
-                        </div>
-                      ))}
-                      {scheduleCalendarDays.map((day) => {
-                        const daySessions = sessionsByDate.get(day.value) || []
-                        const hasSessions = daySessions.length > 0
-                        const isSelected = selectedScheduleDate === day.value
-                        const dayAppearance = hasSessions ? getDayScheduleAppearance(daySessions) : null
-                        
-                        return (
-                          <button
-                            key={`schedule-day-${day.value}`}
-                            type="button"
-                            onClick={() => hasSessions && setSelectedScheduleDate(day.value)}
-                            className={`group relative flex min-h-[100px] flex-col rounded-2xl border p-3 transition-all duration-300 ${hasSessions
-                              ? `${dayAppearance?.dayClass || 'border-emerald-500/20 bg-emerald-500/5 text-white shadow-glow-sm hover:border-emerald-500/40'} text-white`
-                              : day.isCurrentMonth
-                                ? 'border-white/5 bg-white/[0.02] text-slate-500 hover:border-white/10'
-                                : 'border-transparent bg-transparent text-slate-500'
-                              } ${isSelected ? `${dayAppearance?.dotClass?.includes('red') ? 'ring-2 ring-red-500' : 'ring-2 ring-gym-500'} ring-offset-4 ring-offset-[#0a0a0f]` : ''}`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <span className={`text-xs font-black ${day.isCurrentMonth ? (hasSessions ? 'text-white' : 'text-slate-400') : 'text-slate-400'}`}>{day.dayNumber}</span>
-                              {hasSessions && (
-                                <span className={`h-1.5 w-1.5 animate-pulse rounded-full ${dayAppearance?.dotClass || 'bg-emerald-500 shadow-glow'}`} />
-                              )}
-                            </div>
-                            
-                            {hasSessions && (
-                              <div className="mt-auto">
-                                <div className="flex flex-col gap-1">
-                                   <div className="h-1 w-full rounded-full bg-white/10 overflow-hidden">
-                                      <div className={`h-full ${dayAppearance?.countClass?.includes('red') ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, daySessions.length * 20)}%` }} />
-                                   </div>
-                                   <p className={`text-[9px] font-black uppercase tracking-tighter ${dayAppearance?.countClass || 'text-emerald-700'}`}>
-                                      {daySessions.length} {daySessions.length === 1 ? 'Slot' : 'Slots'}
-                                   </p>
-                                </div>
-                              </div>
-                            )}
-                          </button>
-                        )
-                      })}
+                  {selectedCustomerKeys.length === 0 ? (
+                    <div className="flex min-h-[320px] items-center justify-center rounded-[2rem] border border-dashed border-white/10 bg-black/20 text-center">
+                      <div>
+                        <p className="text-sm font-bold uppercase tracking-[0.22em] text-slate-500">No customers selected</p>
+                        <p className="mt-2 text-sm text-slate-400">Select at least one customer above to render the weekly timetable.</p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="gc-glass-panel border-white/10 bg-white/[0.03] p-7 ring-1 ring-white/5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gym-500 mb-1">Focal Point</p>
-                    <h4 className="font-display text-xl font-black text-white uppercase tracking-tight">{formatHumanDate(selectedScheduleDate)}</h4>
-                    <p className="mt-1 text-xs text-slate-500 leading-relaxed">Detailed operational status for the selected coordinate.</p>
-
-                    <div className="mt-8 space-y-4">
-                      {selectedScheduleItems.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-12 rounded-[2rem] border border-dashed border-white/5 bg-white/[0.01]">
-                          <Zap className="h-8 w-8 text-slate-800 mb-3" />
-                          <p className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center">No active connections <br/> for this date.</p>
-                        </div>
-                      )}
-                      {selectedScheduleItems.map((session) => {
-                        const appearance = getStatusAppearance(session.status)
-                        const isScheduled = String(session.status || '').toUpperCase() === 'SCHEDULED'
-                        const isCancelled = String(session.status || '').toUpperCase() === 'CANCELLED'
-                        
-                        return (
-                          <div key={session.ptSessionId} className="gc-card-compact group border-white/5 bg-white/[0.03] transition-all hover:bg-white/[0.05] hover:border-white/10">
-                            <div className="mb-4 flex items-start justify-between gap-4">
-                              <div className="min-w-0">
-                                <h5 className="truncate font-display text-lg font-black text-white uppercase tracking-tight">{session.customerName}</h5>
-                                <div className="mt-1 flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                                   <Clock className="h-3.5 w-3.5 text-gym-500" />
-                                   <span>{String(session.startTime || '').slice(0, 5)} — {String(session.endTime || '').slice(0, 5)}</span>
-                                   <span className="text-slate-700">|</span>
-                                   <span>Vector {session.slotIndex}</span>
-                                </div>
-                              </div>
-                              <span className={`flex items-center gap-2 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ring-1 ${appearance.badge.replace('bg-', 'bg-').replace('text-', 'text-')}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${appearance.dot}`} />
-                                {appearance.label}
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 rounded-xl bg-black/20 p-3 mb-5 group-hover:bg-black/30 transition-colors">
-                              <div className="min-w-0">
-                                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-wider mb-0.5">Contact Interface</p>
-                                 <p className="truncate text-[11px] font-bold text-slate-300">{session.customerPhone || 'UNAVAILABLE'}</p>
-                              </div>
-                              <div className="min-w-0">
-                                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-wider mb-0.5">Email Node</p>
-                                 <p className="truncate text-[11px] font-bold text-slate-300">{session.customerEmail || 'UNSET'}</p>
-                              </div>
-                            </div>
-                            
-                            {isCancelled && session.cancelReason && (
-                               <div className="mb-5 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[11px] leading-relaxed text-rose-400 font-medium italic">
-                                  " {session.cancelReason} "
-                               </div>
-                            )}
-
-                            {isScheduled && (
-                              <div className="flex gap-3 mt-2">
-                                <button
-                                  type="button"
-                                  onClick={() => openCancelModal(session)}
-                                  className="flex-1 rounded-xl border border-white/5 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20 transition-all"
-                                >
-                                  Decommission
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openConfirmAction('complete', session.ptSessionId)}
-                                  className="flex-1 rounded-xl bg-gym-500 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-950 shadow-glow hover:scale-[1.02] transition-all active:scale-95"
-                                >
-                                  Commit Complete
-                                </button>
-                              </div>
-                            )}
-
-                            {isCancelled && (
-                              <button
-                                type="button"
-                                onClick={() => openConfirmAction('delete', session.ptSessionId)}
-                                className="w-full rounded-xl border border-dashed border-white/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-400 hover:border-white/20 transition-all"
-                              >
-                                Purge Record
-                              </button>
-                            )}
+                  ) : (
+                    <div className="overflow-x-auto rounded-[1.75rem] border border-white/5 bg-black/20">
+                      <div className="min-w-[780px]">
+                        <div className="grid grid-cols-[116px_repeat(7,minmax(0,1fr))]">
+                          <div className="border-b border-white/5 bg-[#232434] px-3 py-2.5">
+                            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-500">Week</p>
+                            <p className="mt-1 text-base font-black text-white">{formatWeekRangeLabel(scheduleWeekCursor)}</p>
                           </div>
-                        )
-                      })}
+                          {scheduleWeekDays.map((day) => {
+                            const daySessions = sessionsByDate.get(day.value) || []
+                            const isSelected = selectedScheduleDate === day.value
+                            return (
+                              <button
+                                key={`schedule-weekday-${day.value}`}
+                                type="button"
+                                onClick={() => setSelectedScheduleDate(day.value)}
+                                className={`border-b border-l border-white/5 px-3 py-2.5 text-left transition ${
+                                  isSelected ? 'bg-[#4b392d]' : 'bg-[#232434] hover:bg-[#2a2c3f]'
+                                }`}
+                              >
+                                <p className="text-base font-black uppercase text-white">{day.shortLabel}</p>
+                                <div className="mt-1 flex items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-400">{day.dateLabel}</span>
+                                  {daySessions.length > 0 ? <span className="h-2 w-2 rounded-full bg-gym-500" /> : null}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        <div className="grid">
+                          {(timeSlots.length > 0 ? timeSlots : DEFAULT_TIME_SLOTS).map((slot) => (
+                            <div key={`coach-week-slot-${slot.timeSlotId}`} className="grid grid-cols-[116px_repeat(7,minmax(0,1fr))]">
+                              <div className="border-b border-white/5 bg-white/[0.03] px-3 py-3">
+                                <p className="text-base font-bold text-white">Slot {slot.slotIndex}</p>
+                                <p className="mt-0.5 text-sm text-slate-400">
+                                  {String(slot.startTime || '').slice(0, 5)} - {String(slot.endTime || '').slice(0, 5)}
+                                </p>
+                              </div>
+                              {scheduleWeekDays.map((day) => {
+                                const cellSessions = sessionsByDateAndSlot.get(`${day.value}-${slot.timeSlotId}`) || []
+                                const isSelectedDay = selectedScheduleDate === day.value
+                                return (
+                                  <div
+                                    key={`coach-week-cell-${day.value}-${slot.timeSlotId}`}
+                                    className={`min-h-[62px] border-b border-l border-white/5 px-2 py-2 ${
+                                      isSelectedDay ? 'bg-white/[0.025]' : 'bg-transparent'
+                                    }`}
+                                  >
+                                    {cellSessions.length > 0 ? (
+                                      <div className="space-y-1.5">
+                                        {cellSessions.map((session) => {
+                                          const appearance = getStatusAppearance(session.status)
+                                          return (
+                                            <button
+                                              key={`coach-week-session-${session.ptSessionId}`}
+                                              type="button"
+                                              onClick={() => openSessionDetailModal(session, day.value)}
+                                              className="w-full rounded-[0.9rem] border border-gym-500/55 bg-gym-500/12 px-2.5 py-2 text-left transition hover:bg-gym-500/18"
+                                            >
+                                              <div className="flex items-start gap-2">
+                                                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black/35">
+                                                  {session.avatarUrl ? (
+                                                    <img
+                                                      src={session.avatarUrl}
+                                                      alt={session.customerName || 'Customer avatar'}
+                                                      className="h-full w-full object-cover"
+                                                    />
+                                                  ) : (
+                                                    <User className="h-4 w-4 text-slate-300" />
+                                                  )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                  <p className="line-clamp-2 text-sm font-bold leading-tight text-white">{session.customerName || 'Customer'}</p>
+                                                  <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-400">Customer</p>
+                                                </div>
+                                              </div>
+                                              <p className="mt-0.5 text-[11px] leading-snug text-slate-300">
+                                                Slot {session.slotIndex || slot.slotIndex} ({String(session.startTime || slot.startTime || '').slice(0, 5)}-{String(session.endTime || slot.endTime || '').slice(0, 5)})
+                                              </p>
+                                              <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-bold text-gym-400">
+                                                <span className={`h-2 w-2 rounded-full ${appearance.dot}`} />
+                                                {appearance.label}
+                                              </div>
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="flex h-full items-center justify-center text-base text-slate-500">-</div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
+
               </section>
             )}
           </div>
         )}
       </div>
+
+      {sessionDetailModal.open && sessionDetailModal.session && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/50 animate-in fade-in duration-300">
+          <div className="gc-glass-panel relative w-full max-w-md border-white/10 bg-[#12121a]/95 p-7 shadow-[0_0_100px_rgba(0,0,0,0.8)] ring-1 ring-white/5">
+            <button
+              type="button"
+              onClick={closeSessionDetailModal}
+              className="absolute right-5 top-5 rounded-full border border-white/10 bg-white/[0.03] p-2 text-slate-500 transition hover:bg-white/[0.08] hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {(() => {
+              const session = sessionDetailModal.session
+              const appearance = getStatusAppearance(session.status)
+              const isScheduled = String(session.status || '').toUpperCase() === 'SCHEDULED'
+              const isCancelled = String(session.status || '').toUpperCase() === 'CANCELLED'
+
+              return (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gym-500 mb-1">Focal Point</p>
+                  <h4 className="font-display text-xl font-black text-white uppercase tracking-tight">{formatHumanDate(session.sessionDate)}</h4>
+                  <p className="mt-1 text-xs text-slate-500 leading-relaxed">Detailed operational status for the selected coordinate.</p>
+
+                  <div className="mt-8 rounded-[2rem] border border-white/5 bg-white/[0.03] p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h5 className="truncate font-display text-lg font-black text-white uppercase tracking-tight">{session.customerName}</h5>
+                        <div className="mt-1 flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                          <Clock className="h-3.5 w-3.5 text-gym-500" />
+                          <span>{String(session.startTime || '').slice(0, 5)} — {String(session.endTime || '').slice(0, 5)}</span>
+                          <span className="text-slate-700">|</span>
+                          <span>Vector {session.slotIndex}</span>
+                        </div>
+                      </div>
+                      <span className={`flex items-center gap-2 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ring-1 ${appearance.badge}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${appearance.dot}`} />
+                        {appearance.label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 rounded-xl bg-black/20 p-3 mb-5">
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black text-slate-600 uppercase tracking-wider mb-0.5">Contact Interface</p>
+                        <p className="truncate text-[11px] font-bold text-slate-300">{session.customerPhone || 'UNAVAILABLE'}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black text-slate-600 uppercase tracking-wider mb-0.5">Email Node</p>
+                        <p className="truncate text-[11px] font-bold text-slate-300">{session.customerEmail || 'UNSET'}</p>
+                      </div>
+                    </div>
+
+                    {isCancelled && session.cancelReason && (
+                      <div className="mb-5 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[11px] leading-relaxed text-rose-400 font-medium italic">
+                        " {session.cancelReason} "
+                      </div>
+                    )}
+
+                    {isScheduled && (
+                      <div className="flex gap-3 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeSessionDetailModal()
+                            openCancelModal(session)
+                          }}
+                          className="flex-1 rounded-xl border border-white/5 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20 transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeSessionDetailModal()
+                            openConfirmAction('complete', session.ptSessionId)
+                          }}
+                          className="flex-1 rounded-xl bg-gym-500 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-950 shadow-glow hover:scale-[1.02] transition-all active:scale-95"
+                        >
+                          Commit Complete
+                        </button>
+                      </div>
+                    )}
+
+                    {isCancelled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeSessionDetailModal()
+                          openConfirmAction('delete', session.ptSessionId)
+                        }}
+                        className="w-full rounded-xl border border-dashed border-white/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-400 hover:border-white/20 transition-all"
+                      >
+                        Purge Record
+                      </button>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
 
       {cancelModal.open && cancelModal.session && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/40 animate-in fade-in duration-300">
@@ -938,7 +1169,7 @@ function CoachSchedulePage() {
               </button>
               <button
                 type="button"
-                onClick={handleCancelSession}
+                onClick={confirmCancelSession}
                 disabled={loading}
                 className="gc-button-primary flex-1 !bg-rose-500 !text-white hover:!bg-rose-600 !rounded-2xl shadow-glow-rose"
               >
