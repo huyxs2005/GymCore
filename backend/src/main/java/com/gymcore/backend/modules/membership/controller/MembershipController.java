@@ -77,6 +77,30 @@ public class MembershipController {
                 membershipService.execute("customer-upgrade-membership", authorizationHeader, payload));
     }
 
+    @PostMapping("/memberships/upgrade-scheduled")
+    public ApiResponse<Map<String, Object>> upgradeScheduledMembership(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Scheduled membership upgrade checkout created",
+                membershipService.execute("customer-upgrade-scheduled-membership", authorizationHeader, payload));
+    }
+
+    @PostMapping("/memberships/upgrade-renew")
+    public ApiResponse<Map<String, Object>> upgradeAndRenewMembership(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Membership upgrade and renew checkout created",
+                membershipService.execute("customer-upgrade-renew-membership", authorizationHeader, payload));
+    }
+
+    @PostMapping("/memberships/switch-now")
+    public ApiResponse<Map<String, Object>> switchQueuedMembershipNow(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        return ApiResponse.ok("Queued membership activated immediately",
+                membershipService.execute("customer-switch-membership-now", authorizationHeader, payload));
+    }
+
     @PostMapping("/memberships/payment-return")
     public ApiResponse<Map<String, Object>> confirmMembershipPaymentReturn(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,

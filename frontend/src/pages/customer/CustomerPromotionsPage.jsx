@@ -60,6 +60,9 @@ function CustomerPromotionsPage() {
     return parts.length > 0 ? parts.join(' + ') : 'SPECIAL'
   }
 
+  const isClaimable = (post) => Number(post?.CanClaim || 0) === 1
+  const isClaimed = (post) => Number(post?.IsClaimed || 0) === 1
+
   return (
     <WorkspaceScaffold
       title="Promotions & Special Offers"
@@ -91,7 +94,7 @@ function CustomerPromotionsPage() {
                     {formatPostBenefit(post)}
                   </span>
                 </div>
-                {post.IsClaimed === 1 && (
+                {isClaimed(post) && (
                   <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="bg-white/90 text-slate-900 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 shadow-xl">
                       <CheckCircle2 size={18} className="text-green-500" />
@@ -127,26 +130,35 @@ function CustomerPromotionsPage() {
 
                 <button
                   onClick={() => claimMutation.mutate({ promotionId: post.PromotionID, sourcePostId: post.PromotionPostID })}
-                  disabled={claimMutation.isPending || post.IsClaimed === 1}
+                  disabled={claimMutation.isPending || isClaimed(post) || !isClaimable(post)}
                   className={`w-full py-2.5 px-4 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2
-                    ${post.IsClaimed === 1
+                    ${isClaimed(post)
                       ? 'bg-green-50 text-green-600 border border-green-100 cursor-default'
+                      : !isClaimable(post)
+                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                       : claimMutation.isPending
                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                         : 'bg-gym-600 text-white hover:bg-gym-700 active:scale-95 shadow-sm'
                     }`}
                 >
-                  {post.IsClaimed === 1 ? (
+                  {isClaimed(post) ? (
                     <>
                       <CheckCircle2 size={16} />
                       Claimed
                     </>
+                  ) : !isClaimable(post) ? (
+                    'Voucher unavailable'
                   ) : claimMutation.isPending ? (
                     'Claiming...'
                   ) : (
                     'Claim Voucher'
                   )}
                 </button>
+                {!isClaimable(post) && !isClaimed(post) ? (
+                  <p className="mt-3 text-xs text-slate-500">
+                    This campaign is visible, but the linked voucher is not claimable right now.
+                  </p>
+                ) : null}
               </div>
             </div>
           ))}

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, Package, Search, ShoppingBag, UserRound, X } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarDays, Package, Search, ShoppingBag, Star, UserRound, X } from 'lucide-react'
 import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { useSession } from '../../features/auth/useSession'
 import { membershipApi } from '../../features/membership/api/membershipApi'
+import { productApi } from '../../features/product/api/productApi'
 import {
   formatDurationLabel,
   formatDurationWithCoupon,
@@ -57,6 +58,32 @@ function getMembershipStatusBadgeClass(status) {
   return 'rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300'
 }
 
+function buildReviewDraft(item) {
+  return {
+    productId: item?.productId ?? null,
+    productName: item?.name ?? 'Product',
+    rating: Number(item?.reviewRating || 5),
+    comment: item?.reviewComment || '',
+    mode: item?.hasReview ? 'edit' : 'create',
+  }
+}
+
+function getProductOrderStatus(order) {
+  const pickupStatus = String(order?.pickupStatus || '').toUpperCase()
+  if (pickupStatus === 'PICKED_UP' || order?.pickedUpAt) {
+    return {
+      label: 'Completed order',
+      detail: order?.pickedUpAt ? `Completed ${formatDateTime(order.pickedUpAt)}` : 'Completed order',
+      badgeClass: 'rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400',
+    }
+  }
+  return {
+    label: 'Awaiting pickup',
+    detail: 'Waiting for receptionist pickup confirmation',
+    badgeClass: 'rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300',
+  }
+}
+
 function InfoTile({ label, value }) {
   return (
     <div className="rounded-2xl border border-white/5 bg-black/20 px-5 py-5">
@@ -69,11 +96,15 @@ function InfoTile({ label, value }) {
 function CustomerOrderHistoryPage() {
   const { user } = useSession()
   const userId = user?.userId ?? null
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('membership')
   const [membershipSearch, setMembershipSearch] = useState('')
   const [productSearch, setProductSearch] = useState('')
   const [selectedMembershipId, setSelectedMembershipId] = useState(null)
   const [selectedOrderId, setSelectedOrderId] = useState(null)
+  const [reviewModal, setReviewModal] = useState({ open: false, productId: null, productName: '', rating: 5, comment: '', mode: 'create' })
+  const [reviewError, setReviewError] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const membershipHistoryQuery = useQuery({
     queryKey: ['customer-membership-history', userId],
@@ -145,6 +176,30 @@ function CustomerOrderHistoryPage() {
     () => productOrders.find((order) => order.orderId === selectedOrderId) || null,
     [productOrders, selectedOrderId],
   )
+  const selectedOrderStatus = useMemo(() => getProductOrderStatus(selectedOrder), [selectedOrder])
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ productId, rating, comment, mode }) =>
+      mode === 'edit'
+        ? productApi.updateReview(productId, { rating, comment })
+        : productApi.createReview(productId, { rating, comment }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['orders', userId] })
+      setReviewModal({ open: false, productId: null, productName: '', rating: 5, comment: '', mode: 'create' })
+      setReviewError('')
+    },
+    onError: (error) => {
+      setReviewError(error?.response?.data?.message || error?.message || 'Unable to save review.')
+    },
+  })
+
+  const deleteReviewMutation = useMutation({
+    mutationFn: ({ productId }) => productApi.deleteReview(productId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['orders', userId] })
+      setDeleteTarget(null)
+    },
+  })
 
   useEffect(() => {
     setSelectedMembershipId(null)
@@ -160,6 +215,32 @@ function CustomerOrderHistoryPage() {
     setSelectedMembershipId(null)
     setSelectedOrderId(null)
   }, [activeTab])
+
+  function openReviewModal(item) {
+    setReviewModal({ open: true, ...buildReviewDraft(item) })
+    setReviewError('')
+  }
+
+  function closeReviewModal() {
+    if (reviewMutation.isPending) return
+    setReviewModal({ open: false, productId: null, productName: '', rating: 5, comment: '', mode: 'create' })
+    setReviewError('')
+  }
+
+  function submitReview(event) {
+    event.preventDefault()
+    if (!reviewModal.productId) return
+    if (reviewModal.rating < 1 || reviewModal.rating > 5) {
+      setReviewError('Please choose a rating from 1 to 5.')
+      return
+    }
+    reviewMutation.mutate({
+      productId: reviewModal.productId,
+      rating: reviewModal.rating,
+      comment: reviewModal.comment,
+      mode: reviewModal.mode,
+    })
+  }
 
   return (
     <WorkspaceScaffold showHeader={false} links={customerNav}>
@@ -368,7 +449,9 @@ function CustomerOrderHistoryPage() {
                         <p className="mt-4 text-sm text-slate-500">No product orders match the current search.</p>
                       </div>
                     ) : (
-                      paginatedOrders.map((order) => (
+                      paginatedOrders.map((order) => {
+                        const orderStatus = getProductOrderStatus(order)
+                        return (
                         <button
                           key={order.orderId}
                           type="button"
@@ -388,12 +471,13 @@ function CustomerOrderHistoryPage() {
                                 </p>
                               </div>
                             </div>
-                            <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-                              Completed order
+                            <span className={orderStatus.badgeClass}>
+                              {orderStatus.label}
                             </span>
                           </div>
                         </button>
-                      ))
+                        )
+                      })
                     )}
                   </div>
 
@@ -435,7 +519,7 @@ function CustomerOrderHistoryPage() {
                     <div className="grid gap-3 md:grid-cols-4">
                       <InfoTile label="Bought date" value={formatDateTime(selectedOrder.paidAt)} />
                       <InfoTile label="Payment" value={selectedOrder.paymentMethod || '-'} />
-                      <InfoTile label="Status" value="Completed order" />
+                      <InfoTile label="Status" value={selectedOrderStatus.label} />
                       <InfoTile label="Total paid" value={formatMoney(selectedOrder.totalAmount, selectedOrder.currency)} />
                     </div>
                   </section>
@@ -446,8 +530,8 @@ function CustomerOrderHistoryPage() {
                         <Package className="h-5 w-5 text-gym-500" />
                         <h3 className="text-base font-bold uppercase tracking-tight text-white">Order details</h3>
                       </div>
-                      <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-                        Completed order {formatDateTime(selectedOrder.pickedUpAt)}
+                      <span className={selectedOrderStatus.badgeClass}>
+                        {selectedOrderStatus.detail}
                       </span>
                     </div>
 
@@ -464,12 +548,55 @@ function CustomerOrderHistoryPage() {
                             <div>
                               <p className="text-sm font-semibold text-white">{item.name}</p>
                               <p className="mt-1 text-xs text-slate-500">Quantity: {item.quantity}</p>
+                              {selectedOrder.pickedUpAt ? (
+                                item.hasReview ? (
+                                  <div className="mt-2 space-y-1">
+                                    <p className="inline-flex items-center gap-1 text-xs font-semibold text-amber-300">
+                                      <Star className="h-3.5 w-3.5 fill-current" />
+                                      {Number(item.reviewRating || 0).toFixed(1)} / 5
+                                    </p>
+                                    <p className="text-xs text-slate-400">{item.reviewComment || 'No written comment.'}</p>
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 text-xs text-slate-400">Leave a review now that pickup is confirmed.</p>
+                                )
+                              ) : (
+                                <p className="mt-2 text-xs text-slate-500">Review unlocks after the receptionist confirms pickup.</p>
+                              )}
                             </div>
-                            <div className="text-right">
+                            <div className="space-y-3 text-right">
                               <p className="text-xs text-slate-500">Unit price: {formatMoney(item.unitPrice, selectedOrder.currency)}</p>
                               <p className="mt-1 text-sm font-semibold text-white">
                                 {formatMoney(Number(item.unitPrice || 0) * Number(item.quantity || 0), selectedOrder.currency)}
                               </p>
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openReviewModal(item)}
+                                  disabled={!selectedOrder.pickedUpAt}
+                                  className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                                    selectedOrder.pickedUpAt
+                                      ? 'border border-gym-500/30 bg-gym-500/10 text-gym-300 hover:bg-gym-500/20'
+                                      : 'cursor-not-allowed border border-white/10 bg-white/5 text-slate-500'
+                                  }`}
+                                >
+                                  {item.hasReview ? 'Edit review' : 'Leave review'}
+                                </button>
+                                {item.hasReview ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteTarget({ productId: item.productId, productName: item.name })}
+                                    disabled={!selectedOrder.pickedUpAt}
+                                    className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                                      selectedOrder.pickedUpAt
+                                        ? 'border border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/20'
+                                        : 'cursor-not-allowed border border-white/10 bg-white/5 text-slate-500'
+                                    }`}
+                                  >
+                                    Delete review
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -482,6 +609,117 @@ function CustomerOrderHistoryPage() {
           )}
         </section>
       </div>
+
+      {reviewModal.open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#12131a] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-gym-400">
+                  {reviewModal.mode === 'edit' ? 'Edit review' : 'Leave review'}
+                </p>
+                <h3 className="mt-2 text-xl font-black text-white">{reviewModal.productName}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeReviewModal}
+                className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10"
+                disabled={reviewMutation.isPending}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form className="mt-6 space-y-4" onSubmit={submitReview}>
+              <div>
+                <label htmlFor="product-review-rating" className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                  Rating
+                </label>
+                <select
+                  id="product-review-rating"
+                  value={reviewModal.rating}
+                  onChange={(event) => setReviewModal((prev) => ({ ...prev, rating: Number(event.target.value) }))}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-gym-500 focus:outline-none"
+                  disabled={reviewMutation.isPending}
+                >
+                  {[5, 4, 3, 2, 1].map((rating) => (
+                    <option key={rating} value={rating} className="bg-slate-900 text-white">
+                      {rating} star{rating > 1 ? 's' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="product-review-comment" className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                  Comment
+                </label>
+                <textarea
+                  id="product-review-comment"
+                  value={reviewModal.comment}
+                  onChange={(event) => setReviewModal((prev) => ({ ...prev, comment: event.target.value }))}
+                  className="mt-2 min-h-[140px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-gym-500 focus:outline-none"
+                  placeholder="Share your experience with this product."
+                  disabled={reviewMutation.isPending}
+                />
+              </div>
+
+              {reviewError ? <p className="text-sm text-red-300">{reviewError}</p> : null}
+
+              <div className="flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeReviewModal}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  disabled={reviewMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-gym-500 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-gym-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={reviewMutation.isPending}
+                >
+                  {reviewMutation.isPending
+                    ? 'Saving...'
+                    : reviewModal.mode === 'edit'
+                      ? 'Update review'
+                      : 'Submit review'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#12131a] p-6 shadow-2xl">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-red-300">Delete review</p>
+            <h3 className="mt-2 text-xl font-black text-white">{deleteTarget.productName}</h3>
+            <p className="mt-3 text-sm text-slate-400">This will remove your product review from the order history and product page.</p>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                disabled={deleteReviewMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteReviewMutation.mutate({ productId: deleteTarget.productId })}
+                className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteReviewMutation.isPending}
+              >
+                {deleteReviewMutation.isPending ? 'Deleting...' : 'Confirm delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </WorkspaceScaffold>
   )
 }

@@ -79,7 +79,19 @@ function formatCouponBenefit(coupon) {
 }
 
 function formatDateInput(value) {
-  return value?.split?.('T')?.[0] || ''
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear()
+    const month = String(parsed.getMonth() + 1).padStart(2, '0')
+    const day = String(parsed.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  return String(value).split('T')[0] || ''
+}
+
+function getApiErrorMessage(error, fallbackMessage) {
+  return error?.response?.data?.message || error?.response?.data?.error || error?.message || fallbackMessage
 }
 
 function createEmptyCouponForm() {
@@ -216,6 +228,11 @@ const AdminPromotionsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['adminCoupons'] })
       setIsCouponModalOpen(false)
     },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, 'Failed to create coupon')
+      setCouponFormError(message)
+      toast.error(message)
+    },
   })
 
   const updateCouponMutation = useMutation({
@@ -224,6 +241,11 @@ const AdminPromotionsPage = () => {
       toast.success('Coupon updated')
       queryClient.invalidateQueries({ queryKey: ['adminCoupons'] })
       setIsCouponModalOpen(false)
+    },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, 'Failed to update coupon')
+      setCouponFormError(message)
+      toast.error(message)
     },
   })
 
@@ -242,6 +264,11 @@ const AdminPromotionsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['adminPosts'] })
       setIsPostModalOpen(false)
     },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, 'Failed to create promotion post')
+      setPostFormError(message)
+      toast.error(message)
+    },
   })
 
   const updatePostMutation = useMutation({
@@ -250,6 +277,11 @@ const AdminPromotionsPage = () => {
       toast.success('Promotion post updated')
       queryClient.invalidateQueries({ queryKey: ['adminPosts'] })
       setIsPostModalOpen(false)
+    },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, 'Failed to update promotion post')
+      setPostFormError(message)
+      toast.error(message)
     },
   })
 
@@ -386,6 +418,7 @@ const AdminPromotionsPage = () => {
     const search = postCouponSearch.trim().toLowerCase()
 
     return coupons
+      .filter((coupon) => coupon.IsActive === 1 || coupon.IsActive === true)
       .filter((coupon) => !linkedPromotionIds.has(Number(coupon.PromotionID)))
       .filter((coupon) => {
         if (!search) return true
@@ -1304,7 +1337,7 @@ const AdminPromotionsPage = () => {
                       <div>
                         <p className="text-xs font-black uppercase tracking-[0.22em] text-gym-700">Link To Coupon</p>
                         <h4 className="mt-1 text-lg font-bold text-slate-900">Pick one coupon that is not already posted</h4>
-                        <p className="mt-2 text-sm text-slate-500">Already-linked coupons are hidden here to keep the campaign list clean, even if you have many coupons.</p>
+                        <p className="mt-2 text-sm text-slate-500">Only active coupons are listed here. Already-linked coupons are hidden to keep the campaign list clean.</p>
                       </div>
                       <div className="space-y-3">
                         <label htmlFor="post-coupon-search" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Ticket size={12} /> Coupon search</label>

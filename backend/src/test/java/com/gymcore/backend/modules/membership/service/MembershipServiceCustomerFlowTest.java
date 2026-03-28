@@ -68,7 +68,8 @@ class MembershipServiceCustomerFlowTest {
                 currentUserService,
                 payOsService,
                 notificationService,
-                orderInvoiceService);
+                orderInvoiceService,
+                coachBookingService);
         checkinHealthService = new CheckinHealthService(jdbcTemplate, authService, coachBookingService);
     }
 
@@ -1046,6 +1047,52 @@ class MembershipServiceCustomerFlowTest {
         assertTrue(Boolean.TRUE.equals(response.get("handled")));
         assertEquals(777, response.get("paymentId"));
         assertEquals("SUCCESS", response.get("status"));
+    }
+
+    @Test
+    void confirmPaymentReturn_shouldExtendApprovedPtCoverageForCoachRenewal() throws Exception {
+        LocalDate renewalStart = LocalDate.now().plusDays(1);
+        LocalDate renewalEnd = renewalStart.plusDays(29);
+
+        when(currentUserService.requireCustomer("Bearer customer"))
+                .thenReturn(new CurrentUserService.UserInfo(5, "Customer", "CUSTOMER"));
+        when(payOsService.resolvePaymentIdFromPayOsOrderCode(eq(778))).thenReturn(778);
+
+        when(jdbcTemplate.queryForObject(
+                contains("JOIN dbo.CustomerMemberships cm"),
+                eq(Integer.class),
+                eq(778),
+                eq(5)))
+                .thenReturn(1);
+
+        when(jdbcTemplate.update(eq("EXEC dbo.sp_ConfirmPaymentSuccess ?"), eq(778))).thenReturn(1);
+        when(jdbcTemplate.queryForObject(contains("cm.Status = 'SCHEDULED'"), any(RowMapper.class), eq(778)))
+                .thenThrow(new EmptyResultDataAccessException(1));
+        when(jdbcTemplate.query(
+                contains("JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID"),
+                any(RowMapper.class),
+                eq(778)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    return List.of(mapper.mapRow(resultSet(Map.of(
+                            "CustomerID", 5,
+                            "CustomerMembershipID", 901,
+                            "StartDate", renewalStart,
+                            "EndDate", renewalEnd,
+                            "PlanType", "GYM_PLUS_COACH",
+                            "AllowsCoachBooking", true
+                    )), 0));
+                });
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = membershipService.execute(
+                "customer-confirm-payment-return",
+                "Bearer customer",
+                Map.of("paymentId", 778, "status", "SUCCESS"));
+
+        assertTrue(Boolean.TRUE.equals(response.get("handled")));
+        verify(coachBookingService).extendApprovedPtCoverageIfNeeded(5, 901, renewalStart, renewalEnd);
     }
 
     @Test

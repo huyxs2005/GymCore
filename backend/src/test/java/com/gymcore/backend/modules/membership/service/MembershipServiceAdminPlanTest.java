@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import com.gymcore.backend.modules.product.service.OrderInvoiceService;
 import com.gymcore.backend.modules.product.service.PayOsService;
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ class MembershipServiceAdminPlanTest {
     private PayOsService payOsService;
     private UserNotificationService notificationService;
     private OrderInvoiceService orderInvoiceService;
+    private CoachBookingService coachBookingService;
     private MembershipService membershipService;
 
     @BeforeEach
@@ -44,12 +46,14 @@ class MembershipServiceAdminPlanTest {
         payOsService = Mockito.mock(PayOsService.class);
         notificationService = Mockito.mock(UserNotificationService.class);
         orderInvoiceService = Mockito.mock(OrderInvoiceService.class);
+        coachBookingService = Mockito.mock(CoachBookingService.class);
         membershipService = new MembershipService(
                 jdbcTemplate,
                 currentUserService,
                 payOsService,
                 notificationService,
-                orderInvoiceService);
+                orderInvoiceService,
+                coachBookingService);
     }
 
     @Test

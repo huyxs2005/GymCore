@@ -103,6 +103,55 @@ public class CoachBookingService {
         return customerMatchCoaches(payload);
     }
 
+    @Transactional
+    public void extendApprovedPtCoverageIfNeeded(int customerId, int customerMembershipId,
+            LocalDate membershipStartDate, LocalDate membershipEndDate) {
+        if (membershipStartDate == null || membershipEndDate == null) {
+            return;
+        }
+
+        Map<String, Object> activePhase = loadActivePtPhase(customerId);
+        if (activePhase == null) {
+            return;
+        }
+
+        LocalDate currentEndDate = LocalDate.parse(String.valueOf(activePhase.get("endDate")));
+        if (!membershipEndDate.isAfter(currentEndDate)) {
+            return;
+        }
+        if (membershipStartDate.isAfter(currentEndDate.plusDays(1))) {
+            return;
+        }
+
+        int ptRequestId = (Integer) activePhase.get("ptRequestId");
+        int coachId = (Integer) activePhase.get("coachId");
+        List<Map<String, Object>> templateSlots = loadTemplateSlots(ptRequestId);
+
+        int updated = jdbcTemplate.update("""
+                UPDATE dbo.PTRecurringRequests
+                SET CustomerMembershipID = ?,
+                    EndDate = ?,
+                    UpdatedAt = SYSDATETIME()
+                WHERE PTRequestID = ?
+                  AND CustomerID = ?
+                  AND Status = 'APPROVED'
+                  AND EndDate < ?
+                """, customerMembershipId, membershipEndDate, ptRequestId, customerId, membershipEndDate);
+        if (updated == 0) {
+            return;
+        }
+
+        LocalDate generationStartDate = currentEndDate.plusDays(1);
+        if (generationStartDate.isBefore(membershipStartDate)) {
+            generationStartDate = membershipStartDate;
+        }
+        if (generationStartDate.isAfter(membershipEndDate) || templateSlots.isEmpty()) {
+            return;
+        }
+
+        generatePTSessions(ptRequestId, customerId, coachId, generationStartDate, membershipEndDate, templateSlots);
+    }
+
     // ---------- Common ----------
 
     private Map<String, Object> getTimeSlots() {

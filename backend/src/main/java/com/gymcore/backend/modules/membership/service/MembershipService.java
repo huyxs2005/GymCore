@@ -3,6 +3,7 @@ package com.gymcore.backend.modules.membership.service;
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService;
 import com.gymcore.backend.modules.auth.service.CurrentUserService.UserInfo;
+import com.gymcore.backend.modules.coach.service.CoachBookingService;
 import com.gymcore.backend.modules.product.service.OrderInvoiceService;
 import com.gymcore.backend.modules.product.service.PayOsService;
 import java.math.BigDecimal;
@@ -37,15 +38,17 @@ public class MembershipService {
     private final PayOsService payOsService;
     private final UserNotificationService notificationService;
     private final OrderInvoiceService orderInvoiceService;
+    private final CoachBookingService coachBookingService;
 
     public MembershipService(JdbcTemplate jdbcTemplate, CurrentUserService currentUserService,
             PayOsService payOsService, UserNotificationService notificationService,
-            OrderInvoiceService orderInvoiceService) {
+            OrderInvoiceService orderInvoiceService, CoachBookingService coachBookingService) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.payOsService = payOsService;
         this.notificationService = notificationService;
         this.orderInvoiceService = orderInvoiceService;
+        this.coachBookingService = coachBookingService;
     }
 
     public Map<String, Object> execute(String action, String authorizationHeader, Object payload) {
@@ -58,6 +61,9 @@ public class MembershipService {
             case "customer-purchase-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.PURCHASE);
             case "customer-renew-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.RENEW);
             case "customer-upgrade-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE);
+            case "customer-upgrade-scheduled-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE_SCHEDULED);
+            case "customer-upgrade-renew-membership" -> customerCreateCheckout(authorizationHeader, safePayload, CheckoutMode.UPGRADE_RENEW);
+            case "customer-switch-membership-now" -> customerSwitchMembershipNow(authorizationHeader, safePayload);
             case "customer-confirm-payment-return" -> customerConfirmPaymentReturn(authorizationHeader, safePayload);
             case "payment-webhook" -> handlePaymentWebhook(safePayload);
             case "admin-get-plans" -> adminGetPlans(authorizationHeader);
@@ -297,6 +303,11 @@ public class MembershipService {
         String cancelUrl = asNullableString(payload.get("cancelUrl"));
         String promoCode = asNullableString(payload.get("promoCode"));
 
+        if (mode == CheckoutMode.UPGRADE_RENEW && "DAY_PASS".equalsIgnoreCase(plan.planType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Day Pass cannot use upgrade instantly and renew.");
+        }
+
         LocalDate startDate = resolveStartDate(mode, activeMembership, scheduledMembership, expiredMembership, planId);
         if (plan.price().compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -313,7 +324,7 @@ public class MembershipService {
                     "Day Pass cannot use bonus membership months.");
         }
         Integer claimId = coupon == null ? null : coupon.claimId();
-        LocalDate endDate = resolveEndDate(startDate, plan.planType(), plan.durationDays(), bonusDurationMonths);
+        LocalDate endDate = resolveCheckoutEndDate(mode, plan, startDate, bonusDurationMonths, activeMembership);
         expireStalePendingCheckouts(user.userId());
 
         Map<String, Object> existingPending = findExistingPendingCheckout(
@@ -358,6 +369,8 @@ public class MembershipService {
         String description = switch (mode) {
             case RENEW -> "Renew #" + customerMembershipId;
             case UPGRADE -> "Upgrade #" + customerMembershipId;
+            case UPGRADE_SCHEDULED -> "UpgradeScheduled #" + customerMembershipId;
+            case UPGRADE_RENEW -> "UpgradeRenew #" + customerMembershipId;
             default -> "Membership #" + customerMembershipId;
         };
 
@@ -425,6 +438,8 @@ public class MembershipService {
                     """, "SUCCESS", paymentMethod, paymentId);
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
+            applyScheduledUpgradeReplacementIfNeeded(paymentId);
+            syncCoachBookingCoverageIfNeeded(paymentId);
             markMembershipClaimUsageIfNeeded(paymentId);
             notifySuccessfulPayment(paymentId);
         } catch (Exception exception) {
@@ -541,6 +556,93 @@ public class MembershipService {
         return Map.of("memberships", memberships);
     }
 
+    private Map<String, Object> customerSwitchMembershipNow(String authorizationHeader, Map<String, Object> payload) {
+        UserInfo user = currentUserService.requireCustomer(authorizationHeader);
+        expireStalePendingCheckouts(user.userId());
+
+        Integer requestedMembershipId = tryParsePositiveInt(firstNonNull(
+                payload.get("customerMembershipId"),
+                payload.get("membershipId")));
+
+        MembershipSnapshot activeMembership = findTopMembership(user.userId(), "ACTIVE");
+        MembershipSnapshot scheduledMembership = findTopMembership(user.userId(), "SCHEDULED");
+
+        if (activeMembership == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Customer does not have an ACTIVE membership to replace.");
+        }
+        if (scheduledMembership == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Customer does not have a queued membership to switch to.");
+        }
+        if (requestedMembershipId != null && requestedMembershipId.intValue() != scheduledMembership.customerMembershipId()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Queued membership does not match the requested membership.");
+        }
+        String activePlanType = loadMembershipPlanType(activeMembership.customerMembershipId());
+        String scheduledPlanType = loadMembershipPlanType(scheduledMembership.customerMembershipId());
+        if (membershipTierRank(scheduledPlanType) <= membershipTierRank(activePlanType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Switch now is only available when the queued membership is a higher tier plan.");
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate scheduledStartDate = scheduledMembership.startDate();
+        LocalDate scheduledEndDate = scheduledMembership.endDate();
+        long preservedDurationDays = 0;
+        if (scheduledStartDate != null && scheduledEndDate != null) {
+            preservedDurationDays = ChronoUnit.DAYS.between(scheduledStartDate, scheduledEndDate);
+        }
+        LocalDate newEndDate = today.plusDays(Math.max(0L, preservedDurationDays));
+
+        jdbcTemplate.update("""
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'EXPIRED',
+                    EndDate = CASE WHEN EndDate > CAST(SYSDATETIME() AS DATE) THEN CAST(SYSDATETIME() AS DATE) ELSE EndDate END,
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerMembershipID = ?
+                  AND CustomerID = ?
+                  AND Status = 'ACTIVE'
+                """, activeMembership.customerMembershipId(), user.userId());
+
+        jdbcTemplate.update("""
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'ACTIVE',
+                    StartDate = ?,
+                    EndDate = ?,
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerMembershipID = ?
+                  AND CustomerID = ?
+                  AND Status = 'SCHEDULED'
+                """, java.sql.Date.valueOf(today), java.sql.Date.valueOf(newEndDate),
+                scheduledMembership.customerMembershipId(), user.userId());
+
+        return customerGetCurrentMembership(authorizationHeader);
+    }
+
+    private String loadMembershipPlanType(int customerMembershipId) {
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT mp.PlanType
+                    FROM dbo.CustomerMemberships cm
+                    JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                    WHERE cm.CustomerMembershipID = ?
+                    """, String.class, customerMembershipId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Membership plan not found.");
+        }
+    }
+
+    private int membershipTierRank(String planType) {
+        String normalized = upperText(planType);
+        return switch (normalized) {
+            case "DAY_PASS" -> 1;
+            case "GYM_ONLY" -> 2;
+            case "GYM_PLUS_COACH" -> 3;
+            default -> 0;
+        };
+    }
+
     private List<Map<String, Object>> findExpiredMembershipHistory(int customerId) {
         String sql = """
                 SELECT
@@ -648,6 +750,8 @@ public class MembershipService {
         try {
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
+            applyScheduledUpgradeReplacementIfNeeded(paymentId);
+            syncCoachBookingCoverageIfNeeded(paymentId);
             markMembershipClaimUsageIfNeeded(paymentId);
             notifySuccessfulPayment(paymentId);
         } catch (Exception exception) {
@@ -710,6 +814,8 @@ public class MembershipService {
                     """, normalizedSuccessStatus(status), paymentId);
             jdbcTemplate.update("EXEC dbo.sp_ConfirmPaymentSuccess ?", paymentId);
             applyImmediateUpgradeActivationIfNeeded(paymentId);
+            applyScheduledUpgradeReplacementIfNeeded(paymentId);
+            syncCoachBookingCoverageIfNeeded(paymentId);
             markMembershipClaimUsageIfNeeded(paymentId);
             notifySuccessfulPayment(paymentId);
             orderInvoiceService.handleSuccessfulProductPayment(paymentId);
@@ -734,7 +840,7 @@ public class MembershipService {
                     FROM dbo.Payments p
                     JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = p.CustomerMembershipID
                     WHERE p.PaymentID = ?
-                      AND cm.Status = 'SCHEDULED'
+                      AND cm.Status IN ('SCHEDULED', 'ACTIVE')
                       AND cm.StartDate <= CAST(SYSDATETIME() AS DATE)
                     """, (rs, rowNum) -> new UpgradeCandidate(
                     rs.getInt("CustomerMembershipID"),
@@ -772,8 +878,98 @@ public class MembershipService {
                 SET Status = 'ACTIVE',
                     UpdatedAt = SYSDATETIME()
                 WHERE CustomerMembershipID = ?
-                  AND Status = 'SCHEDULED'
+                  AND Status IN ('SCHEDULED', 'PENDING')
                 """, candidate.customerMembershipId());
+    }
+
+    private void applyScheduledUpgradeReplacementIfNeeded(int paymentId) {
+        UpgradeCandidate candidate;
+        try {
+            candidate = jdbcTemplate.queryForObject("""
+                    SELECT TOP (1)
+                        cm.CustomerMembershipID,
+                        cm.CustomerID
+                    FROM dbo.Payments p
+                    JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = p.CustomerMembershipID
+                    WHERE p.PaymentID = ?
+                      AND cm.Status = 'SCHEDULED'
+                      AND cm.StartDate > CAST(SYSDATETIME() AS DATE)
+                    """, (rs, rowNum) -> new UpgradeCandidate(
+                    rs.getInt("CustomerMembershipID"),
+                    rs.getInt("CustomerID")), paymentId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
+            return;
+        }
+        if (candidate == null) {
+            return;
+        }
+
+        Integer otherScheduledCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM dbo.CustomerMemberships
+                WHERE CustomerID = ?
+                  AND Status = 'SCHEDULED'
+                  AND CustomerMembershipID <> ?
+                """, Integer.class, candidate.customerId(), candidate.customerMembershipId());
+        if (otherScheduledCount == null || otherScheduledCount == 0) {
+            return;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE dbo.CustomerMemberships
+                SET Status = 'CANCELLED',
+                    UpdatedAt = SYSDATETIME()
+                WHERE CustomerID = ?
+                  AND Status = 'SCHEDULED'
+                  AND CustomerMembershipID <> ?
+                """, candidate.customerId(), candidate.customerMembershipId());
+    }
+
+    private void syncCoachBookingCoverageIfNeeded(int paymentId) {
+        List<Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT TOP (1)
+                    cm.CustomerID,
+                    cm.CustomerMembershipID,
+                    cm.StartDate,
+                    cm.EndDate,
+                    mp.PlanType,
+                    mp.AllowsCoachBooking
+                FROM dbo.Payments p
+                JOIN dbo.CustomerMemberships cm ON cm.CustomerMembershipID = p.CustomerMembershipID
+                JOIN dbo.MembershipPlans mp ON mp.MembershipPlanID = cm.MembershipPlanID
+                WHERE p.PaymentID = ?
+                  AND p.CustomerMembershipID IS NOT NULL
+                ORDER BY cm.CustomerMembershipID DESC
+                """, (rs, rowNum) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("customerId", rs.getInt("CustomerID"));
+            item.put("customerMembershipId", rs.getInt("CustomerMembershipID"));
+            item.put("startDate", toLocalDate(rs, "StartDate"));
+            item.put("endDate", toLocalDate(rs, "EndDate"));
+            item.put("planType", rs.getString("PlanType"));
+            item.put("allowsCoachBooking", rs.getBoolean("AllowsCoachBooking"));
+            return item;
+        }, paymentId);
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> membership = rows.getFirst();
+        boolean allowsCoachBooking = Boolean.TRUE.equals(membership.get("allowsCoachBooking"));
+        String planType = upperText(membership.get("planType"));
+        if (!allowsCoachBooking || (!"GYM_PLUS_COACH".equals(planType) && !"GYM_COACH".equals(planType))) {
+            return;
+        }
+
+        Integer customerId = tryParsePositiveInt(membership.get("customerId"));
+        Integer customerMembershipId = tryParsePositiveInt(membership.get("customerMembershipId"));
+        LocalDate startDate = (LocalDate) membership.get("startDate");
+        LocalDate endDate = (LocalDate) membership.get("endDate");
+        if (customerId == null || customerMembershipId == null || startDate == null || endDate == null) {
+            return;
+        }
+
+        coachBookingService.extendApprovedPtCoverageIfNeeded(customerId, customerMembershipId, startDate, endDate);
     }
 
     private Map<String, Object> adminGetPlans(String authorizationHeader) {
@@ -1466,16 +1662,49 @@ public class MembershipService {
                     "Renew requires an ACTIVE membership or the same expired plan.");
         }
 
+        if (mode == CheckoutMode.UPGRADE_RENEW) {
+            if (activeMembership == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Upgrade instantly and renew requires an ACTIVE membership.");
+            }
+            if (scheduledMembership != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Customer already has the maximum of 2 memberships (current + queued).");
+            }
+            return today;
+        }
+
+        if (mode == CheckoutMode.UPGRADE_SCHEDULED) {
+            if (activeMembership == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Upgrade scheduled requires an ACTIVE membership.");
+            }
+            if (scheduledMembership == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Upgrade scheduled requires an existing queued membership.");
+            }
+            return scheduledMembership.startDate();
+        }
+
         if (activeMembership == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Upgrade requires an ACTIVE membership.");
         }
-        if (scheduledMembership != null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Customer already has the maximum of 2 memberships (current + queued).");
-        }
         // Upgrade starts now; webhook will switch ACTIVE membership immediately after success.
         return today;
+    }
+
+    private LocalDate resolveCheckoutEndDate(
+            CheckoutMode mode,
+            MembershipPlan plan,
+            LocalDate startDate,
+            int bonusDurationMonths,
+            MembershipSnapshot activeMembership) {
+        if (mode == CheckoutMode.UPGRADE_RENEW && activeMembership != null) {
+            LocalDate renewedStartDate = activeMembership.endDate().plusDays(1);
+            return resolveEndDate(renewedStartDate, plan.planType(), plan.durationDays(), bonusDurationMonths);
+        }
+        return resolveEndDate(startDate, plan.planType(), plan.durationDays(), bonusDurationMonths);
     }
 
     private LocalDate resolveEndDate(LocalDate startDate, String planType, int durationDays) {
@@ -2002,6 +2231,8 @@ public class MembershipService {
     private enum CheckoutMode {
         PURCHASE,
         RENEW,
-        UPGRADE
+        UPGRADE,
+        UPGRADE_SCHEDULED,
+        UPGRADE_RENEW
     }
 }

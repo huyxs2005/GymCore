@@ -54,9 +54,9 @@ class CoachBookingServiceTest {
         when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
                 .thenReturn(List.of());
 
-        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
+        when(jdbcTemplate.query(contains("SELECT TOP (1)"), any(RowMapper.class),
                 eq(10), any(LocalDate.class), any(LocalDate.class)))
-                .thenThrow(new EmptyResultDataAccessException(1));
+                .thenReturn(List.of());
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
                 "customer-create-booking-request",
@@ -72,8 +72,8 @@ class CoachBookingServiceTest {
 
     @Test
     void customerCreateInstantBooking_shouldConfirmImmediatelyAndNotifyBothSides() {
-        LocalDate requestStart = nextMonday(LocalDate.now().plusDays(7));
-        LocalDate requestEnd = requestStart.plusDays(21);
+        LocalDate requestStart = LocalDate.now().plusDays(1);
+        LocalDate requestEnd = requestStart.plusDays(27);
 
         when(authService.requireAuthContext("Bearer customer"))
                 .thenReturn(new AuthService.AuthContext(10, "CUSTOMER", "Customer Minh", "customer@gymcore.local"));
@@ -81,15 +81,16 @@ class CoachBookingServiceTest {
         when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
                 .thenReturn(List.of());
 
-        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
-                eq(10), eq(requestStart), eq(requestEnd)))
+        when(jdbcTemplate.query(contains("UPPER(mp.PlanType) IN ('GYM_PLUS_COACH', 'GYM_COACH')"), any(RowMapper.class),
+                eq(10), eq(requestStart), eq(requestStart)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
                     RowMapper<Object> mapper = invocation.getArgument(1);
                     ResultSet rs = Mockito.mock(ResultSet.class);
                     when(rs.getInt("CustomerMembershipID")).thenReturn(77);
                     when(rs.getBoolean("AllowsCoachBooking")).thenReturn(true);
-                    return mapper.mapRow(rs, 0);
+                    when(rs.getDate("EndDate")).thenReturn(java.sql.Date.valueOf(requestEnd));
+                    return List.of(mapper.mapRow(rs, 0));
                 });
 
         when(jdbcTemplate.query(eq("SELECT 1 FROM dbo.Coaches WHERE CoachID = ?"), any(RowMapper.class), eq(20)))
@@ -440,6 +441,86 @@ class CoachBookingServiceTest {
         verify(jdbcTemplate).update(contains("DELETE FROM dbo.PTRequestSlots"), eq(900));
         verify(jdbcTemplate, atLeastOnce()).update(contains("INSERT INTO dbo.PTSessions"), eq(900), eq(10), eq(20),
                 any(LocalDate.class), eq(1), eq(2));
+    }
+
+    @Test
+    void extendApprovedPtCoverageIfNeeded_shouldExtendRequestAndGenerateNewSessions() {
+        LocalDate currentEndDate = LocalDate.now().plusDays(6);
+        LocalDate renewalStartDate = currentEndDate.plusDays(1);
+        LocalDate renewalEndDate = renewalStartDate.plusDays(20);
+
+        when(jdbcTemplate.query(
+                contains("WHERE r.CustomerID = ?"),
+                any(RowMapper.class),
+                eq(10)))
+                .thenReturn(List.of(mapOfNullable(
+                        "ptRequestId", 900,
+                        "customerId", 10,
+                        "coachId", 20,
+                        "coachName", "Coach Alex",
+                        "coachEmail", "coach@gymcore.local",
+                        "coachPhone", "0900000003",
+                        "customerMembershipId", 77,
+                        "startDate", LocalDate.now().minusDays(20).toString(),
+                        "endDate", currentEndDate.toString(),
+                        "status", "APPROVED",
+                        "bookingMode", "INSTANT")));
+
+        when(jdbcTemplate.query(
+                contains("FROM dbo.PTRequestSlots prs"),
+                any(RowMapper.class),
+                eq(900)))
+                .thenReturn(List.of(Map.of(
+                        "dayOfWeek", renewalStartDate.getDayOfWeek().getValue(),
+                        "timeSlotId", 1,
+                        "slotIndex", 1,
+                        "startTime", "07:00:00",
+                        "endTime", "08:30:00")));
+
+        when(jdbcTemplate.update(
+                contains("UPDATE dbo.PTRecurringRequests"),
+                eq(901),
+                eq(renewalEndDate),
+                eq(900),
+                eq(10),
+                eq(renewalEndDate)))
+                .thenReturn(1);
+
+        when(jdbcTemplate.queryForObject(
+                contains("FROM dbo.PTSessions"),
+                eq(Integer.class),
+                eq(900),
+                any(LocalDate.class),
+                eq(1)))
+                .thenReturn(0);
+
+        when(jdbcTemplate.update(
+                contains("INSERT INTO dbo.PTSessions"),
+                eq(900),
+                eq(10),
+                eq(20),
+                any(LocalDate.class),
+                eq(renewalStartDate.getDayOfWeek().getValue()),
+                eq(1)))
+                .thenReturn(1);
+
+        service.extendApprovedPtCoverageIfNeeded(10, 901, renewalStartDate, renewalEndDate);
+
+        verify(jdbcTemplate).update(
+                contains("UPDATE dbo.PTRecurringRequests"),
+                eq(901),
+                eq(renewalEndDate),
+                eq(900),
+                eq(10),
+                eq(renewalEndDate));
+        verify(jdbcTemplate, atLeastOnce()).update(
+                contains("INSERT INTO dbo.PTSessions"),
+                eq(900),
+                eq(10),
+                eq(20),
+                any(LocalDate.class),
+                eq(renewalStartDate.getDayOfWeek().getValue()),
+                eq(1));
     }
 
     @Test
@@ -1019,7 +1100,7 @@ class CoachBookingServiceTest {
         when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
                 .thenReturn(List.of());
 
-        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
+        when(jdbcTemplate.query(contains("UPPER(mp.PlanType) IN ('GYM_PLUS_COACH', 'GYM_COACH')"), any(RowMapper.class),
                 eq(10), any(LocalDate.class), any(LocalDate.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
@@ -1027,17 +1108,18 @@ class CoachBookingServiceTest {
                     ResultSet rs = Mockito.mock(ResultSet.class);
                     when(rs.getInt("CustomerMembershipID")).thenReturn(77);
                     when(rs.getBoolean("AllowsCoachBooking")).thenReturn(true);
-                    return mapper.mapRow(rs, 0);
+                    when(rs.getDate("EndDate")).thenReturn(java.sql.Date.valueOf(LocalDate.now().plusDays(28)));
+                    return List.of(mapper.mapRow(rs, 0));
                 });
 
         when(jdbcTemplate.query(contains("FROM dbo.Coaches"), any(RowMapper.class)))
                 .thenReturn(List.of(
                         mapOfNullable("coachId", 501, "fullName", "Coach Full", "email", "full@gymcore.local",
                                 "phone", "1", "avatarUrl", null, "experienceYears", 3, "bio", "full",
-                                "averageRating", 5.0, "reviewCount", 10),
+                                "averageRating", 5.0, "reviewCount", 10, "acceptingCustomers", true),
                         mapOfNullable("coachId", 502, "fullName", "Coach Partial", "email", "partial@gymcore.local",
                                 "phone", "2", "avatarUrl", null, "experienceYears", 2, "bio", "partial",
-                                "averageRating", 4.5, "reviewCount", 7)));
+                                "averageRating", 4.5, "reviewCount", 7, "acceptingCustomers", true)));
 
         when(jdbcTemplate.query(contains("FROM dbo.CoachWeeklyAvailability"), any(RowMapper.class), eq(501)))
                 .thenReturn(List.of(
@@ -1079,7 +1161,7 @@ class CoachBookingServiceTest {
         assertEquals(501, fullMatches.getFirst().get("coachId"));
         assertEquals(1, partialMatches.size());
         assertEquals(502, partialMatches.getFirst().get("coachId"));
-        verify(jdbcTemplate).queryForObject(contains("mp.PlanType = 'GYM_PLUS_COACH'"), any(RowMapper.class),
+        verify(jdbcTemplate).query(contains("UPPER(mp.PlanType) IN ('GYM_PLUS_COACH', 'GYM_COACH')"), any(RowMapper.class),
                 eq(10), any(LocalDate.class), any(LocalDate.class));
     }
 
@@ -1091,9 +1173,9 @@ class CoachBookingServiceTest {
         when(jdbcTemplate.query(contains("FROM dbo.PTRecurringRequests"), any(RowMapper.class), eq(10)))
                 .thenReturn(List.of());
 
-        when(jdbcTemplate.queryForObject(contains("SELECT TOP 1 cm.CustomerMembershipID"), any(RowMapper.class),
+        when(jdbcTemplate.query(contains("SELECT TOP (1)"), any(RowMapper.class),
                 eq(10), any(LocalDate.class), any(LocalDate.class)))
-                .thenThrow(new EmptyResultDataAccessException(1));
+                .thenReturn(List.of());
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.execute(
                 "customer-match-coaches",
@@ -1162,10 +1244,10 @@ class CoachBookingServiceTest {
                 .thenReturn(List.of(Map.of("dayOfWeek", 1, "timeSlotId", 1)));
 
         when(jdbcTemplate.query(
-                contains("SELECT cm.CustomerMembershipID, mp.AllowsCoachBooking"),
+                anyString(),
                 any(RowMapper.class),
-                eq(10),
                 eq(77),
+                eq(10),
                 eq(expectedStartDate),
                 eq(endDate)))
                 .thenAnswer(invocation -> {
@@ -1174,6 +1256,7 @@ class CoachBookingServiceTest {
                     ResultSet rs = Mockito.mock(ResultSet.class);
                     when(rs.getInt("CustomerMembershipID")).thenReturn(77);
                     when(rs.getBoolean("AllowsCoachBooking")).thenReturn(true);
+                    when(rs.getDate("EndDate")).thenReturn(java.sql.Date.valueOf(endDate));
                     return List.of(mapper.mapRow(rs, 0));
                 });
 
@@ -1190,8 +1273,8 @@ class CoachBookingServiceTest {
         assertEquals("APPROVED", result.get("status"));
         assertEquals(expectedStartDate.toString(), result.get("startDate"));
         assertEquals(endDate.toString(), result.get("endDate"));
-        verify(jdbcTemplate).query(contains("mp.PlanType = 'GYM_PLUS_COACH'"), any(RowMapper.class),
-                eq(10), eq(77), eq(expectedStartDate), eq(endDate));
+        verify(jdbcTemplate).query(anyString(), any(RowMapper.class),
+                eq(77), eq(10), eq(expectedStartDate), eq(endDate));
         verify(jdbcTemplate).update(contains("UPDATE dbo.PTRecurringRequests SET StartDate = ?"), eq(expectedStartDate), eq(900));
     }
 

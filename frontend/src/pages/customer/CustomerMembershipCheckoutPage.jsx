@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Check, CreditCard, Ticket, WalletCards } from 'lucide-react'
@@ -13,6 +13,7 @@ import {
   checkoutModeLabel,
   formatDurationLabel,
   formatDurationWithCoupon,
+  getPlanTierRank,
   inferCheckoutMode,
 } from '../../features/membership/utils/membershipCheckout'
 
@@ -44,6 +45,7 @@ function CustomerMembershipCheckoutPage() {
   const [checkoutWarning, setCheckoutWarning] = useState(null)
 
   const selectedPlanId = Number(searchParams.get('planId') || 0)
+  const requestedMode = String(searchParams.get('mode') || '').trim().toUpperCase()
 
   const plansQuery = useQuery({
     queryKey: ['membershipPlans'],
@@ -89,8 +91,47 @@ function CustomerMembershipCheckoutPage() {
     [normalizedMembershipCoupons, selectedPromoCode],
   )
 
-  const checkoutMode = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : 'PURCHASE'
   const hasActiveMembership = String(currentMembership?.status || '').toUpperCase() === 'ACTIVE'
+  const queuedMembership = currentMembershipQuery.data?.data?.queuedMembership ?? null
+  const hasQueuedMembership = Boolean(queuedMembership && Object.keys(queuedMembership).length > 0)
+  const currentPlanId = Number(currentMembership?.plan?.planId || 0)
+  const currentPlanType = String(currentMembership?.plan?.planType || '').trim().toUpperCase()
+  const queuedPlanId = Number(queuedMembership?.plan?.planId || 0)
+  const queuedPlanType = String(queuedMembership?.plan?.planType || '').trim().toUpperCase()
+  const inferredCheckoutMode = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : 'PURCHASE'
+  const supportsUpgradeRenewOption = Boolean(
+    selectedPlan
+    && hasActiveMembership
+    && currentPlanType !== 'DAY_PASS'
+    && String(selectedPlan?.planType || '').trim().toUpperCase() !== 'DAY_PASS'
+    && Number(selectedPlan.planId) !== currentPlanId,
+  )
+  const supportsScheduledUpgradeOption = Boolean(
+    selectedPlan
+    && hasQueuedMembership
+    && getPlanTierRank(selectedPlan?.planType) > getPlanTierRank(queuedPlanType)
+    && Number(selectedPlan.planId) !== queuedPlanId,
+  )
+  const availableCheckoutModes = useMemo(() => {
+    if (!selectedPlan) return []
+    if (hasQueuedMembership) {
+      const modes = []
+      if (supportsUpgradeRenewOption) modes.push('UPGRADE')
+      if (supportsScheduledUpgradeOption) modes.push('UPGRADE_SCHEDULED')
+      return modes.length ? modes : [inferredCheckoutMode]
+    }
+    if (!supportsUpgradeRenewOption) return [inferredCheckoutMode]
+    return ['RENEW', 'UPGRADE']
+  }, [hasQueuedMembership, inferredCheckoutMode, selectedPlan, supportsScheduledUpgradeOption, supportsUpgradeRenewOption])
+  const [checkoutMode, setCheckoutMode] = useState(null)
+
+  useEffect(() => {
+    setCheckoutMode((current) => {
+      if (availableCheckoutModes.includes(current)) return current
+      if (availableCheckoutModes.includes(requestedMode)) return requestedMode
+      return availableCheckoutModes[0] ?? inferredCheckoutMode
+    })
+  }, [availableCheckoutModes, inferredCheckoutMode, requestedMode])
 
   const previewCouponMutation = useMutation({
     mutationFn: (payload) => promotionApi.applyCoupon(payload),
@@ -139,6 +180,7 @@ function CustomerMembershipCheckoutPage() {
       }
       if (mode === 'RENEW') return membershipApi.renew(payload)
       if (mode === 'UPGRADE') return membershipApi.upgrade(payload)
+      if (mode === 'UPGRADE_SCHEDULED') return membershipApi.upgradeScheduled(payload)
       return membershipApi.purchase(payload)
     },
     onSuccess: (response) => {
@@ -189,15 +231,16 @@ function CustomerMembershipCheckoutPage() {
 
   const handleProceedPayment = () => {
     if (!selectedPlan) return
+    const effectiveCheckoutMode = checkoutMode || inferredCheckoutMode
     if (hasActiveMembership) {
       setCheckoutWarning({
-        mode: checkoutMode,
-        message: buildActiveWarningMessage(checkoutMode, currentMembership, selectedPlan),
+        mode: effectiveCheckoutMode,
+        message: buildActiveWarningMessage(effectiveCheckoutMode, currentMembership, selectedPlan),
       })
       return
     }
     checkoutMutation.mutate({
-      mode: checkoutMode,
+      mode: effectiveCheckoutMode,
       planId: selectedPlan.planId,
       promoCode: selectedPromoCode,
     })
@@ -251,7 +294,7 @@ function CustomerMembershipCheckoutPage() {
                   <div className="flex items-start justify-between min-h-[60px] mb-4 gap-3">
                     <h2 className="text-xl font-black tracking-tight text-white leading-tight pr-4">{selectedPlan.name}</h2>
                     <span className="shrink-0 mt-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-emerald-400 h-fit">
-                      {checkoutModeLabel[checkoutMode]}
+                      {checkoutModeLabel[checkoutMode || inferredCheckoutMode]}
                     </span>
                   </div>
 
@@ -271,11 +314,36 @@ function CustomerMembershipCheckoutPage() {
                   <div className="min-h-[50px] mb-4">
                     <p className="text-[12px] font-bold text-slate-300 leading-relaxed border-l-2 border-emerald-500/30 pl-3 py-0.5">
                       {hasActiveMembership
-                        ? buildActiveWarningMessage(checkoutMode, currentMembership, selectedPlan)
+                        ? buildActiveWarningMessage(checkoutMode || inferredCheckoutMode, currentMembership, selectedPlan)
                         : 'Your selected membership will start after successful payment confirmation.'}
                     </p>
                   </div>
                 </div>
+
+                {availableCheckoutModes.length > 1 ? (
+                  <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Choose action</p>
+                    <div className="mt-3 space-y-2">
+                      {availableCheckoutModes.map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setCheckoutMode(mode)}
+                          className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                            (checkoutMode || inferredCheckoutMode) === mode
+                              ? 'border-emerald-400/50 bg-emerald-500/15 text-white'
+                              : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
+                          }`}
+                        >
+                          <p className="text-[11px] font-black uppercase tracking-[0.16em]">{checkoutModeLabel[mode]}</p>
+                          <p className="mt-2 text-xs font-medium leading-5 text-slate-300">
+                            {buildActiveWarningMessage(mode, currentMembership, selectedPlan)}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="border-t border-white/5 pt-5">
                   <ul className="space-y-3.5">
@@ -283,7 +351,7 @@ function CustomerMembershipCheckoutPage() {
                       <div className="mt-0.5 rounded-full p-0.5 shadow-sm bg-emerald-500/20 text-emerald-400">
                         <Check size={14} strokeWidth={3} />
                       </div>
-                      <span className="text-[12px] font-bold leading-relaxed text-slate-100">Mode: {checkoutModeLabel[checkoutMode]}</span>
+                      <span className="text-[12px] font-bold leading-relaxed text-slate-100">Mode: {checkoutModeLabel[checkoutMode || inferredCheckoutMode]}</span>
                     </li>
                     <li className="flex gap-3 items-start">
                       <div className="mt-0.5 rounded-full p-0.5 shadow-sm bg-emerald-500/20 text-emerald-400">

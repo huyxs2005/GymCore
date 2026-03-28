@@ -302,11 +302,11 @@ public class UserManagementService {
         CurrentUserService.UserInfo admin = requireAdmin(payload);
         int userId = requirePositiveInt(payload.get("userId"), "User ID is required.");
         Map<String, Object> body = asMap(payload.get("body"));
-        StaffRecord current = requireStaffRecord(userId);
+        ManagedUserRecord current = requireManagedUserRecord(userId);
 
         String requestedRole = normalizeRoleInput(body.get("role"), true);
         if (requestedRole != null && !requestedRole.equals(current.role())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Changing staff roles is not supported.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Changing roles is not supported.");
         }
 
         String requestedEmail = normalizeNullableText(asText(body.get("email")));
@@ -346,7 +346,7 @@ public class UserManagementService {
             upsertCoachProfile(userId, body);
         }
 
-        return Map.of("user", requireStaffItem(userId));
+        return Map.of("user", requireManagedUserItem(userId));
     }
 
     private Map<String, Object> adminLockUser(Map<String, Object> payload) {
@@ -354,7 +354,7 @@ public class UserManagementService {
         int userId = requirePositiveInt(payload.get("userId"), "User ID is required.");
         Map<String, Object> body = asMap(payload.get("body"));
         String reason = requireText(asText(body.get("reason")), "Lock reason is required.");
-        StaffRecord target = requireStaffRecord(userId);
+        ManagedUserRecord target = requireManagedUserRecord(userId);
 
         if (admin.userId() == userId) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin cannot lock the current account.");
@@ -372,13 +372,13 @@ public class UserManagementService {
                 WHERE UserID = ?
                 """, reason, userId);
 
-        return Map.of("user", requireStaffItem(userId));
+        return Map.of("user", requireManagedUserItem(userId));
     }
 
     private Map<String, Object> adminUnlockUser(Map<String, Object> payload) {
         requireAdmin(payload);
         int userId = requirePositiveInt(payload.get("userId"), "User ID is required.");
-        requireStaffRecord(userId);
+        requireManagedUserRecord(userId);
 
         jdbcTemplate.update("""
                 UPDATE dbo.Users
@@ -389,7 +389,7 @@ public class UserManagementService {
                 WHERE UserID = ?
                 """, userId);
 
-        return Map.of("user", requireStaffItem(userId));
+        return Map.of("user", requireManagedUserItem(userId));
     }
 
     private AuthService.AuthContext requireReceptionist(Map<String, Object> payload) {
@@ -581,6 +581,44 @@ public class UserManagementService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff account not found."));
     }
 
+    private Map<String, Object> requireManagedUserItem(int userId) {
+        return jdbcTemplate.query("""
+                SELECT
+                    u.UserID,
+                    u.FullName,
+                    u.Email,
+                    u.Phone,
+                    u.IsActive,
+                    u.IsLocked,
+                    u.LockedAt,
+                    u.LockReason,
+                    u.IsEmailVerified,
+                    u.EmailVerifiedAt,
+                    u.CreatedAt,
+                    r.RoleName,
+                    c.DateOfBirth,
+                    c.Gender,
+                    c.ExperienceYears,
+                    c.Bio,
+                    CASE
+                        WHEN u.PasswordHash IS NOT NULL AND providers.GoogleProviderCount > 0 THEN 'PASSWORD_AND_GOOGLE'
+                        WHEN u.PasswordHash IS NOT NULL THEN 'PASSWORD'
+                        WHEN providers.GoogleProviderCount > 0 THEN 'GOOGLE_ONLY'
+                        ELSE 'UNKNOWN'
+                    END AS AuthMode
+                FROM dbo.Users u
+                JOIN dbo.Roles r ON r.RoleID = u.RoleID
+                LEFT JOIN dbo.Coaches c ON c.CoachID = u.UserID
+                OUTER APPLY (
+                    SELECT COUNT(1) AS GoogleProviderCount
+                    FROM dbo.UserAuthProviders provider
+                    WHERE provider.UserID = u.UserID
+                ) providers
+                WHERE u.UserID = ?
+                """, (rs, rowNum) -> toManagedUserMap(rs), userId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User account not found."));
+    }
+
     private StaffRecord requireStaffRecord(int userId) {
         StaffRecord record = jdbcTemplate.query("""
                 SELECT
@@ -607,12 +645,78 @@ public class UserManagementService {
         return record;
     }
 
+    private ManagedUserRecord requireManagedUserRecord(int userId) {
+        return jdbcTemplate.query("""
+                SELECT
+                    u.UserID,
+                    u.FullName,
+                    u.Email,
+                    u.Phone,
+                    u.IsActive,
+                    u.IsLocked,
+                    r.RoleName,
+                    c.DateOfBirth,
+                    c.Gender,
+                    c.ExperienceYears,
+                    c.Bio
+                FROM dbo.Users u
+                JOIN dbo.Roles r ON r.RoleID = u.RoleID
+                LEFT JOIN dbo.Coaches c ON c.CoachID = u.UserID
+                WHERE u.UserID = ?
+                """, (rs, rowNum) -> new ManagedUserRecord(
+                rs.getInt("UserID"),
+                rs.getString("FullName"),
+                rs.getString("Email"),
+                rs.getString("Phone"),
+                normalizeRoleName(rs.getString("RoleName")),
+                rs.getBoolean("IsActive"),
+                rs.getBoolean("IsLocked"),
+                toLocalDate(rs, "DateOfBirth"),
+                rs.getString("Gender"),
+                parseInteger(rs.getObject("ExperienceYears")),
+                rs.getString("Bio")), userId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User account not found."));
+    }
+
     private Map<String, Object> toStaffMap(ResultSet rs) throws SQLException {
         String normalizedRole = normalizeRoleName(rs.getString("RoleName"));
         if (!isStaffRole(normalizedRole)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only staff accounts are managed here.");
         }
 
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("userId", rs.getInt("UserID"));
+        item.put("fullName", rs.getString("FullName"));
+        item.put("email", rs.getString("Email"));
+        item.put("phone", rs.getString("Phone"));
+        item.put("role", normalizedRole);
+        item.put("roleLabel", rs.getString("RoleName"));
+        item.put("active", rs.getBoolean("IsActive"));
+        item.put("locked", rs.getBoolean("IsLocked"));
+        item.put("lockReason", rs.getString("LockReason"));
+        item.put("lockedAt", rs.getTimestamp("LockedAt"));
+        item.put("emailVerified", rs.getBoolean("IsEmailVerified"));
+        item.put("emailVerifiedAt", rs.getTimestamp("EmailVerifiedAt"));
+        item.put("createdAt", rs.getTimestamp("CreatedAt"));
+        item.put("lastLogin", null);
+        item.put("authMode", rs.getString("AuthMode"));
+
+        if ("COACH".equals(normalizedRole)) {
+            Map<String, Object> coachProfile = new LinkedHashMap<>();
+            coachProfile.put("dateOfBirth", dateToString(toLocalDate(rs, "DateOfBirth")));
+            coachProfile.put("gender", rs.getString("Gender"));
+            coachProfile.put("experienceYears", parseInteger(rs.getObject("ExperienceYears")));
+            coachProfile.put("bio", rs.getString("Bio"));
+            item.put("coachProfile", coachProfile);
+        } else {
+            item.put("coachProfile", Map.of());
+        }
+
+        return item;
+    }
+
+    private Map<String, Object> toManagedUserMap(ResultSet rs) throws SQLException {
+        String normalizedRole = normalizeRoleName(rs.getString("RoleName"));
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("userId", rs.getInt("UserID"));
         item.put("fullName", rs.getString("FullName"));
@@ -985,5 +1089,8 @@ public class UserManagementService {
     }
 
     private record StaffRecord(int userId, String fullName, String email, String phone, String role, boolean active, boolean locked, LocalDate coachDateOfBirth, String coachGender, Integer coachExperienceYears, String coachBio) {
+    }
+
+    private record ManagedUserRecord(int userId, String fullName, String email, String phone, String role, boolean active, boolean locked, LocalDate coachDateOfBirth, String coachGender, Integer coachExperienceYears, String coachBio) {
     }
 }

@@ -236,6 +236,11 @@ public class PromotionService {
 
     private Map<String, Object> adminCreatePost(String auth, Map<String, Object> payload) {
         CurrentUserService.UserInfo admin = currentUserService.requireAdmin(auth);
+        int promotionId = requireInt(payload.get("promotionId"), "Promotion ID is required.");
+        java.time.LocalDate startAt = requireDate(payload.get("startAt"), "Start date is required.");
+        java.time.LocalDate endAt = requireDate(payload.get("endAt"), "End date is required.");
+        validateCouponDateWindow(startAt, endAt);
+        validatePromotionPostEligibility(promotionId, startAt, endAt);
         int isActive = requireBit(payload.getOrDefault("isActive", 1));
         int isImportant = requireBit(payload.getOrDefault("isImportant", 0));
         jdbcTemplate.update(
@@ -246,9 +251,9 @@ public class PromotionService {
                 payload.get("title"),
                 payload.get("content"),
                 payload.get("bannerUrl"),
-                requireInt(payload.get("promotionId"), "Promotion ID is required."),
-                payload.get("startAt"),
-                payload.get("endAt"),
+                promotionId,
+                startAt,
+                endAt,
                 isActive,
                 isImportant,
                 admin.userId());
@@ -264,6 +269,11 @@ public class PromotionService {
         Map<String, Object> existingPostState = findPromotionPostState(postId);
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) payload.get("body");
+        int promotionId = requireInt(body.get("promotionId"), "Promotion ID is required.");
+        java.time.LocalDate startAt = requireDate(body.get("startAt"), "Start date is required.");
+        java.time.LocalDate endAt = requireDate(body.get("endAt"), "End date is required.");
+        validateCouponDateWindow(startAt, endAt);
+        validatePromotionPostEligibility(promotionId, startAt, endAt);
         int isActive = requireBit(body.getOrDefault("isActive", 1));
         int isImportant = requireBit(body.getOrDefault("isImportant", 0));
 
@@ -275,11 +285,11 @@ public class PromotionService {
                 body.get("title"),
                 body.get("content"),
                 body.get("bannerUrl"),
-                body.get("startAt"),
-                body.get("endAt"),
+                startAt,
+                endAt,
                 isActive,
                 isImportant,
-                requireInt(body.get("promotionId"), "Promotion ID is required."),
+                promotionId,
                 postId);
         if (!isPromotionPostBroadcastEligible(existingPostState)) {
             publishPromotionPostIfNeeded(postId, body.get("title"), isActive, isImportant);
@@ -302,25 +312,33 @@ public class PromotionService {
         if (user != null) {
             sql = """
                     SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.ApplyTarget, r.BonusDurationMonths,
+                           CASE
+                               WHEN r.IsActive = 1
+                                AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
+                               THEN 1 ELSE 0
+                           END as CanClaim,
                            CASE WHEN c.ClaimID IS NOT NULL THEN 1 ELSE 0 END as IsClaimed
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
                     LEFT JOIN dbo.UserPromotionClaims c ON c.PromotionID = r.PromotionID AND c.UserID = ?
-                    WHERE p.IsActive = 1 AND r.IsActive = 1
+                    WHERE p.IsActive = 1
                     AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
                     ORDER BY p.CreatedAt DESC
                     """;
             posts = jdbcTemplate.queryForList(sql, user.userId());
         } else {
             sql = """
                     SELECT p.*, r.PromoCode, r.DiscountPercent, r.DiscountAmount, r.ApplyTarget, r.BonusDurationMonths,
+                           CASE
+                               WHEN r.IsActive = 1
+                                AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
+                               THEN 1 ELSE 0
+                           END as CanClaim,
                            0 as IsClaimed
                     FROM dbo.PromotionPosts p
                     JOIN dbo.Promotions r ON r.PromotionID = p.PromotionID
-                    WHERE p.IsActive = 1 AND r.IsActive = 1
+                    WHERE p.IsActive = 1
                     AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(p.StartAt AS DATE) AND CAST(p.EndAt AS DATE)
-                    AND CAST(SYSDATETIME() AS DATE) BETWEEN CAST(r.ValidFrom AS DATE) AND CAST(r.ValidTo AS DATE)
                     ORDER BY p.CreatedAt DESC
                     """;
             posts = jdbcTemplate.queryForList(sql);
@@ -821,6 +839,58 @@ public class PromotionService {
         if (validTo.isBefore(validFrom)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Valid to must be on or after valid from.");
+        }
+    }
+
+    private void validatePromotionPostEligibility(int promotionId, java.time.LocalDate startAt, java.time.LocalDate endAt) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT TOP (1) IsActive, ValidFrom, ValidTo
+                FROM dbo.Promotions
+                WHERE PromotionID = ?
+                """, promotionId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Linked coupon does not exist.");
+        }
+
+        Map<String, Object> promotion = rows.get(0);
+        if (requireBit(promotion.get("IsActive")) != 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Linked coupon must be active before publishing a marketing post.");
+        }
+
+        java.time.LocalDate couponValidFrom = coerceDate(promotion.get("ValidFrom"), "Linked coupon has an invalid valid-from date.");
+        java.time.LocalDate couponValidTo = coerceDate(promotion.get("ValidTo"), "Linked coupon has an invalid valid-to date.");
+
+        if (startAt.isBefore(couponValidFrom) || endAt.isAfter(couponValidTo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Marketing post dates must stay within the linked coupon validity window.");
+        }
+    }
+
+    private java.time.LocalDate coerceDate(Object value, String message) {
+        if (value == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        if (value instanceof java.time.LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toLocalDateTime().toLocalDate();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        try {
+            if (text.length() >= 10) {
+                return java.time.LocalDate.parse(text.substring(0, 10));
+            }
+            return java.time.LocalDate.parse(text);
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
     }
 

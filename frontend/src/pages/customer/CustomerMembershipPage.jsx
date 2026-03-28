@@ -12,6 +12,7 @@ import {
   buildActiveWarningMessage,
   checkoutModeLabel,
   formatDurationLabel,
+  getPlanTierRank,
   inferCheckoutMode,
   normalizePlanType,
 } from '../../features/membership/utils/membershipCheckout'
@@ -130,6 +131,10 @@ function CustomerMembershipPage() {
   const invalidReason = currentMembershipQuery.data?.data?.reason || ''
   const hasActiveMembership = String(currentMembership?.status || '').toUpperCase() === 'ACTIVE'
   const hasQueuedMembership = Boolean(queuedMembership && Object.keys(queuedMembership).length > 0)
+  const currentPlanId = Number(currentMembership?.plan?.planId || 0)
+  const currentPlanType = normalizePlanType(currentMembership?.plan?.planType)
+  const currentPlanTier = getPlanTierRank(currentPlanType)
+  const queuedPlanTier = getPlanTierRank(queuedMembership?.plan?.planType)
 
   function dismissPaymentSuccessOverlay() {
     setShowSuccessMessage(false)
@@ -182,6 +187,38 @@ function CustomerMembershipPage() {
     [activeSelectedPlanId, visiblePlans],
   )
 
+  const inferredCheckoutMode = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : null
+  const supportsUpgradeRenewOption = Boolean(
+    selectedPlan
+    && hasActiveMembership
+    && getPlanTierRank(selectedPlan?.planType) > currentPlanTier
+    && Number(selectedPlan.planId) !== currentPlanId
+  )
+  const supportsScheduledUpgradeOption = Boolean(
+    selectedPlan
+    && hasQueuedMembership
+    && getPlanTierRank(selectedPlan?.planType) > queuedPlanTier
+    && Number(selectedPlan.planId) !== Number(queuedMembership?.plan?.planId || 0)
+  )
+  const availableCheckoutModes = useMemo(() => {
+    if (!inferredCheckoutMode) return []
+    if (hasQueuedMembership) {
+      const modes = []
+      if (supportsUpgradeRenewOption) modes.push('UPGRADE')
+      if (supportsScheduledUpgradeOption) modes.push('UPGRADE_SCHEDULED')
+      return modes.length ? modes : [inferredCheckoutMode]
+    }
+    if (!supportsUpgradeRenewOption) return [inferredCheckoutMode]
+    return ['RENEW', 'UPGRADE']
+  }, [hasQueuedMembership, inferredCheckoutMode, supportsScheduledUpgradeOption, supportsUpgradeRenewOption])
+  const [selectedCheckoutMode, setSelectedCheckoutMode] = useState(null)
+
+  useEffect(() => {
+    setSelectedCheckoutMode((current) => (
+      availableCheckoutModes.includes(current) ? current : (availableCheckoutModes[0] ?? null)
+    ))
+  }, [availableCheckoutModes])
+
   const planColumns = useMemo(
     () =>
       Object.entries(planTypeMeta).map(([key, meta]) => {
@@ -214,6 +251,9 @@ function CustomerMembershipPage() {
       }
       if (mode === 'UPGRADE') {
         return membershipApi.upgrade(payload)
+      }
+      if (mode === 'UPGRADE_SCHEDULED') {
+        return membershipApi.upgradeScheduled(payload)
       }
       return membershipApi.purchase(payload)
     },
@@ -284,7 +324,10 @@ function CustomerMembershipPage() {
   const handleCheckout = (plan) => {
     const targetPlan = plan || selectedPlan
     if (!targetPlan) return
-    navigate(`/customer/membership/checkout?planId=${targetPlan.planId}`)
+    const targetMode = targetPlan.planId === selectedPlan?.planId
+      ? (selectedCheckoutMode || inferredCheckoutMode || 'PURCHASE')
+      : inferCheckoutMode(targetPlan, currentMembership)
+    navigate(`/customer/membership/checkout?planId=${targetPlan.planId}&mode=${targetMode}`)
   }
 
   const confirmCheckoutAfterWarning = () => {
@@ -298,8 +341,7 @@ function CustomerMembershipPage() {
     checkoutMutation.mutate({ mode, planId: selectedPlan.planId, promoCode: selectedPromoCode })
   }
 
-  const checkoutModePreview = selectedPlan ? inferCheckoutMode(selectedPlan, currentMembership) : null
-  const queueLimitReached = hasActiveMembership && hasQueuedMembership
+  const checkoutModePreview = selectedCheckoutMode || inferredCheckoutMode
   const checkoutActionLabel = checkoutModePreview ? checkoutModeLabel[checkoutModePreview] : 'Checkout'
 
   const resetCouponSelection = () => {
@@ -464,11 +506,46 @@ function CustomerMembershipPage() {
       <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
         {/* PLANS SECTION */}
         <section className="flex flex-col">
+          {availableCheckoutModes.length > 1 && selectedPlan ? (
+            <div className="mb-6 rounded-3xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5">
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-400">Membership action</p>
+              <p className="mt-2 text-sm font-semibold text-slate-200">
+                You already have {currentMembership.plan?.name || 'an active membership'}. Choose how this new plan should apply.
+              </p>
+              <div className="mt-4 flex flex-col gap-3 lg:flex-row">
+                {availableCheckoutModes.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSelectedCheckoutMode(mode)}
+                    className={`flex-1 rounded-2xl border px-4 py-4 text-left transition ${
+                      selectedCheckoutMode === mode
+                        ? 'border-emerald-400/50 bg-emerald-500/15 text-white'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    <p className="text-sm font-black uppercase tracking-[0.14em]">{checkoutModeLabel[mode]}</p>
+                    <p className="mt-2 text-xs font-medium leading-6 text-slate-300">
+                      {buildActiveWarningMessage(mode, currentMembership, selectedPlan)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-12 grid-cols-1 lg:grid-cols-3">
             {planColumns.map(({ key, meta, plans: categoryPlans, activePlan, selected }) => {
               const Icon = meta.icon
-              const currentMode = activePlan ? inferCheckoutMode(activePlan, currentMembership) : 'PURCHASE'
+              const currentMode = selected && selectedCheckoutMode
+                ? selectedCheckoutMode
+                : (activePlan ? inferCheckoutMode(activePlan, currentMembership) : 'PURCHASE')
+              const queueLimitReachedForCard = Boolean(
+                hasActiveMembership
+                && hasQueuedMembership
+                && currentMode !== 'UPGRADE'
+                && currentMode !== 'UPGRADE_SCHEDULED',
+              )
               const isProcessing = checkoutMutation.isPending && selectedPlanId === activePlan?.planId
 
               return (
@@ -565,7 +642,7 @@ function CustomerMembershipPage() {
                   <div className="min-h-[60px] mb-4">
                     <button
                       type="button"
-                      disabled={checkoutMutation.isPending || !activePlan || queueLimitReached}
+                      disabled={checkoutMutation.isPending || !activePlan || queueLimitReachedForCard}
                       onClick={(e) => {
                         e.stopPropagation()
                         setSelectedCategory(key)
@@ -587,7 +664,7 @@ function CustomerMembershipPage() {
                         </>
                       )}
                     </button>
-                    {selected && queueLimitReached && (
+                    {selected && queueLimitReachedForCard && (
                       <p className="mt-2 text-[9px] text-center font-black text-amber-500/80 uppercase tracking-widest bg-amber-500/10 py-0.5 rounded-full border border-amber-500/10">
                         Queue Limit
                       </p>

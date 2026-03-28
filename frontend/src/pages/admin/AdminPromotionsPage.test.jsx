@@ -47,6 +47,7 @@ function renderWithQuery(ui) {
 describe('AdminPromotionsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.sessionStorage.clear()
     adminPromotionApi.getCoupons.mockResolvedValue({
       data: {
         coupons: [
@@ -82,6 +83,17 @@ describe('AdminPromotionsPage', () => {
             ValidFrom: '2026-05-01T00:00:00',
             ValidTo: '2026-06-01T00:00:00',
             IsActive: true,
+          },
+          {
+            PromotionID: 4,
+            PromoCode: 'HIDDENINACTIVE',
+            DiscountPercent: 15,
+            DiscountAmount: null,
+            ApplyTarget: 'ORDER',
+            BonusDurationMonths: 0,
+            ValidFrom: '2026-03-01T00:00:00',
+            ValidTo: '2026-04-01T00:00:00',
+            IsActive: false,
           },
         ],
       },
@@ -160,7 +172,7 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Coupon/i }))
     const modal = screen.getByRole('dialog', { name: /New Coupon/i })
 
     fireEvent.change(screen.getByLabelText(/Coupon Code/i), { target: { value: 'MEMBERBOOST' } })
@@ -195,7 +207,7 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Coupon/i }))
     const modal = screen.getByRole('dialog', { name: /New Coupon/i })
 
     expect(screen.getByLabelText(/Discount \(%\)/i)).toBeEnabled()
@@ -220,7 +232,7 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Coupon/i }))
     const modal = screen.getByRole('dialog', { name: /New Coupon/i })
 
     await user.click(within(modal).getByRole('button', { name: /^Create Coupon$/i }))
@@ -233,7 +245,7 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Coupon/i }))
     const modal = screen.getByRole('dialog', { name: /New Coupon/i })
 
     fireEvent.change(screen.getByLabelText(/Coupon Code/i), { target: { value: 'OVER100' } })
@@ -251,7 +263,7 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Coupon/i }))
     const modal = screen.getByRole('dialog', { name: /New Coupon/i })
 
     await user.click(within(modal).getByRole('button', { name: /Fixed VND off use a flat VND discount/i }))
@@ -272,7 +284,7 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Coupon/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Coupon/i }))
     const modal = screen.getByRole('dialog', { name: /New Coupon/i })
 
     await user.click(within(modal).getByRole('button', { name: /Membership use for plan discounts/i }))
@@ -292,7 +304,8 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Marketing Post/i }))
+    await user.click(await screen.findByRole('button', { name: /Marketing Posts/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Post/i }))
     const modal = screen.getByRole('dialog', { name: /New Marketing Post/i })
 
     await user.type(within(modal).getByLabelText(/Post Title/i), 'Summer Blast')
@@ -332,7 +345,8 @@ describe('AdminPromotionsPage', () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Marketing Post/i }))
+    await user.click(await screen.findByRole('button', { name: /Marketing Posts/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Post/i }))
     const modal = screen.getByRole('dialog', { name: /New Marketing Post/i })
 
     await user.type(within(modal).getByLabelText(/Post Title/i), 'Quiet Promo')
@@ -361,11 +375,26 @@ describe('AdminPromotionsPage', () => {
     })
   })
 
+  it('hides inactive coupons from the marketing post picker', async () => {
+    const user = userEvent.setup()
+    renderWithQuery(<AdminPromotionsPage />)
+
+    await user.click(await screen.findByRole('button', { name: /Marketing Posts/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Post/i }))
+    const modal = screen.getByRole('dialog', { name: /New Marketing Post/i })
+
+    await user.click(within(modal).getByRole('button', { name: /Selected coupon/i }))
+
+    expect(screen.queryByRole('button', { name: /HIDDENINACTIVE/i })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /FLEXBOOST2M/i })).toBeInTheDocument()
+  })
+
   it('blocks oversized post banners before the upload request is sent', async () => {
     const user = userEvent.setup()
     renderWithQuery(<AdminPromotionsPage />)
 
-    await user.click(await screen.findByRole('button', { name: /New Marketing Post/i }))
+    await user.click(await screen.findByRole('button', { name: /Marketing Posts/i }))
+    await user.click(await screen.findByRole('button', { name: /Create Post/i }))
     const modal = screen.getByRole('dialog', { name: /New Marketing Post/i })
 
     const fileInput = modal.querySelector('input[type="file"]')
@@ -376,3 +405,4 @@ describe('AdminPromotionsPage', () => {
     expect(toast.error).toHaveBeenCalledWith('Promotion banner file is too large. Maximum size is 5 MB.')
   })
 })
+

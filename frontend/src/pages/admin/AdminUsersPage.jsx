@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  CreditCard,
+  History,
   Lock,
   MailCheck,
   MailX,
@@ -16,6 +18,7 @@ import { toast } from 'react-hot-toast'
 import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { adminNav } from '../../config/navigation'
+import { adminSupportApi } from '../../features/admin/api/adminSupportApi'
 import { adminUserApi } from '../../features/users/api/adminUserApi'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import { usePagination } from '../../hooks/usePagination'
@@ -25,6 +28,7 @@ const ROLE_OPTIONS = [
   { value: 'COACH', label: 'Coach' },
   { value: 'RECEPTIONIST', label: 'Receptionist' },
 ]
+const CREATE_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value === 'COACH' || option.value === 'RECEPTIONIST')
 
 const ROLE_FILTERS = [{ value: 'ALL', label: 'All staff roles' }, ...ROLE_OPTIONS]
 const BOOLEAN_FILTERS = [
@@ -69,11 +73,14 @@ function buildFormFromUser(user) {
 
 function AdminUsersPage() {
   const queryClient = useQueryClient()
+  const [viewMode, setViewMode] = useState('staff')
   const [search, setSearch] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('ALL')
   const [lockedFilter, setLockedFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState('all')
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null)
   const [editorMode, setEditorMode] = useState(null)
   const [form, setForm] = useState(buildInitialForm())
   const [formError, setFormError] = useState('')
@@ -93,6 +100,19 @@ function AdminUsersPage() {
     queryFn: () => adminUserApi.getUsers(filters),
   })
 
+  const normalizedCustomerSearch = customerSearch.trim()
+  const customerSearchQuery = useQuery({
+    queryKey: ['admin-support-customers', normalizedCustomerSearch],
+    queryFn: () => adminSupportApi.searchCustomers(normalizedCustomerSearch),
+    enabled: viewMode === 'customers',
+  })
+
+  const customerDetailQuery = useQuery({
+    queryKey: ['admin-support-customer-detail', selectedCustomerId],
+    queryFn: () => adminSupportApi.getCustomerDetail(selectedCustomerId),
+    enabled: viewMode === 'customers' && Boolean(selectedCustomerId),
+  })
+
   const items = usersQuery.data?.data?.items ?? []
   const {
     currentPage,
@@ -102,6 +122,23 @@ function AdminUsersPage() {
   } = usePagination(items, 10)
   const summary = usersQuery.data?.data?.summary ?? {}
   const selectedUser = items.find((user) => user.userId === selectedUserId) ?? null
+  const customerResults = customerSearchQuery.data?.items ?? []
+  const {
+    currentPage: customerPage,
+    setCurrentPage: setCustomerPage,
+    totalPages: customerTotalPages,
+    paginatedItems: paginatedCustomers,
+  } = usePagination(customerResults, 10)
+  const customerAccount = customerDetailQuery.data?.account ?? null
+  const customerMemberships = customerDetailQuery.data?.memberships ?? {}
+  const customerAlerts = customerDetailQuery.data?.alerts ?? []
+
+  useEffect(() => {
+    if (viewMode !== 'customers') return
+    if (selectedCustomerId) return
+    if (customerResults.length === 0) return
+    setSelectedCustomerId(customerResults[0].customerId)
+  }, [customerResults, selectedCustomerId, viewMode])
 
   const upsertMutation = useMutation({
     mutationFn: (payload) => (
@@ -111,14 +148,16 @@ function AdminUsersPage() {
     ),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-support-customer-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-support-customers'] })
       const nextUser = response?.data?.user
       setSelectedUserId(nextUser?.userId ?? null)
       setEditorMode(null)
       setFormError('')
-      toast.success(editorMode === 'create' ? 'Staff account created.' : 'Staff account updated.')
+      toast.success(editorMode === 'create' ? 'Staff account created.' : 'User account updated.')
     },
     onError: (error) => {
-      setFormError(error?.response?.data?.message || 'Staff account could not be saved.')
+      setFormError(error?.response?.data?.message || 'User account could not be saved.')
     },
   })
 
@@ -126,9 +165,11 @@ function AdminUsersPage() {
     mutationFn: ({ userId, reason }) => adminUserApi.lockUser(userId, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-support-customer-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-support-customers'] })
       setLockDraft(null)
       setLockError('')
-      toast.success('Staff account locked.')
+      toast.success('User account locked.')
     },
     onError: (error) => {
       setLockError(error?.response?.data?.message || 'Lock request failed.')
@@ -139,8 +180,10 @@ function AdminUsersPage() {
     mutationFn: (userId) => adminUserApi.unlockUser(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-support-customer-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-support-customers'] })
       setUnlockDraft(null)
-      toast.success('Staff account unlocked.')
+      toast.success('User account unlocked.')
     },
     onError: (error) => {
       setFormError(error?.response?.data?.message || 'Unlock request failed.')
@@ -196,9 +239,35 @@ function AdminUsersPage() {
   return (
     <WorkspaceScaffold
       title="Admin User Management"
-      subtitle="Create staff account and lock or unlock employee access."
+      subtitle="Manage employee accounts and customer access from one screen."
       links={adminNav}
     >
+      <div className="mb-6 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode('staff')
+            setEditorMode(null)
+            setFormError('')
+          }}
+          className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${viewMode === 'staff' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+        >
+          Employees
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode('customers')
+            setEditorMode(null)
+            setFormError('')
+          }}
+          className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${viewMode === 'customers' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+        >
+          Customers
+        </button>
+      </div>
+
+      {viewMode === 'staff' ? (
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.95fr)]">
         <section className="gc-card-compact space-y-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -363,7 +432,7 @@ function AdminUsersPage() {
                   {editorMode === 'create' ? 'Create staff account' : 'Update staff account'}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Customers are intentionally excluded. This form provisions only Admin, Coach, and Receptionist accounts.
+                  Customers are intentionally excluded. This form provisions only Coach and Receptionist employee accounts.
                 </p>
               </div>
 
@@ -399,18 +468,21 @@ function AdminUsersPage() {
                   />
                 </FormField>
 
-                <FormField label="Role">
-                  <select
-                    value={form.role}
-                    disabled={editorMode === 'edit'}
-                    onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
-                    className={`${INPUT_CLASS} disabled:bg-slate-50`}
-                  >
-                    {ROLE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </FormField>
+                {editorMode === 'create' ? (
+                  <FormField label="Role">
+                    <select
+                      value={form.role}
+                      onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
+                      className={INPUT_CLASS}
+                    >
+                      {CREATE_ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </FormField>
+                ) : (
+                  <DetailCard label="Role" value={formatRole(form.role)} />
+                )}
 
                 {editorMode === 'create' ? (
                   <>
@@ -583,12 +655,230 @@ function AdminUsersPage() {
               </span>
               <h2 className="mt-5 text-xl font-bold text-slate-900">Select a staff account</h2>
               <p className="mt-2 max-w-sm text-sm text-slate-500">
-                Pick an employee from the list to manage the account, or create a new Admin, Coach, or Receptionist profile.
+                Pick an employee from the list to manage the account, or create a new Coach or Receptionist profile.
               </p>
             </div>
           )}
         </aside>
       </div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.95fr)]">
+          <section className="gc-card-compact space-y-5">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Customer directory</p>
+              <h2 className="mt-2 text-2xl font-bold text-slate-900">Customer lookup</h2>
+              <p className="mt-2 max-w-3xl text-sm text-slate-600">
+                Reuse the customer lookup flow to inspect membership status and manage customer account access.
+              </p>
+            </div>
+
+            <label className="relative">
+              <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={(event) => {
+                  setCustomerSearch(event.target.value)
+                  setCustomerPage(1)
+                  setSelectedCustomerId(null)
+                }}
+                placeholder="Search customer by name, email, or phone"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition focus:border-gym-300"
+              />
+            </label>
+
+            {customerSearchQuery.error ? (
+              <div className="rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+                {customerSearchQuery.error?.response?.data?.message || 'Customer search could not be loaded.'}
+              </div>
+            ) : null}
+
+            <div className="overflow-hidden rounded-[28px] border border-slate-100 bg-white">
+              {customerSearchQuery.isLoading ? (
+                <div className="p-6 text-sm text-slate-500">Searching customers...</div>
+              ) : customerResults.length === 0 ? (
+                <div className="p-6 text-sm text-slate-500">
+                  {normalizedCustomerSearch ? 'No customers match the current search.' : 'No customer accounts were found.'}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_110px_140px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    <span>Customer</span>
+                    <span>Contact</span>
+                    <span>Status</span>
+                    <span className="text-right">Actions</span>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {paginatedCustomers.map((customer) => (
+                      <div
+                        key={customer.customerId}
+                        className={`grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_110px_140px] gap-4 px-5 py-4 text-sm ${
+                          selectedCustomerId === customer.customerId ? 'bg-gym-50/60' : 'bg-white'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => {
+                            setSelectedCustomerId(customer.customerId)
+                            setEditorMode(null)
+                            setFormError('')
+                          }}
+                        >
+                          <p className="font-bold text-slate-900">{customer.fullName}</p>
+                          <p className="mt-1 text-xs text-slate-500">Customer #{customer.customerId}</p>
+                        </button>
+                        <div>
+                          <p className="font-medium text-slate-700">{customer.email || '-'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{customer.phone || 'No phone'}</p>
+                        </div>
+                        <div className="flex items-start">
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
+                            customer.locked ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            {customer.locked ? 'Locked' : 'Open'}
+                          </span>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomerId(customer.customerId)
+                              setEditorMode(null)
+                              setFormError('')
+                            }}
+                            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-gym-200 hover:text-gym-700"
+                          >
+                            Manage
+                          </button>
+                          {customer.locked ? (
+                            <button
+                              type="button"
+                              onClick={() => setUnlockDraft({ userId: customer.customerId, fullName: customer.fullName })}
+                              className="rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                            >
+                              Unlock
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setLockDraft({ user: { userId: customer.customerId, fullName: customer.fullName }, reason: '' })}
+                              className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+                            >
+                              Lock
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={customerPage}
+                    totalPages={customerTotalPages}
+                    onPageChange={setCustomerPage}
+                    className="border-t border-slate-100 px-5 py-4"
+                  />
+                </>
+              )}
+            </div>
+          </section>
+
+          <aside className="gc-card-compact space-y-5">
+            {customerAccount ? (
+              <>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Customer detail</p>
+                  <h2 className="mt-2 text-2xl font-bold text-slate-900">{customerAccount.fullName}</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Customer account, membership status, and account access controls.
+                  </p>
+                </div>
+
+                {formError ? (
+                  <div className="rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+                    {formError}
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <DetailCard label="Role" value="Customer" />
+                  <DetailCard label="Created at" value={formatDateTime(customerAccount.createdAt)} />
+                  <DetailCard label="Phone" value={customerAccount.phone || 'No phone'} />
+                  <DetailCard label="Email" value={customerAccount.email || '-'} />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoPill icon={customerAccount.locked ? <Lock size={16} /> : <Unlock size={16} />} label={customerAccount.locked ? 'Locked account' : 'Unlocked account'} />
+                  <InfoPill icon={<Users size={16} />} label={customerAccount.active ? 'Active customer' : 'Inactive customer'} />
+                </div>
+
+                {customerAlerts.length > 0 ? (
+                  <div className="rounded-[28px] border border-amber-100 bg-amber-50/70 p-4">
+                    <h3 className="text-sm font-bold text-amber-900">Support alerts</h3>
+                    <div className="mt-3 space-y-2">
+                      {customerAlerts.map((alert) => (
+                        <div key={alert.id} className="rounded-2xl border border-amber-200 bg-white/80 px-4 py-3 text-sm text-amber-900">
+                          {alert.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <CustomerInfoCard
+                    icon={<CreditCard size={18} />}
+                    title="Current membership"
+                    value={customerMemberships.current?.planName || 'No active membership'}
+                    meta={customerMemberships.current?.endDate ? `Ends ${customerMemberships.current.endDate}` : 'No active plan'}
+                  />
+                  <CustomerInfoCard
+                    icon={<History size={18} />}
+                    title="Queued membership"
+                    value={customerMemberships.history?.find((item) => String(item.status || '').toUpperCase() === 'SCHEDULED')?.planName || 'No queued membership'}
+                    meta={(() => {
+                      const queuedMembership = customerMemberships.history?.find((item) => String(item.status || '').toUpperCase() === 'SCHEDULED')
+                      return queuedMembership?.startDate ? `Starts ${queuedMembership.startDate}` : 'No queued plan'
+                    })()}
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  {customerAccount.locked ? (
+                    <button
+                      type="button"
+                      onClick={() => setUnlockDraft({ userId: customerAccount.customerId, fullName: customerAccount.fullName })}
+                      className="rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    >
+                      Unlock account
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setLockDraft({ user: { userId: customerAccount.customerId, fullName: customerAccount.fullName }, reason: '' })}
+                      className="rounded-2xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                    >
+                      Lock account
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
+                <span className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-white text-gym-600 shadow-sm">
+                  <Users size={24} />
+                </span>
+                <h2 className="mt-5 text-xl font-bold text-slate-900">Select a customer</h2>
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  Search for a customer to review memberships and manage their account access.
+                </p>
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
 
       {lockDraft ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
@@ -646,8 +936,8 @@ function AdminUsersPage() {
 
       <ConfirmDialog
         open={Boolean(unlockDraft)}
-        title="Unlock staff account"
-        description={`Restore access for ${unlockDraft?.fullName || 'this staff account'}?`}
+        title="Unlock user account"
+        description={`Restore access for ${unlockDraft?.fullName || 'this user account'}?`}
         confirmLabel="Unlock account"
         tone="neutral"
         pending={unlockMutation.isPending}
@@ -727,8 +1017,8 @@ function validateForm(form, mode) {
   if (!form.fullName.trim()) return 'Full name is required.'
   if (!form.email.trim()) return 'Email is required.'
   if (!form.phone.trim()) return 'Phone number is required.'
-  if (!['ADMIN', 'COACH', 'RECEPTIONIST'].includes(form.role)) {
-    return 'Customers cannot be created from admin users.'
+  if (!['COACH', 'RECEPTIONIST'].includes(form.role)) {
+    return 'This screen can create only Coach or Receptionist accounts.'
   }
   if (mode === 'create') {
     if (!form.password) return 'Temporary password is required.'
@@ -773,6 +1063,23 @@ function formatDateTime(value) {
   } catch {
     return String(value)
   }
+}
+
+function CustomerInfoCard({ icon, title, value, meta }) {
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-4">
+      <div className="flex items-center gap-3 text-slate-700">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-gym-600">
+          {icon}
+        </span>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{title}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">{meta}</p>
+    </div>
+  )
 }
 
 export default AdminUsersPage

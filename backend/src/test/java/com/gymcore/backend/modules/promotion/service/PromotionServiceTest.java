@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import com.gymcore.backend.common.service.UserNotificationService;
 import com.gymcore.backend.modules.admin.service.ReportService;
@@ -47,6 +48,14 @@ class PromotionServiceTest {
         service = new PromotionService(jdbcTemplate, currentUserService, reportService, notificationService);
         ReflectionTestUtils.setField(service, "promotionImageDir", "uploads/promotions-test");
         ReflectionTestUtils.setField(service, "promotionImageMaxBytes", 5L * 1024 * 1024);
+        lenient().when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, ValidFrom, ValidTo"), eq(12)))
+                .thenReturn(List.of(Map.of("IsActive", 1, "ValidFrom", "2026-03-01", "ValidTo", "2026-03-10")));
+        lenient().when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, ValidFrom, ValidTo"), eq(13)))
+                .thenReturn(List.of(Map.of("IsActive", 1, "ValidFrom", "2026-03-01", "ValidTo", "2026-03-10")));
+        lenient().when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, ValidFrom, ValidTo"), eq(14)))
+                .thenReturn(List.of(Map.of("IsActive", 1, "ValidFrom", "2026-03-01", "ValidTo", "2026-03-10")));
+        lenient().when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, ValidFrom, ValidTo"), eq(15)))
+                .thenReturn(List.of(Map.of("IsActive", 1, "ValidFrom", "2026-03-01", "ValidTo", "2026-03-10")));
     }
 
     @Test
@@ -150,6 +159,30 @@ class PromotionServiceTest {
                 eq("/customer/promotions"),
                 eq(78),
                 eq("PROMOTION_POST_78"));
+    }
+
+    @Test
+    void adminCreatePost_shouldRejectInactiveLinkedCoupon() {
+        when(currentUserService.requireAdmin("Bearer admin"))
+                .thenReturn(new CurrentUserService.UserInfo(1, "Admin", "ADMIN"));
+        when(jdbcTemplate.queryForList(contains("SELECT TOP (1) IsActive, ValidFrom, ValidTo"), eq(21)))
+                .thenReturn(List.of(Map.of("IsActive", 0, "ValidFrom", "2026-03-01", "ValidTo", "2026-03-10")));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () ->
+                service.execute("admin-create-promotion-post", "Bearer admin", Map.of(
+                        "title", "Inactive coupon promo",
+                        "content", "Should fail",
+                        "bannerUrl", "/promo.png",
+                        "promotionId", 21,
+                        "startAt", "2026-03-01",
+                        "endAt", "2026-03-10",
+                        "isActive", 1,
+                        "isImportant", 0)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Linked coupon must be active before publishing a marketing post.", exception.getReason());
+        verify(jdbcTemplate, never()).update(startsWith("INSERT INTO dbo.PromotionPosts"), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
     }
 
     @Test

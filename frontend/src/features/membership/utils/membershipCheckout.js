@@ -2,12 +2,21 @@ export const checkoutModeLabel = {
   PURCHASE: 'Purchase',
   RENEW: 'Renew',
   UPGRADE: 'Upgrade',
+  UPGRADE_SCHEDULED: 'Upgrade Queued Membership',
 }
 
 export function normalizePlanType(planType) {
   return String(planType || '')
     .trim()
     .toUpperCase()
+}
+
+export function getPlanTierRank(planType) {
+  const normalized = normalizePlanType(planType)
+  if (normalized === 'DAY_PASS') return 1
+  if (normalized === 'GYM_ONLY') return 2
+  if (normalized === 'GYM_PLUS_COACH') return 3
+  return 0
 }
 
 export function formatDurationLabel(durationDays) {
@@ -40,16 +49,14 @@ export function inferCheckoutMode(selectedPlan, currentMembership) {
 
   const currentPlanType = normalizePlanType(currentMembership?.plan?.planType)
   const selectedPlanType = normalizePlanType(selectedPlan?.planType)
+  const currentPlanTier = getPlanTierRank(currentPlanType)
+  const selectedPlanTier = getPlanTierRank(selectedPlanType)
 
-  if (currentPlanType === 'DAY_PASS') {
+  if (selectedPlanTier <= currentPlanTier) {
     return 'RENEW'
   }
 
-  if (currentPlanType && selectedPlanType && currentPlanType === selectedPlanType) {
-    return 'RENEW'
-  }
-
-  if (currentPlanType === 'GYM_ONLY' && selectedPlanType === 'GYM_PLUS_COACH') {
+  if (selectedPlanTier > currentPlanTier) {
     return 'UPGRADE'
   }
 
@@ -68,6 +75,10 @@ export function buildActiveWarningMessage(mode, currentMembership, selectedPlan)
 
   if (mode === 'RENEW') {
     return `You already have an ACTIVE membership (${currentName}). If you continue, ${selectedName} will be queued to start after your current membership ends.`
+  }
+
+  if (mode === 'UPGRADE_SCHEDULED') {
+    return `You already have a queued membership. If you continue, your scheduled membership will be replaced by ${selectedName}, while your current active membership stays unchanged.`
   }
 
   return `You already have an ACTIVE membership (${currentName}). If you continue, your current membership will end today and ${selectedName} starts today.`

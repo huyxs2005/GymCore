@@ -1,10 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
-import { CalendarClock, CheckCircle2, Clock3, History } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarClock, CheckCircle2, Clock3, History, AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'react-hot-toast'
 import PaginationControls from '../../components/common/PaginationControls'
 import WorkspaceScaffold from '../../components/frame/WorkspaceScaffold'
 import { customerNav } from '../../config/navigation'
 import { membershipApi } from '../../features/membership/api/membershipApi'
+import { getPlanTierRank } from '../../features/membership/utils/membershipCheckout'
 import { usePagination } from '../../hooks/usePagination'
 
 const planTypeLabel = {
@@ -131,15 +134,39 @@ function MembershipCard({ title, membership, tone = 'emerald' }) {
 }
 
 function CustomerCurrentMembershipPage() {
+  const queryClient = useQueryClient()
+  const [switchWarningOpen, setSwitchWarningOpen] = useState(false)
   const currentMembershipQuery = useQuery({
     queryKey: ['membershipCurrent'],
     queryFn: membershipApi.getCurrentMembership,
+  })
+
+  const switchNowMutation = useMutation({
+    mutationFn: (payload) => membershipApi.switchNow(payload),
+    onSuccess: async () => {
+      setSwitchWarningOpen(false)
+      toast.success('Queued membership is now active.')
+      await queryClient.invalidateQueries({ queryKey: ['membershipCurrent'] })
+      await queryClient.invalidateQueries({ queryKey: ['membershipPlans'] })
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || error.message || 'Unable to switch membership now.')
+    },
   })
 
   const membership = currentMembershipQuery.data?.data?.membership ?? {}
   const queuedMembership = currentMembershipQuery.data?.data?.queuedMembership ?? null
   const expiredMembershipHistory = currentMembershipQuery.data?.data?.expiredMembershipHistory ?? []
   const hasMembership = Object.keys(membership).length > 0
+  const activePlanTier = getPlanTierRank(membership?.plan?.planType)
+  const queuedPlanTier = getPlanTierRank(queuedMembership?.plan?.planType)
+  const canSwitchToQueuedHigherTier = queuedPlanTier > activePlanTier
+  const canSwitchQueuedMembershipNow = Boolean(
+    queuedMembership
+    && Object.keys(queuedMembership).length > 0
+    && String(membership?.status || '').toUpperCase() === 'ACTIVE'
+    && canSwitchToQueuedHigherTier
+  )
 
   const {
     currentPage,
@@ -192,7 +219,19 @@ function CustomerCurrentMembershipPage() {
 
             <section className="space-y-6">
               {queuedMembership && Object.keys(queuedMembership).length > 0 ? (
-                <MembershipCard title="Upcoming renew membership" membership={queuedMembership} tone="amber" />
+                <div className="space-y-4">
+                  <MembershipCard title="Upcoming renew membership" membership={queuedMembership} tone="amber" />
+                  {canSwitchQueuedMembershipNow ? (
+                    <button
+                      type="button"
+                      onClick={() => setSwitchWarningOpen(true)}
+                      disabled={switchNowMutation.isPending}
+                      className="inline-flex min-h-11 items-center justify-center rounded-full border border-amber-400/30 bg-amber-500/10 px-5 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {switchNowMutation.isPending ? 'Switching now...' : 'Switch To This Membership Now'}
+                    </button>
+                  ) : null}
+                </div>
               ) : (
                 <article className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
                   <div className="flex items-center gap-3">
@@ -284,6 +323,42 @@ function CustomerCurrentMembershipPage() {
               </>
             )}
           </section>
+        </div>
+      ) : null}
+
+      {switchWarningOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-amber-500/20 bg-[#12121a] shadow-2xl">
+            <div className="border-b border-amber-500/20 bg-amber-500/10 p-6 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20 text-amber-500 ring-1 ring-amber-500/30">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-black text-amber-400">Switch membership now?</h3>
+            </div>
+            <div className="p-6">
+              <p className="text-center text-sm font-medium leading-7 text-slate-300">
+                If you continue, your current membership will end today, the queued membership will start immediately,
+                and the old membership will move to expired history.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSwitchWarningOpen(false)}
+                  className="inline-flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-bold text-slate-200 transition hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchNowMutation.mutate({ customerMembershipId: queuedMembership?.customerMembershipId })}
+                  disabled={switchNowMutation.isPending}
+                  className="inline-flex flex-1 items-center justify-center rounded-2xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {switchNowMutation.isPending ? 'Switching...' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </WorkspaceScaffold>

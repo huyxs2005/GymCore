@@ -11,6 +11,7 @@ export default defineConfig({
     clearMocks: true,
   },
   server: {
+    allowedHosts: ['95e4-118-69-34-209.ngrok-free.app'],
     port: 5173,
     strictPort: true,
     proxy: {
